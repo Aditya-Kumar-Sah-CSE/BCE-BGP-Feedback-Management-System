@@ -1,19 +1,33 @@
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import {
+  AcademicYear,
+  Branch,
+  Semester,
+  Faculty,
+  Subject,
+} from '@/types/database';
+import {
+  getPublicFacultiesForSelectionAction,
+  getPublicSubjectsForFacultyAction,
+  getPublicFeedbackFormAction,
+  PublicFormSummary,
+} from '@/app/feedback/actions';
+import { PublicFeedbackCard } from '@/components/public/PublicFeedbackCard';
 import {
   Calendar,
   Layers,
+  GraduationCap,
   BookOpen,
   User,
-  ExternalLink,
+  AlertCircle,
+  Loader2,
+  Sparkles,
+  RotateCcw,
   Info,
-  Clock,
-  CheckCircle2,
-  AlertCircle
 } from 'lucide-react';
-import type { AcademicYear, Branch, Semester, FacultySubjectAssignment, FeedbackForm } from '@/types/database';
+
 
 interface Props {
   academicYears: AcademicYear[];
@@ -21,7 +35,12 @@ interface Props {
   semesters: Semester[];
 }
 
-export function StudentDiscoveryFlow({ academicYears, branches, semesters }: Props) {
+export function StudentDiscoveryFlow({
+  academicYears,
+  branches,
+  semesters,
+}: Props) {
+  // Cascading selections
   const [selectedYearId, setSelectedYearId] = useState<string>(
     academicYears.find(y => y.is_active)?.id || academicYears[0]?.id || ''
   );
@@ -31,129 +50,224 @@ export function StudentDiscoveryFlow({ academicYears, branches, semesters }: Pro
   const [selectedSemesterId, setSelectedSemesterId] = useState<string>(
     semesters.find(s => s.is_active)?.id || semesters[0]?.id || ''
   );
+  const [selectedFacultyId, setSelectedFacultyId] = useState<string>('');
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
 
-  const [assignments, setAssignments] = useState<FacultySubjectAssignment[]>([]);
-  const [forms, setForms] = useState<FeedbackForm[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  // Dynamically loaded cohorts
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [matchedForm, setMatchedForm] = useState<PublicFormSummary | null>(null);
+  const [formStatus, setFormStatus] = useState<'PUBLISHED' | 'CLOSED' | 'NONE'>('NONE');
+  const [statusMessage, setStatusMessage] = useState<string>('');
+
+  // Loading states
+  const [loadingFaculties, setLoadingFaculties] = useState<boolean>(false);
+  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
+  const [loadingForm, setLoadingForm] = useState<boolean>(false);
   const [, startTransition] = useTransition();
 
-  const supabase = createClient();
-
+  // 1. Fetch faculties when Year + Branch + Semester change
   useEffect(() => {
-    if (!selectedYearId || !selectedBranchId || !selectedSemesterId) return;
-
-    let isMounted = true;
-    setIsLoading(true);
-
-    async function fetchData() {
-      try {
-        // 1. Fetch active assignments
-        const { data: assignData, error: assignErr } = await supabase
-          .from('faculty_subject_assignments')
-          .select(`
-            id,
-            faculty_id,
-            subject_id,
-            academic_year_id,
-            branch_id,
-            semester_id,
-            is_active,
-            created_at,
-            faculty:faculties(id, name, department, designation),
-            subject:subjects(id, name, code)
-          `)
-          .eq('academic_year_id', selectedYearId)
-          .eq('is_active', true)
-          .order('created_at', { ascending: false });
-
-        if (assignErr) {
-          console.error('Error fetching assignments:', assignErr);
-        }
-
-        // Filter by branch & semester if specified in assignment or subject
-        const filteredAssignments = (assignData || []).filter((item: any) => {
-          const matchBranch = !item.branch_id || item.branch_id === selectedBranchId;
-          const matchSem = !item.semester_id || item.semester_id === selectedSemesterId;
-          return matchBranch && matchSem;
-        });
-
-        // 2. Fetch published feedback forms
-        const { data: formData, error: formErr } = await supabase
-          .from('feedback_forms')
-          .select('*')
-          .eq('academic_year_id', selectedYearId)
-          .eq('branch_id', selectedBranchId)
-          .eq('semester_id', selectedSemesterId)
-          .eq('status', 'PUBLISHED');
-
-        if (formErr) {
-          console.error('Error fetching feedback forms:', formErr);
-        }
-
-        if (isMounted) {
-          setAssignments(filteredAssignments as unknown as FacultySubjectAssignment[]);
-          setForms((formData as FeedbackForm[]) || []);
-        }
-      } catch (err) {
-        console.error('Failed to load discovery data:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
+    if (!selectedYearId || !selectedBranchId || !selectedSemesterId) {
+      setFaculties([]);
+      setSelectedFacultyId('');
+      setSubjects([]);
+      setSelectedSubjectId('');
+      setMatchedForm(null);
+      return;
     }
 
-    startTransition(() => {
-      fetchData();
+    let isMounted = true;
+    setLoadingFaculties(true);
+    setSelectedFacultyId('');
+    setSubjects([]);
+    setSelectedSubjectId('');
+    setMatchedForm(null);
+
+    startTransition(async () => {
+      const res = await getPublicFacultiesForSelectionAction(
+        selectedYearId,
+        selectedBranchId,
+        selectedSemesterId
+      );
+
+      if (isMounted) {
+        setLoadingFaculties(false);
+        if (res.success) {
+          setFaculties(res.faculties);
+        } else {
+          setFaculties([]);
+        }
+      }
     });
 
     return () => {
       isMounted = false;
     };
-  }, [selectedYearId, selectedBranchId, selectedSemesterId, supabase]);
+  }, [selectedYearId, selectedBranchId, selectedSemesterId]);
+
+  // 2. Fetch subjects when Faculty changes
+  useEffect(() => {
+    if (!selectedYearId || !selectedBranchId || !selectedSemesterId || !selectedFacultyId) {
+      setSubjects([]);
+      setSelectedSubjectId('');
+      setMatchedForm(null);
+      return;
+    }
+
+    let isMounted = true;
+    setLoadingSubjects(true);
+    setSelectedSubjectId('');
+    setMatchedForm(null);
+
+    startTransition(async () => {
+      const res = await getPublicSubjectsForFacultyAction(
+        selectedYearId,
+        selectedBranchId,
+        selectedSemesterId,
+        selectedFacultyId
+      );
+
+      if (isMounted) {
+        setLoadingSubjects(false);
+        if (res.success) {
+          setSubjects(res.subjects);
+        } else {
+          setSubjects([]);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedYearId, selectedBranchId, selectedSemesterId, selectedFacultyId]);
+
+  // 3. Fetch Feedback Form when Subject is selected
+  useEffect(() => {
+    if (
+      !selectedYearId ||
+      !selectedBranchId ||
+      !selectedSemesterId ||
+      !selectedFacultyId ||
+      !selectedSubjectId
+    ) {
+      setMatchedForm(null);
+      setFormStatus('NONE');
+      return;
+    }
+
+    let isMounted = true;
+    setLoadingForm(true);
+
+    startTransition(async () => {
+      const res = await getPublicFeedbackFormAction(
+        selectedYearId,
+        selectedBranchId,
+        selectedSemesterId,
+        selectedFacultyId,
+        selectedSubjectId
+      );
+
+      if (isMounted) {
+        setLoadingForm(false);
+        if (res.success) {
+          setMatchedForm(res.form);
+          setFormStatus(res.status);
+          setStatusMessage(res.message);
+        } else {
+          setMatchedForm(null);
+          setFormStatus('NONE');
+          setStatusMessage(res.message || 'Unable to check feedback form.');
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    selectedYearId,
+    selectedBranchId,
+    selectedSemesterId,
+    selectedFacultyId,
+    selectedSubjectId,
+  ]);
+
+  const handleReset = () => {
+    setSelectedFacultyId('');
+    setSelectedSubjectId('');
+    setMatchedForm(null);
+    setFormStatus('NONE');
+  };
 
   const selectedYear = academicYears.find(y => y.id === selectedYearId);
   const selectedBranch = branches.find(b => b.id === selectedBranchId);
   const selectedSemester = semesters.find(s => s.id === selectedSemesterId);
+  const selectedFaculty = faculties.find(f => f.id === selectedFacultyId);
+  const selectedSubject = subjects.find(s => s.id === selectedSubjectId);
 
   return (
     <div className="space-y-8">
-      {/* 3-Step Filter Panel */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      {/* 5-Step Cascading Selection Box */}
+      <div className="bg-white rounded-2xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <h4 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-bce-cobalt" />
+              Cascading Feedback Selection
+            </h4>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Select your academic details in order: Session → Department → Semester → Faculty → Subject.
+            </p>
+          </div>
+
+          {(selectedFacultyId || selectedSubjectId) && (
+            <button
+              onClick={handleReset}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition-colors self-start sm:self-auto"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+              <span>Reset Selection</span>
+            </button>
+          )}
+        </div>
+
+        {/* Tier 1: Academic Year + Branch + Semester */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Step 1: Academic Year */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-bce-cobalt" />
-              1. Academic Year
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-bce-cobalt" />
+              1. Academic Session
             </label>
             <select
               value={selectedYearId}
-              onChange={(e) => setSelectedYearId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20 focus:border-bce-cobalt transition-all"
+              onChange={e => setSelectedYearId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
             >
-              {academicYears.length === 0 && <option value="">No active years</option>}
-              {academicYears.map((yr) => (
-                <option key={yr.id} value={yr.id}>
-                  {yr.name} {yr.is_active ? '(Active)' : ''}
+              {academicYears.map(y => (
+                <option key={y.id} value={y.id}>
+                  {y.name} {y.is_active ? '(Active Session)' : ''}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Step 2: Branch / Department */}
+          {/* Step 2: Branch */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-bce-cobalt" />
-              2. Branch / Department
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-bce-cobalt" />
+              2. Branch / Discipline
             </label>
             <select
               value={selectedBranchId}
-              onChange={(e) => setSelectedBranchId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20 focus:border-bce-cobalt transition-all"
+              onChange={e => setSelectedBranchId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
             >
-              {branches.length === 0 && <option value="">No active branches</option>}
-              {branches.map((br) => (
-                <option key={br.id} value={br.id}>
-                  {br.name} ({br.code})
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({b.code})
                 </option>
               ))}
             </select>
@@ -161,159 +275,158 @@ export function StudentDiscoveryFlow({ academicYears, branches, semesters }: Pro
 
           {/* Step 3: Semester */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
-              <BookOpen className="w-4 h-4 text-bce-cobalt" />
-              3. Semester
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+              <GraduationCap className="w-3.5 h-3.5 text-bce-cobalt" />
+              3. Semester Level
             </label>
             <select
               value={selectedSemesterId}
-              onChange={(e) => setSelectedSemesterId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20 focus:border-bce-cobalt transition-all"
+              onChange={e => setSelectedSemesterId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
             >
-              {semesters.length === 0 && <option value="">No active semesters</option>}
-              {semesters.map((sem) => (
-                <option key={sem.id} value={sem.id}>
-                  {sem.name}
+              {semesters.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} (Sem {s.semester_number})
                 </option>
               ))}
             </select>
           </div>
         </div>
 
-        {/* Selected Criteria Summary Tag */}
-        <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-700">Currently Filtering:</span>
-            <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 font-medium">
-              {selectedYear?.name || 'Session'}
-            </span>
-            <span className="text-slate-400">/</span>
-            <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 font-medium">
-              {selectedBranch?.code || 'Branch'}
-            </span>
-            <span className="text-slate-400">/</span>
-            <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 font-medium">
-              {selectedSemester?.name || 'Semester'}
-            </span>
+        {/* Tier 2: Faculty & Subject Cascading Filters */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+          {/* Step 4: Faculty Selector */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-bce-cobalt" />
+                4. Select Faculty Member
+              </span>
+              {loadingFaculties && <Loader2 className="w-3.5 h-3.5 animate-spin text-bce-cobalt" />}
+            </label>
+
+            {loadingFaculties ? (
+              <div className="h-10 bg-slate-50 border border-slate-200 rounded-xl flex items-center px-3 text-xs text-slate-400">
+                Loading assigned faculties...
+              </div>
+            ) : faculties.length === 0 ? (
+              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs text-amber-900 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>No faculty assignments found for {selectedBranch?.name}, {selectedSemester?.name}.</span>
+              </div>
+            ) : (
+              <select
+                value={selectedFacultyId}
+                onChange={e => setSelectedFacultyId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
+              >
+                <option value="">-- Choose Faculty Member ({faculties.length} available) --</option>
+                {faculties.map(f => (
+                  <option key={f.id} value={f.id}>
+                    {f.name} ({f.designation || f.department || 'Faculty'})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
-          <div className="text-slate-400">
-            {assignments.length} {assignments.length === 1 ? 'Faculty Assigned' : 'Faculties Assigned'}
+          {/* Step 5: Subject Selector */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-bce-cobalt" />
+                5. Select Course Subject
+              </span>
+              {loadingSubjects && <Loader2 className="w-3.5 h-3.5 animate-spin text-bce-cobalt" />}
+            </label>
+
+            {!selectedFacultyId ? (
+              <div className="h-10 bg-slate-50 border border-slate-200 rounded-xl flex items-center px-3 text-xs text-slate-400">
+                Please select a faculty member first
+              </div>
+            ) : loadingSubjects ? (
+              <div className="h-10 bg-slate-50 border border-slate-200 rounded-xl flex items-center px-3 text-xs text-slate-400">
+                Loading subjects taught by {selectedFaculty?.name}...
+              </div>
+            ) : subjects.length === 0 ? (
+              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs text-amber-900 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>No subjects mapped to {selectedFaculty?.name} in this semester.</span>
+              </div>
+            ) : (
+              <select
+                value={selectedSubjectId}
+                onChange={e => setSelectedSubjectId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
+              >
+                <option value="">-- Choose Subject ({subjects.length} available) --</option>
+                {subjects.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} {s.code ? `(${s.code})` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Results Section */}
+      {/* Available Feedback Results Area */}
       <div className="space-y-4">
-        <h4 className="text-base font-bold text-slate-900 flex items-center justify-between">
-          <span>Faculty & Subject Evaluation Forms</span>
-          {isLoading && (
-            <span className="text-xs font-normal text-bce-cobalt animate-pulse flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 animate-spin" /> Loading assignments...
-            </span>
-          )}
-        </h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-bce-cobalt" />
+            Evaluation Feedback Form
+          </h4>
+          <span className="text-xs text-slate-500 font-medium">
+            {selectedBranch?.code} • {selectedSemester?.name} • {selectedYear?.name}
+          </span>
+        </div>
 
-        {/* Loading Skeleton */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="bg-white rounded-xl p-5 border border-slate-200 animate-pulse space-y-3">
-                <div className="h-4 bg-slate-200 rounded w-2/3" />
-                <div className="h-3 bg-slate-100 rounded w-1/2" />
-                <div className="h-9 bg-slate-100 rounded-lg w-full mt-4" />
-              </div>
-            ))}
+        {loadingForm ? (
+          <div className="p-12 bg-white rounded-2xl border border-slate-200 shadow-xs text-center space-y-3">
+            <Loader2 className="w-8 h-8 animate-spin text-bce-cobalt mx-auto" />
+            <p className="text-xs font-semibold text-slate-700">
+              Checking feedback form availability for {selectedFaculty?.name} — {selectedSubject?.name}...
+            </p>
           </div>
-        ) : assignments.length > 0 ? (
-          /* Cards Grid */
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {assignments.map((item) => {
-              const faculty = item.faculty;
-              const subject = item.subject;
-              const matchingForm = forms.find(
-                f => f.faculty_id === item.faculty_id && f.subject_id === item.subject_id
-              );
-
-              return (
-                <div
-                  key={item.id}
-                  className="bg-white rounded-xl p-5 border border-slate-200 hover:border-bce-cobalt/40 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-full bg-slate-100 text-bce-cobalt flex items-center justify-center font-bold text-sm">
-                          <User className="w-4 h-4 text-bce-cobalt" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-slate-900 text-base leading-tight">
-                            {faculty?.name || 'Faculty Member'}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {faculty?.designation || 'Faculty'} • {faculty?.department || 'Department'}
-                          </p>
-                        </div>
-                      </div>
-
-                      {matchingForm ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Published
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                          <Clock className="w-3.5 h-3.5 text-slate-400" /> Pending Form
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 flex items-center justify-between text-xs">
-                      <span className="text-slate-500 font-medium">Subject:</span>
-                      <span className="font-semibold text-slate-800">
-                        {subject?.name || 'Subject'} {subject?.code ? `(${subject.code})` : ''}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 pt-3 border-t border-slate-100">
-                    {matchingForm ? (
-                      <a
-                        href={matchingForm.public_url || matchingForm.google_form_url || '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-bce-cobalt hover:bg-bce-navy text-white rounded-lg font-medium text-sm transition-colors shadow-xs"
-                      >
-                        <span>Start Feedback Evaluation</span>
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    ) : (
-                      <div className="bg-amber-50/70 border border-amber-200/60 rounded-lg p-2.5 text-center text-xs text-amber-900 flex items-center justify-center gap-2">
-                        <Info className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>Feedback form not yet published by administration for this subject.</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          /* Empty State */
-          <div className="bg-white rounded-2xl p-10 border border-slate-200 text-center space-y-3">
-            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
+        ) : matchedForm ? (
+          /* Real Published or Closed Feedback Card */
+          <PublicFeedbackCard form={matchedForm} isClosed={formStatus === 'CLOSED'} />
+        ) : selectedSubjectId ? (
+          /* Subject Selected but No Published Form Found */
+          <div className="bg-white rounded-2xl p-10 border border-slate-200 text-center space-y-3 shadow-xs">
+            <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 mx-auto flex items-center justify-center">
               <AlertCircle className="w-6 h-6" />
             </div>
-            <h5 className="text-base font-bold text-slate-800">
-              No Faculty Assignments or Feedback Forms Found
+            <h5 className="text-base font-bold text-slate-900">
+              No Published Feedback Form Available
             </h5>
-            <p className="text-sm text-slate-500 max-w-md mx-auto">
-              There are currently no active faculty assignments configured for {selectedBranch?.name || 'this branch'} in {selectedSemester?.name || 'this semester'} for session {selectedYear?.name || ''}.
+            <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+              {statusMessage ||
+                `There is no active feedback form published for ${selectedFaculty?.name} teaching ${selectedSubject?.name} (${selectedBranch?.name}, ${selectedSemester?.name}).`}
             </p>
             <div className="pt-2">
-              <span className="text-xs text-slate-400">
-                Please check another semester or check back after the administration updates assignments.
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-600 text-[11px] font-medium rounded-full">
+                <Info className="w-3.5 h-3.5" />
+                Forms are opened during designated academic feedback windows.
               </span>
             </div>
+          </div>
+        ) : (
+          /* Prompt to complete selections */
+          <div className="bg-white rounded-2xl p-10 border border-dashed border-slate-300 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-blue-50 text-bce-cobalt mx-auto flex items-center justify-center">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <h5 className="text-sm font-bold text-slate-800">
+              Complete the Selection Above
+            </h5>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              {!selectedFacultyId
+                ? 'Please select your Faculty Member from the dropdown to continue.'
+                : 'Please select the Course Subject to access your evaluation form.'}
+            </p>
           </div>
         )}
       </div>
