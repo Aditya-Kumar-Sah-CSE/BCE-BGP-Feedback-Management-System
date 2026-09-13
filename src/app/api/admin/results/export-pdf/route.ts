@@ -8,11 +8,11 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
-    // 1. Mandatory Admin Authentication Check
+    // 1. Mandatory Active Admin Authentication Check
     const session = await getAdminSession();
-    if (!session.isAuthenticated) {
+    if (!session.isAuthenticated || !session.isActive) {
       return NextResponse.json(
-        { error: 'Unauthorized. Admin credentials required to access institutional report PDFs.' },
+        { error: 'Unauthorized. Active admin credentials required to access institutional report PDFs.' },
         { status: 401 }
       );
     }
@@ -57,8 +57,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Institutional PDF generation failed';
     console.error('Institutional PDF export error:', err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to generate institutional report PDF.' }, { status: 500 });
   }
 }

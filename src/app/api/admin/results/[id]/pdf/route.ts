@@ -6,6 +6,7 @@ import { normalizeSheetRows } from '@/lib/analytics/normalizer';
 import { calculateFormAnalytics } from '@/lib/analytics/engine';
 import { generateIndividualFacultyPDF } from '@/lib/analytics/pdf-generator';
 import { isGoogleConfigured } from '@/lib/google/auth';
+import { isValidUUID } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -15,18 +16,18 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    // 1. Mandatory Admin Authentication Check
+    // 1. Mandatory Active Admin Authentication Check
     const session = await getAdminSession();
-    if (!session.isAuthenticated) {
+    if (!session.isAuthenticated || !session.isActive) {
       return NextResponse.json(
-        { error: 'Unauthorized. Admin credentials required to access report PDFs.' },
+        { error: 'Unauthorized. Active admin credentials required to access report PDFs.' },
         { status: 401 }
       );
     }
 
     const { id: formId } = await context.params;
-    if (!formId) {
-      return NextResponse.json({ error: 'Form ID is required.' }, { status: 400 });
+    if (!formId || !isValidUUID(formId)) {
+      return NextResponse.json({ error: 'Valid Feedback Form ID is required.' }, { status: 400 });
     }
 
     const supabase = await createClient();
@@ -96,8 +97,7 @@ export async function GET(
       },
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'PDF generation failed';
     console.error('Individual PDF generation error:', err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to generate faculty report PDF.' }, { status: 500 });
   }
 }

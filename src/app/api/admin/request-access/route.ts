@@ -1,16 +1,25 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { SUPER_ADMIN_EMAIL } from '@/lib/auth/admin-auth';
+import { requestAccessSchema, isValidUUID } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const { userId, name, email, department } = await request.json();
+    const body = await request.json();
+    const validation = requestAccessSchema.safeParse(body);
 
-    if (!email || !name) {
-      return NextResponse.json({ error: 'Name and email are required.' }, { status: 400 });
+    if (!validation.success) {
+      const issue = validation.error.issues[0];
+      return NextResponse.json(
+        { error: issue ? issue.message : 'Invalid request submission data.' },
+        { status: 400 }
+      );
     }
+
+    const { name, email, department } = validation.data;
+    const userId = body.userId && isValidUUID(body.userId) ? body.userId : null;
 
     const cleanEmail = email.trim().toLowerCase();
     const isSuperAdminEmail = cleanEmail === SUPER_ADMIN_EMAIL;
@@ -33,6 +42,7 @@ export async function POST(request: Request) {
             user_id: userId || existingAdmin.user_id,
             name,
             role: 'SUPER_ADMIN',
+            status: 'ACTIVE',
           })
           .eq('id', existingAdmin.id)
           .select('*')
@@ -46,6 +56,7 @@ export async function POST(request: Request) {
             email: cleanEmail,
             name,
             role: 'SUPER_ADMIN',
+            status: 'ACTIVE',
           })
           .select('*')
           .maybeSingle();
@@ -86,7 +97,7 @@ export async function POST(request: Request) {
 
       if (error) {
         console.error('Admin request update error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: 'Failed to update admin request.' }, { status: 500 });
       }
       reqData = data;
     } else {
@@ -103,7 +114,7 @@ export async function POST(request: Request) {
 
       if (error) {
         console.error('Admin request insert error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: 'Failed to record admin request.' }, { status: 500 });
       }
       reqData = data;
     }
@@ -115,10 +126,10 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ success: true, isSuperAdmin: false, status: 'PENDING', request: reqData });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Request access error:', error);
     return NextResponse.json(
-      { error: error.message || 'Internal Server Error' },
+      { error: 'An unexpected error occurred while processing your request.' },
       { status: 500 }
     );
   }

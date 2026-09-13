@@ -13,6 +13,7 @@ import {
   generateFeedbackFormTitle,
   generateFeedbackFormDescription,
 } from '@/lib/google/template';
+import { isValidUUID, createFormPayloadSchema, formStatusSchema } from '@/lib/validation';
 
 // Helper: Record audit logs
 async function logAuditAction(
@@ -57,8 +58,8 @@ export async function getFeedbackFormsAction(filters?: {
   search?: string;
 }) {
   const session = await getAdminSession();
-  if (!session.isAuthenticated) {
-    return { success: false, error: 'Unauthorized. Admin login required.', forms: [] };
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized. Active admin session required.', forms: [] };
   }
 
   const supabase = await createClient();
@@ -114,8 +115,12 @@ export async function getFeedbackFormsAction(filters?: {
  */
 export async function getFeedbackFormByIdAction(formId: string) {
   const session = await getAdminSession();
-  if (!session.isAuthenticated) {
-    return { success: false, error: 'Unauthorized' };
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized. Active admin session required.' };
+  }
+
+  if (!isValidUUID(formId)) {
+    return { success: false, error: 'Invalid feedback form identifier format.' };
   }
 
   const supabase = await createClient();
@@ -168,8 +173,15 @@ export interface CreateFormPayload {
 export async function createGoogleFeedbackFormAction(payload: CreateFormPayload) {
   // 1. Authorization check
   const session = await getAdminSession();
-  if (!session.isAuthenticated) {
-    return { success: false, error: 'Unauthorized. Admin login required.' };
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized. Active admin session required.' };
+  }
+
+  // 2. Validate input payload
+  const validation = createFormPayloadSchema.safeParse(payload);
+  if (!validation.success) {
+    const issue = validation.error.issues[0];
+    return { success: false, error: issue ? issue.message : 'Invalid form creation parameters.' };
   }
 
   const adminId = session.admin?.id || session.user?.id || null;
@@ -435,8 +447,16 @@ export async function updateFormStatusAction(
   newStatus: FeedbackFormStatus
 ) {
   const session = await getAdminSession();
-  if (!session.isAuthenticated) {
-    return { success: false, error: 'Unauthorized' };
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized. Active admin session required.' };
+  }
+
+  if (!isValidUUID(formId)) {
+    return { success: false, error: 'Invalid feedback form identifier format.' };
+  }
+
+  if (!formStatusSchema.safeParse(newStatus).success) {
+    return { success: false, error: 'Invalid feedback form status value.' };
   }
 
   const adminId = session.admin?.id || session.user?.id || null;
@@ -531,8 +551,12 @@ export async function updateFormStatusAction(
  */
 export async function syncFormResponsesAction(formId: string) {
   const session = await getAdminSession();
-  if (!session.isAuthenticated) {
-    return { success: false, error: 'Unauthorized' };
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized. Active admin session required.' };
+  }
+
+  if (!isValidUUID(formId)) {
+    return { success: false, error: 'Invalid feedback form identifier format.' };
   }
 
   const adminId = session.admin?.id || session.user?.id || null;

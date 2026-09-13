@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { Faculty, Subject } from '@/types/database';
+import { isValidUUID } from '@/lib/validation';
 
 
 export interface PublicFormSummary {
@@ -50,6 +51,10 @@ export async function getPublicFacultiesForSelectionAction(
   semesterId: string
 ): Promise<{ success: boolean; faculties: Faculty[]; error?: string }> {
   try {
+    if (!isValidUUID(yearId) || !isValidUUID(branchId) || !isValidUUID(semesterId)) {
+      return { success: false, faculties: [], error: 'Invalid academic parameters.' };
+    }
+
     const supabase = await createClient();
 
     const { data: assignments, error } = await supabase
@@ -105,6 +110,15 @@ export async function getPublicSubjectsForFacultyAction(
   facultyId: string
 ): Promise<{ success: boolean; subjects: Subject[]; error?: string }> {
   try {
+    if (
+      !isValidUUID(yearId) ||
+      !isValidUUID(branchId) ||
+      !isValidUUID(semesterId) ||
+      !isValidUUID(facultyId)
+    ) {
+      return { success: false, subjects: [], error: 'Invalid academic parameters.' };
+    }
+
     const supabase = await createClient();
 
     const { data: assignments, error } = await supabase
@@ -169,6 +183,21 @@ export async function getPublicFeedbackFormAction(
   message: string;
 }> {
   try {
+    if (
+      !isValidUUID(yearId) ||
+      !isValidUUID(branchId) ||
+      !isValidUUID(semesterId) ||
+      !isValidUUID(facultyId) ||
+      !isValidUUID(subjectId)
+    ) {
+      return {
+        success: false,
+        form: null,
+        status: 'NONE',
+        message: 'Invalid academic parameters.',
+      };
+    }
+
     const supabase = await createClient();
 
     const { data: form, error } = await supabase
@@ -252,6 +281,15 @@ export async function getPublicFeedbackFormByIdAction(formId: string): Promise<{
   message: string;
 }> {
   try {
+    if (!formId || !isValidUUID(formId)) {
+      return {
+        success: false,
+        form: null,
+        status: 'UNAVAILABLE',
+        message: 'This feedback form link is invalid.',
+      };
+    }
+
     const supabase = await createClient();
 
     const { data: form, error } = await supabase

@@ -5,9 +5,10 @@ import { getAdminSession } from '@/lib/auth/admin-auth';
 import { fetchRawSheetResponses } from '@/lib/analytics/sheets-reader';
 import { normalizeSheetRows } from '@/lib/analytics/normalizer';
 import { calculateFormAnalytics, aggregateAnalytics } from '@/lib/analytics/engine';
-import { FormAnalyticsReport, AggregatedAnalyticsReport } from '@/lib/analytics/types';
+import type { FormAnalyticsReport, AggregatedAnalyticsReport } from '@/lib/analytics/types';
 import { syncFormResponsesToSheet } from '@/lib/google/sync';
 import { isGoogleConfigured } from '@/lib/google/auth';
+import { isValidUUID } from '@/lib/validation';
 
 /**
  * Fetches real-time analytics for a specific feedback form.
@@ -20,8 +21,12 @@ export async function getFormAnalyticsAction(formId: string): Promise<{
 }> {
   // 1. Admin Authentication Check
   const session = await getAdminSession();
-  if (!session.isAuthenticated) {
-    return { success: false, error: 'Unauthorized. Admin credentials required.' };
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized. Active admin credentials required.' };
+  }
+
+  if (!isValidUUID(formId)) {
+    return { success: false, error: 'Invalid feedback form identifier format.' };
   }
 
   const supabase = await createClient();
@@ -107,8 +112,25 @@ export async function getOverallAnalyticsAction(filters?: ScopeFilters): Promise
   report?: AggregatedAnalyticsReport;
 }> {
   const session = await getAdminSession();
-  if (!session.isAuthenticated) {
-    return { success: false, error: 'Unauthorized. Admin credentials required.' };
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized. Active admin credentials required.' };
+  }
+
+  // Validate filter UUIDs if present
+  if (filters?.academicYearId && filters.academicYearId !== 'ALL' && !isValidUUID(filters.academicYearId)) {
+    return { success: false, error: 'Invalid Academic Year filter format.' };
+  }
+  if (filters?.branchId && filters.branchId !== 'ALL' && !isValidUUID(filters.branchId)) {
+    return { success: false, error: 'Invalid Branch filter format.' };
+  }
+  if (filters?.semesterId && filters.semesterId !== 'ALL' && !isValidUUID(filters.semesterId)) {
+    return { success: false, error: 'Invalid Semester filter format.' };
+  }
+  if (filters?.facultyId && filters.facultyId !== 'ALL' && !isValidUUID(filters.facultyId)) {
+    return { success: false, error: 'Invalid Faculty filter format.' };
+  }
+  if (filters?.subjectId && filters.subjectId !== 'ALL' && !isValidUUID(filters.subjectId)) {
+    return { success: false, error: 'Invalid Subject filter format.' };
   }
 
   const supabase = await createClient();
@@ -242,8 +264,12 @@ export async function getOverallAnalyticsAction(filters?: ScopeFilters): Promise
  */
 export async function syncSingleFormResponsesAction(formId: string) {
   const session = await getAdminSession();
-  if (!session.isAuthenticated) {
-    return { success: false, error: 'Unauthorized.' };
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized. Active admin credentials required.' };
+  }
+
+  if (!isValidUUID(formId)) {
+    return { success: false, error: 'Invalid feedback form identifier format.' };
   }
 
   const supabase = await createClient();
