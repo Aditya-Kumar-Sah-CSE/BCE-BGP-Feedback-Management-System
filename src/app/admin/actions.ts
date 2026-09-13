@@ -865,24 +865,51 @@ export async function createFeedbackFormDraftAction(data: {
   const supabase = await getAdminDb();
   const slug = `bce-fb-${Date.now()}`;
 
-  const { data: form, error } = await supabase
-    .from('feedback_forms')
-    .insert({
-      title: data.title.trim(),
-      academic_year_id: data.academic_year_id,
-      branch_id: data.branch_id,
-      semester_id: data.semester_id,
-      faculty_id: data.faculty_id,
-      subject_id: data.subject_id,
-      form_type: 'FACULTY_FEEDBACK',
-      status: 'DRAFT',
-      slug,
-      created_by: session.admin?.id || null,
-    })
-    .select('*')
-    .single();
+  const insertPayload: Record<string, any> = {
+    title: data.title.trim(),
+    academic_year_id: data.academic_year_id,
+    branch_id: data.branch_id,
+    semester_id: data.semester_id,
+    faculty_id: data.faculty_id,
+    subject_id: data.subject_id,
+    form_type: 'FACULTY_FEEDBACK',
+    status: 'DRAFT',
+    slug,
+    created_by: session.admin?.id || null,
+  };
 
-  if (error) return { success: false, error: error.message };
+  let form: any = null;
+  let currentPayload = { ...insertPayload };
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const { data: inserted, error: insertErr } = await supabase
+      .from('feedback_forms')
+      .insert(currentPayload)
+      .select('*')
+      .single();
+
+    if (!insertErr && inserted) {
+      form = inserted;
+      break;
+    }
+
+    if (insertErr) {
+      const missingColMatch = insertErr.message.match(/Could not find the '([^']+)' column/i);
+      const undefColMatch = insertErr.message.match(/column "([^"]+)"/i);
+      const colToRemove = missingColMatch?.[1] || undefColMatch?.[1];
+
+      if (colToRemove && colToRemove in currentPayload) {
+        delete currentPayload[colToRemove];
+        continue;
+      }
+
+      return { success: false, error: insertErr.message };
+    }
+  }
+
+  if (!form) {
+    return { success: false, error: 'Failed to create feedback form record in database.' };
+  }
 
   await logAuditAction(
     supabase,

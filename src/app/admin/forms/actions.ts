@@ -367,45 +367,42 @@ export async function createGoogleFeedbackFormAction(payload: CreateFormPayload)
       created_by: adminId,
     };
 
-    let savedForm: FeedbackForm;
+    let savedForm: FeedbackForm | null = null;
+    let currentPayload = { ...insertPayload };
 
-    const { data: inserted, error: insertErr } = await supabase
-      .from('feedback_forms')
-      .insert(insertPayload)
-      .select()
-      .single();
-
-    if (insertErr) {
-      // Fallback for unmigrated columns if database has not yet run Phase 2 migration
-      console.warn('Phase 2 insert retry with base columns due to schema difference:', insertErr.message);
-      const basePayload = {
-        title,
-        academic_year_id: payload.academicYearId,
-        branch_id: payload.branchId,
-        semester_id: payload.semesterId,
-        faculty_id: payload.facultyId,
-        subject_id: payload.subjectId,
-        form_type: payload.formType,
-        status: 'DRAFT',
-        slug: cleanSlug,
-        google_form_id: googleFormResult.formId,
-        google_form_url: googleFormResult.responderUri,
-        google_sheet_id: googleSheetResult.spreadsheetId,
-        created_by: adminId,
-      };
-
-      const { data: baseInserted, error: baseErr } = await supabase
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { data: inserted, error: insertErr } = await supabase
         .from('feedback_forms')
-        .insert(basePayload)
+        .insert(currentPayload)
         .select()
         .single();
 
-      if (baseErr) {
-        throw new Error(`Failed to save feedback form record to database: ${baseErr.message}`);
+      if (!insertErr && inserted) {
+        savedForm = inserted as FeedbackForm;
+        break;
       }
-      savedForm = baseInserted as FeedbackForm;
-    } else {
-      savedForm = inserted as FeedbackForm;
+
+      if (insertErr) {
+        console.warn(`feedback_forms insert attempt ${attempt + 1} failed:`, insertErr.message);
+
+        // Pattern 1: PGRST204 "Could not find the 'xyz' column of 'feedback_forms' in the schema cache"
+        const missingColMatch = insertErr.message.match(/Could not find the '([^']+)' column/i);
+        // Pattern 2: Postgres 42703 'column "xyz" of relation "feedback_forms" does not exist'
+        const undefColMatch = insertErr.message.match(/column "([^"]+)"/i);
+        const colToRemove = missingColMatch?.[1] || undefColMatch?.[1];
+
+        if (colToRemove && colToRemove in currentPayload) {
+          console.warn(`Stripping missing column '${colToRemove}' and retrying insert...`);
+          delete currentPayload[colToRemove];
+          continue;
+        }
+
+        throw new Error(`Failed to save feedback form record to database: ${insertErr.message}`);
+      }
+    }
+
+    if (!savedForm) {
+      throw new Error('Failed to save feedback form record to database: unknown database error');
     }
 
     revalidatePath('/admin/dashboard/forms');
