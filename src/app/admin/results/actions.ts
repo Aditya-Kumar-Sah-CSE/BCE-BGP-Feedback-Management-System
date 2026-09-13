@@ -280,7 +280,7 @@ export async function syncSingleFormResponsesAction(formId: string) {
   const supabase = await createClient();
   const { data: form, error } = await supabase
     .from('feedback_forms')
-    .select('id, title, google_form_id, google_sheet_id')
+    .select('*')
     .eq('id', formId)
     .single();
 
@@ -288,7 +288,16 @@ export async function syncSingleFormResponsesAction(formId: string) {
     return { success: false, error: 'Form not found.' };
   }
 
-  if (!form.google_form_id || !form.google_sheet_id) {
+  const resolvedFormId =
+    form.google_form_id ||
+    form.google_form_edit_url?.match(/\/forms\/d\/([a-zA-Z0-9_-]+)/)?.[1] ||
+    form.google_form_url?.match(/\/forms\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+
+  const resolvedSheetId =
+    form.google_sheet_id ||
+    form.google_sheet_url?.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+
+  if (!resolvedFormId || !resolvedSheetId) {
     return { success: false, error: 'Google Form ID or Sheet ID not associated with this record.' };
   }
 
@@ -300,8 +309,8 @@ export async function syncSingleFormResponsesAction(formId: string) {
   }
 
   const syncRes = await syncFormResponsesToSheet({
-    googleFormId: form.google_form_id,
-    googleSheetId: form.google_sheet_id,
+    googleFormId: resolvedFormId,
+    googleSheetId: resolvedSheetId,
   });
 
   if (!syncRes.success) {
