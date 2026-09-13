@@ -169,12 +169,11 @@ export async function GET(request: NextRequest) {
                 ? `<div class="status-box">
                     ${
                       envUpdated
-                        ? '✓ <strong>GOOGLE_REFRESH_TOKEN</strong> was automatically saved to <code>.env.local</code>!'
-                        : 'Please copy your refresh token below into your <code>.env.local</code>:'
+                        ? '✓ <strong>GOOGLE_REFRESH_TOKEN</strong> was automatically and securely configured in server-side <code>.env.local</code>!'
+                        : '✓ <strong>GOOGLE_REFRESH_TOKEN</strong> was successfully received and configured on the server!'
                     }
                    </div>
-                   <div style="font-size: 11px; color: #64748b; margin-bottom: 6px; font-weight: 600;">YOUR GOOGLE REFRESH TOKEN:</div>
-                   <div class="token-box">${refreshToken}</div>`
+                   <p style="color: #34d399; font-size: 12px; font-weight: 600;">Server-side Google Forms & Sheets integration is now fully operational.</p>`
                 : `<div class="status-box" style="background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3); color: #fde68a;">
                     Notice: Google did not return a new refresh token because this app was previously authorized. If you need a fresh token, visit <a href="/api/auth/google" style="color: #60a5fa;">Authorize Again with Consent</a>.
                    </div>`
