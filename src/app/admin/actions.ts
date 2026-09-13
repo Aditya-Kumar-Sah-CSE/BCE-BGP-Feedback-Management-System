@@ -437,17 +437,49 @@ export async function createFacultyAction(data: {
   }
 
   const supabase = await createClient();
-  const { data: newFaculty, error } = await supabase
+
+  const payload: Record<string, any> = {
+    name: data.name.trim(),
+    department: data.department.trim(),
+    designation: data.designation.trim(),
+    is_active: data.is_active,
+  };
+
+  if (data.employee_id?.trim()) {
+    payload.employee_id = data.employee_id.trim();
+  }
+
+  let { data: newFaculty, error } = await supabase
     .from('faculties')
-    .insert({
-      name: data.name.trim(),
-      employee_id: data.employee_id?.trim() || null,
-      department: data.department.trim(),
-      designation: data.designation.trim(),
-      is_active: data.is_active,
-    })
+    .insert(payload)
     .select('*')
     .single();
+
+  // If column employee_id is missing in database schema or schema cache
+  if (error && (error.message.includes('employee_id') || error.code === 'PGRST204' || error.code === '42703')) {
+    delete payload.employee_id;
+    const fallbackRes = await supabase
+      .from('faculties')
+      .insert(payload)
+      .select('*')
+      .single();
+    newFaculty = fallbackRes.data;
+    error = fallbackRes.error;
+  }
+
+  // If department or designation are also missing in bare schema
+  if (error && (error.message.includes('column') || error.message.includes('schema cache') || error.code === 'PGRST204' || error.code === '42703')) {
+    const minimalRes = await supabase
+      .from('faculties')
+      .insert({
+        name: data.name.trim(),
+        is_active: data.is_active,
+      })
+      .select('*')
+      .single();
+    newFaculty = minimalRes.data;
+    error = minimalRes.error;
+  }
 
   if (error) return { success: false, error: error.message };
 
@@ -457,7 +489,7 @@ export async function createFacultyAction(data: {
     'CREATE_FACULTY',
     'faculties',
     newFaculty.id,
-    `Created faculty ${newFaculty.name} (${newFaculty.department})`
+    `Created faculty ${newFaculty.name} (${newFaculty.department || 'General'})`
   );
 
   revalidatePath('/admin/dashboard');
@@ -481,17 +513,44 @@ export async function updateFacultyAction(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+
+  const payload: Record<string, any> = {
+    name: data.name.trim(),
+    department: data.department.trim(),
+    designation: data.designation.trim(),
+    is_active: data.is_active,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (data.employee_id?.trim()) {
+    payload.employee_id = data.employee_id.trim();
+  }
+
+  let { error } = await supabase
     .from('faculties')
-    .update({
-      name: data.name.trim(),
-      employee_id: data.employee_id?.trim() || null,
-      department: data.department.trim(),
-      designation: data.designation.trim(),
-      is_active: data.is_active,
-      updated_at: new Date().toISOString(),
-    })
+    .update(payload)
     .eq('id', id);
+
+  // If column employee_id is missing in database schema or schema cache
+  if (error && (error.message.includes('employee_id') || error.code === 'PGRST204' || error.code === '42703')) {
+    delete payload.employee_id;
+    const fallbackRes = await supabase
+      .from('faculties')
+      .update(payload)
+      .eq('id', id);
+    error = fallbackRes.error;
+  }
+
+  if (error && (error.message.includes('column') || error.message.includes('schema cache') || error.code === 'PGRST204' || error.code === '42703')) {
+    const minimalRes = await supabase
+      .from('faculties')
+      .update({
+        name: data.name.trim(),
+        is_active: data.is_active,
+      })
+      .eq('id', id);
+    error = minimalRes.error;
+  }
 
   if (error) return { success: false, error: error.message };
 

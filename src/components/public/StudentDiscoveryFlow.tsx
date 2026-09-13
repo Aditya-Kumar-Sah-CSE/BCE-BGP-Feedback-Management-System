@@ -85,17 +85,31 @@ export function StudentDiscoveryFlow({
     setMatchedForm(null);
 
     startTransition(async () => {
-      const res = await getPublicFacultiesForSelectionAction(
-        selectedYearId,
-        selectedBranchId,
-        selectedSemesterId
-      );
+      try {
+        const res = await getPublicFacultiesForSelectionAction(
+          selectedYearId,
+          selectedBranchId,
+          selectedSemesterId
+        );
 
-      if (isMounted) {
-        setLoadingFaculties(false);
-        if (res.success) {
-          setFaculties(res.faculties);
-        } else {
+        if (isMounted) {
+          setLoadingFaculties(false);
+          if (res.success) {
+            setFaculties(res.faculties);
+          } else {
+            setFaculties([]);
+          }
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('not found') || msg.includes('Server Action')) {
+          if (typeof window !== 'undefined') {
+            window.location.reload();
+            return;
+          }
+        }
+        if (isMounted) {
+          setLoadingFaculties(false);
           setFaculties([]);
         }
       }
@@ -121,18 +135,32 @@ export function StudentDiscoveryFlow({
     setMatchedForm(null);
 
     startTransition(async () => {
-      const res = await getPublicSubjectsForFacultyAction(
-        selectedYearId,
-        selectedBranchId,
-        selectedSemesterId,
-        selectedFacultyId
-      );
+      try {
+        const res = await getPublicSubjectsForFacultyAction(
+          selectedYearId,
+          selectedBranchId,
+          selectedSemesterId,
+          selectedFacultyId
+        );
 
-      if (isMounted) {
-        setLoadingSubjects(false);
-        if (res.success) {
-          setSubjects(res.subjects);
-        } else {
+        if (isMounted) {
+          setLoadingSubjects(false);
+          if (res.success) {
+            setSubjects(res.subjects);
+          } else {
+            setSubjects([]);
+          }
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('not found') || msg.includes('Server Action')) {
+          if (typeof window !== 'undefined') {
+            window.location.reload();
+            return;
+          }
+        }
+        if (isMounted) {
+          setLoadingSubjects(false);
           setSubjects([]);
         }
       }
@@ -161,24 +189,39 @@ export function StudentDiscoveryFlow({
     setLoadingForm(true);
 
     startTransition(async () => {
-      const res = await getPublicFeedbackFormAction(
-        selectedYearId,
-        selectedBranchId,
-        selectedSemesterId,
-        selectedFacultyId,
-        selectedSubjectId
-      );
+      try {
+        const res = await getPublicFeedbackFormAction(
+          selectedYearId,
+          selectedBranchId,
+          selectedSemesterId,
+          selectedFacultyId,
+          selectedSubjectId
+        );
 
-      if (isMounted) {
-        setLoadingForm(false);
-        if (res.success) {
-          setMatchedForm(res.form);
-          setFormStatus(res.status);
-          setStatusMessage(res.message);
-        } else {
+        if (isMounted) {
+          setLoadingForm(false);
+          if (res.success) {
+            setMatchedForm(res.form);
+            setFormStatus(res.status);
+            setStatusMessage(res.message);
+          } else {
+            setMatchedForm(null);
+            setFormStatus('NONE');
+            setStatusMessage(res.message || 'Unable to check feedback form.');
+          }
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('not found') || msg.includes('Server Action')) {
+          if (typeof window !== 'undefined') {
+            window.location.reload();
+            return;
+          }
+        }
+        if (isMounted) {
+          setLoadingForm(false);
           setMatchedForm(null);
           setFormStatus('NONE');
-          setStatusMessage(res.message || 'Unable to check feedback form.');
         }
       }
     });
