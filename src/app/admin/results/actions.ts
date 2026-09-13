@@ -1,7 +1,12 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getAdminSession } from '@/lib/auth/admin-auth';
+
+async function getAdminDb() {
+  return createAdminClient() || await createClient();
+}
 import { fetchRawSheetResponses } from '@/lib/analytics/sheets-reader';
 import { normalizeSheetRows } from '@/lib/analytics/normalizer';
 import { calculateFormAnalytics, aggregateAnalytics } from '@/lib/analytics/engine';
@@ -29,7 +34,7 @@ export async function getFormAnalyticsAction(formId: string): Promise<{
     return { success: false, error: 'Invalid feedback form identifier format.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
 
   // 2. Fetch Form Metadata
   const { data: form, error: formErr } = await supabase
@@ -133,7 +138,7 @@ export async function getOverallAnalyticsAction(filters?: ScopeFilters): Promise
     return { success: false, error: 'Invalid Subject filter format.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
 
   // Query matching feedback forms
   let query = supabase

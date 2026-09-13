@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import type { Admin, AdminRequest } from '@/types/database';
 
 export const SUPER_ADMIN_EMAIL = (process.env.SUPER_ADMIN_EMAIL || 'iambestadi@gmail.com').toLowerCase().trim();
@@ -21,6 +22,7 @@ export interface AdminAuthResult {
  */
 export async function getAdminSession(): Promise<AdminAuthResult> {
   const supabase = await createClient();
+  const adminDb = createAdminClient() || supabase;
 
   const { data: { user }, error: userError } = await supabase.auth.getUser();
 
@@ -42,8 +44,18 @@ export async function getAdminSession(): Promise<AdminAuthResult> {
 
   // 1. If Super Admin email, ensure record exists with SUPER_ADMIN + ACTIVE privileges
   if (isSuperAdminEmail) {
+    try {
+      await supabase.rpc('ensure_super_admin', {
+        p_user_id: user.id,
+        p_email: userEmail,
+        p_name: user.user_metadata?.name || 'Aditya (Super Admin)',
+      });
+    } catch {
+      // Ignored if RPC does not exist
+    }
+
     // Try to fetch existing admin record
-    const { data: existingAdmin } = await supabase
+    const { data: existingAdmin } = await adminDb
       .from('admins')
       .select('*')
       .or(`user_id.eq.${user.id},email.eq.${userEmail}`)
@@ -59,7 +71,7 @@ export async function getAdminSession(): Promise<AdminAuthResult> {
         updated_at: new Date().toISOString(),
       };
 
-      const { data: initialAdmin, error: upsertErr } = await supabase
+      const { data: initialAdmin, error: upsertErr } = await adminDb
         .from('admins')
         .upsert(
           { ...basePayload, status: 'ACTIVE' },
@@ -71,7 +83,7 @@ export async function getAdminSession(): Promise<AdminAuthResult> {
       let updatedAdmin = initialAdmin;
 
       if (upsertErr && (upsertErr.message.includes('status') || upsertErr.code === '42703')) {
-        const { data: fallbackAdmin } = await supabase
+        const { data: fallbackAdmin } = await adminDb
           .from('admins')
           .upsert(
             basePayload,
@@ -83,7 +95,7 @@ export async function getAdminSession(): Promise<AdminAuthResult> {
       }
 
       // Ensure any request is marked as APPROVED (omit updated_at if not present in schema)
-      await supabase
+      await adminDb
         .from('admin_requests')
         .update({
           status: 'APPROVED',

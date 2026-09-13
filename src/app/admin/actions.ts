@@ -2,7 +2,12 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getAdminSession, SUPER_ADMIN_EMAIL } from '@/lib/auth/admin-auth';
+
+async function getAdminDb() {
+  return createAdminClient() || await createClient();
+}
 
 // Helper: record audit log
 async function logAuditAction(
@@ -37,7 +42,7 @@ export async function approveAdminRequestAction(requestId: string) {
     return { success: false, error: 'Only a Super Admin can approve requests.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
 
   // Get request details
   const { data: req, error: fetchErr } = await supabase
@@ -118,7 +123,7 @@ export async function rejectAdminRequestAction(requestId: string) {
     return { success: false, error: 'Only a Super Admin can reject requests.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
 
   // Get request details
   const { data: req, error: fetchErr } = await supabase
@@ -159,7 +164,7 @@ export async function toggleAdminStatusAction(targetAdminId: string, newStatus: 
     return { success: false, error: 'Only a Super Admin can change admin status.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
 
   const { data: target, error: fetchErr } = await supabase
     .from('admins')
@@ -220,7 +225,7 @@ export async function createAcademicYearAction(data: { name: string; is_active: 
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
   const { data: newYear, error } = await supabase
     .from('academic_years')
     .insert({
@@ -252,7 +257,7 @@ export async function updateAcademicYearAction(id: string, data: { name: string;
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
   const { error } = await supabase
     .from('academic_years')
     .update({
@@ -288,7 +293,7 @@ export async function createBranchAction(data: { name: string; code: string; is_
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
   const { data: newBranch, error } = await supabase
     .from('branches')
     .insert({
@@ -321,7 +326,7 @@ export async function updateBranchAction(id: string, data: { name: string; code:
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
   const { error } = await supabase
     .from('branches')
     .update({
@@ -358,7 +363,7 @@ export async function createSemesterAction(data: { name: string; year_number: nu
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
   const { data: newSem, error } = await supabase
     .from('semesters')
     .insert({
@@ -392,7 +397,7 @@ export async function updateSemesterAction(id: string, data: { name: string; yea
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
   const { error } = await supabase
     .from('semesters')
     .update({
@@ -436,7 +441,7 @@ export async function createFacultyAction(data: {
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
 
   const payload: Record<string, any> = {
     name: data.name.trim(),
@@ -512,7 +517,7 @@ export async function updateFacultyAction(
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
 
   const payload: Record<string, any> = {
     name: data.name.trim(),
@@ -584,7 +589,7 @@ export async function createSubjectAction(data: {
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
   const { data: newSubject, error } = await supabase
     .from('subjects')
     .insert({
@@ -628,7 +633,7 @@ export async function updateSubjectAction(
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
   const { error } = await supabase
     .from('subjects')
     .update({
@@ -674,7 +679,7 @@ export async function createAssignmentAction(data: {
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
   const { data: newAssign, error } = await supabase
     .from('faculty_subject_assignments')
     .insert({
@@ -710,7 +715,7 @@ export async function deleteAssignmentAction(id: string) {
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
   const { error } = await supabase
     .from('faculty_subject_assignments')
     .delete()
@@ -749,7 +754,7 @@ export async function createFeedbackFormDraftAction(data: {
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
   const slug = `bce-fb-${Date.now()}`;
 
   const { data: form, error } = await supabase
@@ -790,7 +795,7 @@ export async function toggleFeedbackFormStatusAction(formId: string, status: str
     return { success: false, error: 'Unauthorized.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
   const { error } = await supabase
     .from('feedback_forms')
     .update({

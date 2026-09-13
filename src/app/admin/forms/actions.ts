@@ -2,7 +2,12 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getAdminSession } from '@/lib/auth/admin-auth';
+
+async function getAdminDb() {
+  return createAdminClient() || await createClient();
+}
 import { FeedbackForm, FeedbackFormStatus } from '@/types/database';
 import { isGoogleConfigured, getGoogleConfigStatus } from '@/lib/google/auth';
 import { createGoogleFeedbackForm } from '@/lib/google/forms';
@@ -62,7 +67,7 @@ export async function getFeedbackFormsAction(filters?: {
     return { success: false, error: 'Unauthorized. Active admin session required.', forms: [] };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
 
   let query = supabase
     .from('feedback_forms')
@@ -123,7 +128,7 @@ export async function getFeedbackFormByIdAction(formId: string) {
     return { success: false, error: 'Invalid feedback form identifier format.' };
   }
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
 
   const { data: form, error } = await supabase
     .from('feedback_forms')
@@ -187,7 +192,7 @@ export async function createGoogleFeedbackFormAction(payload: CreateFormPayload)
   const adminId = session.admin?.id || session.user?.id || null;
   const adminEmail = session.admin?.email || session.user?.email || '';
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
 
   // 2. Validate Academic Relationships
   // Fetch academic year, branch, semester, faculty, subject
@@ -462,7 +467,7 @@ export async function updateFormStatusAction(
   const adminId = session.admin?.id || session.user?.id || null;
   const adminEmail = session.admin?.email || session.user?.email || '';
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
 
   // Fetch current form
   const { data: form, error: fetchErr } = await supabase
@@ -562,7 +567,7 @@ export async function syncFormResponsesAction(formId: string) {
   const adminId = session.admin?.id || session.user?.id || null;
   const adminEmail = session.admin?.email || session.user?.email || '';
 
-  const supabase = await createClient();
+  const supabase = await getAdminDb();
 
   const { data: form, error: fetchErr } = await supabase
     .from('feedback_forms')
