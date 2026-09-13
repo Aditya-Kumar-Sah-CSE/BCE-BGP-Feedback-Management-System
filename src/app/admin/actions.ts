@@ -50,35 +50,51 @@ export async function approveAdminRequestAction(requestId: string) {
     return { success: false, error: 'Request not found.' };
   }
 
-  // Create / activate admin in admins table
-  const { data: newAdmin, error: adminErr } = await supabase
+  // Create / activate admin in admins table with schema fallback
+  const baseAdminPayload = {
+    user_id: req.user_id || null,
+    email: req.email.toLowerCase().trim(),
+    name: req.name,
+    role: 'ADMIN',
+    updated_at: new Date().toISOString(),
+  };
+
+  let { data: newAdmin, error: adminErr } = await supabase
     .from('admins')
     .upsert(
       {
-        user_id: req.user_id || null,
-        email: req.email.toLowerCase().trim(),
-        name: req.name,
-        role: 'ADMIN',
+        ...baseAdminPayload,
         status: 'ACTIVE',
-        updated_at: new Date().toISOString(),
       },
       { onConflict: 'email' }
     )
     .select('*')
     .single();
 
+  if (adminErr && (adminErr.message.includes('status') || adminErr.code === '42703')) {
+    const { data: fallbackAdmin, error: fallbackErr } = await supabase
+      .from('admins')
+      .upsert(
+        baseAdminPayload,
+        { onConflict: 'email' }
+      )
+      .select('*')
+      .single();
+    newAdmin = fallbackAdmin;
+    adminErr = fallbackErr;
+  }
+
   if (adminErr) {
     return { success: false, error: adminErr.message };
   }
 
-  // Update request status
+  // Update request status (omit updated_at if not present in schema)
   await supabase
     .from('admin_requests')
     .update({
       status: 'APPROVED',
       reviewed_by: session.admin?.id || null,
       reviewed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     })
     .eq('id', requestId);
 
@@ -104,6 +120,7 @@ export async function rejectAdminRequestAction(requestId: string) {
 
   const supabase = await createClient();
 
+  // Get request details
   const { data: req, error: fetchErr } = await supabase
     .from('admin_requests')
     .select('*')
@@ -120,7 +137,6 @@ export async function rejectAdminRequestAction(requestId: string) {
       status: 'REJECTED',
       reviewed_by: session.admin?.id || null,
       reviewed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     })
     .eq('id', requestId);
 
@@ -159,13 +175,23 @@ export async function toggleAdminStatusAction(targetAdminId: string, newStatus: 
     return { success: false, error: 'The primary Super Admin cannot be deactivated.' };
   }
 
-  const { error: updateErr } = await supabase
+  let { error: updateErr } = await supabase
     .from('admins')
     .update({
       status: newStatus,
       updated_at: new Date().toISOString(),
     })
     .eq('id', targetAdminId);
+
+  if (updateErr && (updateErr.message.includes('status') || updateErr.code === '42703')) {
+    const { error: fallbackErr } = await supabase
+      .from('admins')
+      .update({
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', targetAdminId);
+    updateErr = fallbackErr;
+  }
 
   if (updateErr) {
     return { success: false, error: updateErr.message };

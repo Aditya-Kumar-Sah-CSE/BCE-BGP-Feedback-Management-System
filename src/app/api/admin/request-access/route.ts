@@ -35,31 +35,57 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       let adminData;
+      const basePayload: Record<string, any> = {
+        user_id: userId || (existingAdmin ? existingAdmin.user_id : null),
+        name,
+        role: 'SUPER_ADMIN',
+        updated_at: new Date().toISOString(),
+      };
+
       if (existingAdmin) {
-        const { data } = await supabase
+        const { data: initialData, error: updateErr } = await supabase
           .from('admins')
-          .update({
-            user_id: userId || existingAdmin.user_id,
-            name,
-            role: 'SUPER_ADMIN',
-            status: 'ACTIVE',
-          })
+          .update({ ...basePayload, status: 'ACTIVE' })
           .eq('id', existingAdmin.id)
           .select('*')
           .maybeSingle();
+
+        let data = initialData;
+
+        if (updateErr && (updateErr.message.includes('status') || updateErr.code === '42703')) {
+          const { data: retryData } = await supabase
+            .from('admins')
+            .update(basePayload)
+            .eq('id', existingAdmin.id)
+            .select('*')
+            .maybeSingle();
+          data = retryData;
+        }
         adminData = data;
       } else {
-        const { data } = await supabase
+        const { data: initialData, error: insertErr } = await supabase
           .from('admins')
           .insert({
-            user_id: userId || null,
+            ...basePayload,
             email: cleanEmail,
-            name,
-            role: 'SUPER_ADMIN',
             status: 'ACTIVE',
           })
           .select('*')
           .maybeSingle();
+
+        let data = initialData;
+
+        if (insertErr && (insertErr.message.includes('status') || insertErr.code === '42703')) {
+          const { data: retryData } = await supabase
+            .from('admins')
+            .insert({
+              ...basePayload,
+              email: cleanEmail,
+            })
+            .select('*')
+            .maybeSingle();
+          data = retryData;
+        }
         adminData = data;
       }
 

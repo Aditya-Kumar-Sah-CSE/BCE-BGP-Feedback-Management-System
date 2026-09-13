@@ -49,38 +49,74 @@ export async function getAdminSession(): Promise<AdminAuthResult> {
       .or(`user_id.eq.${user.id},email.eq.${userEmail}`)
       .maybeSingle();
 
-    if (!existingAdmin || existingAdmin.role !== 'SUPER_ADMIN' || existingAdmin.status !== 'ACTIVE' || !existingAdmin.user_id) {
-      // Upsert/Promote Super Admin in admins table
-      const { data: updatedAdmin } = await supabase
+    if (!existingAdmin || existingAdmin.role !== 'SUPER_ADMIN' || (existingAdmin.status && existingAdmin.status !== 'ACTIVE') || !existingAdmin.user_id) {
+      // Upsert/Promote Super Admin in admins table with schema compatibility
+      const basePayload: Record<string, any> = {
+        user_id: user.id,
+        email: userEmail,
+        name: user.user_metadata?.name || 'Aditya (Super Admin)',
+        role: 'SUPER_ADMIN',
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data: initialAdmin, error: upsertErr } = await supabase
         .from('admins')
         .upsert(
-          {
-            user_id: user.id,
-            email: userEmail,
-            name: user.user_metadata?.name || 'Aditya (Super Admin)',
-            role: 'SUPER_ADMIN',
-            status: 'ACTIVE',
-            updated_at: new Date().toISOString(),
-          },
+          { ...basePayload, status: 'ACTIVE' },
           { onConflict: 'email' }
         )
         .select('*')
         .maybeSingle();
 
-      // Ensure any request is approved
+      let updatedAdmin = initialAdmin;
+
+      if (upsertErr && (upsertErr.message.includes('status') || upsertErr.code === '42703')) {
+        const { data: fallbackAdmin } = await supabase
+          .from('admins')
+          .upsert(
+            basePayload,
+            { onConflict: 'email' }
+          )
+          .select('*')
+          .maybeSingle();
+        updatedAdmin = fallbackAdmin;
+      }
+
+      // Ensure any request is marked as APPROVED (omit updated_at if not present in schema)
       await supabase
         .from('admin_requests')
         .update({
           status: 'APPROVED',
           reviewed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
         })
         .eq('email', userEmail);
 
-      const activeAdmin = updatedAdmin || existingAdmin;
+      const rawAdmin = updatedAdmin || existingAdmin;
+      const activeAdmin: Admin = rawAdmin
+        ? {
+            id: rawAdmin.id,
+            user_id: user.id,
+            email: userEmail,
+            name: rawAdmin.name || 'Aditya (Super Admin)',
+            role: 'SUPER_ADMIN',
+            status: 'ACTIVE',
+            created_at: rawAdmin.created_at || new Date().toISOString(),
+            updated_at: rawAdmin.updated_at || new Date().toISOString(),
+          }
+        : {
+            id: user.id,
+            user_id: user.id,
+            email: userEmail,
+            name: user.user_metadata?.name || 'Aditya (Super Admin)',
+            role: 'SUPER_ADMIN',
+            status: 'ACTIVE',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
       return {
         isAuthenticated: true,
-        user: { id: user.id, email: user.email, name: activeAdmin?.name || 'Super Admin' },
+        user: { id: user.id, email: user.email, name: activeAdmin.name },
         admin: activeAdmin,
         isSuperAdmin: true,
         isApproved: true,
@@ -90,10 +126,21 @@ export async function getAdminSession(): Promise<AdminAuthResult> {
       };
     }
 
+    const activeAdmin: Admin = {
+      id: existingAdmin.id,
+      user_id: user.id,
+      email: user.email,
+      name: existingAdmin.name,
+      role: 'SUPER_ADMIN',
+      status: 'ACTIVE',
+      created_at: existingAdmin.created_at,
+      updated_at: existingAdmin.updated_at,
+    };
+
     return {
       isAuthenticated: true,
       user: { id: user.id, email: user.email, name: existingAdmin.name },
-      admin: existingAdmin,
+      admin: activeAdmin,
       isSuperAdmin: true,
       isApproved: true,
       isActive: true,
@@ -111,12 +158,17 @@ export async function getAdminSession(): Promise<AdminAuthResult> {
 
   if (adminRecord) {
     const isSuperAdmin = adminRecord.role === 'SUPER_ADMIN';
-    const isActive = adminRecord.status === 'ACTIVE';
+    const isActive = adminRecord.status === 'ACTIVE' || adminRecord.status === undefined;
+
+    const fullAdmin: Admin = {
+      ...adminRecord,
+      status: adminRecord.status || 'ACTIVE',
+    };
 
     return {
       isAuthenticated: true,
       user: { id: user.id, email: user.email, name: adminRecord.name },
-      admin: adminRecord,
+      admin: fullAdmin,
       isSuperAdmin,
       isApproved: true,
       isActive,

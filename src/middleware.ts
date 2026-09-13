@@ -43,9 +43,11 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // If already authenticated and accessing login/signup, redirect to dashboard
+  // If already authenticated and accessing login/signup, redirect to destination or dashboard
   if ((pathname === '/admin/login' || pathname === '/admin/signup') && user) {
-    return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+    const redirectParam = request.nextUrl.searchParams.get('redirect');
+    const dest = redirectParam && redirectParam.startsWith('/admin') ? redirectParam : '/admin/dashboard';
+    return NextResponse.redirect(new URL(dest, request.url));
   }
 
   return response;
@@ -54,5 +56,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/admin/:path*',
+    '/auth/:path*',
   ],
 };
