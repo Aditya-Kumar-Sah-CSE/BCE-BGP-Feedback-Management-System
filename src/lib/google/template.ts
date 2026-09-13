@@ -68,6 +68,40 @@ export const BCE_FEEDBACK_PARAMETERS: FeedbackParameter[] = [
   },
 ];
 
+export interface FormFieldDefinition {
+  id: string;
+  title: string;
+  description?: string;
+  type: 'TEXT' | 'PARAGRAPH' | 'RADIO';
+  required: boolean;
+  options?: string[];
+}
+
+export const STUDENT_IDENTIFIER_FIELDS = [
+  {
+    id: 'student_name',
+    title: 'Student Name',
+    description: 'Enter your full name as per official college records',
+    required: true,
+  },
+  {
+    id: 'reg_no',
+    title: 'University Registration Number',
+    description: 'Enter your official BCE / University registration number or roll number',
+    required: true,
+  },
+] as const;
+
+export const ADDITIONAL_FEEDBACK_FIELDS = [
+  {
+    id: 'comments',
+    title: 'Comments / Suggestions',
+    description: 'Any constructive feedback, suggestions, or specific observations for improvement (Optional)',
+    required: false,
+    paragraph: true,
+  },
+] as const;
+
 export interface FormMetadataInputs {
   facultyName: string;
   subjectName: string;
@@ -85,32 +119,107 @@ export function generateFeedbackFormTitle(meta: FormMetadataInputs): string {
 }
 
 export function generateFeedbackFormDescription(meta: FormMetadataInputs): string {
-  return `Official Student Feedback Form for ${meta.facultyName} teaching ${meta.subjectName} (${meta.branchName}, ${meta.semesterName}, ${meta.academicYearName}).\n\nDepartment of Science & Technology, Government of Bihar.\nBhagalpur College of Engineering (BCE Bhagalpur).\n\nNOTE: Submissions are 100% anonymous. Please rate all 8 parameters objectively.`;
+  return `Official Student Feedback Form for ${meta.facultyName} teaching ${meta.subjectName} (${meta.branchName}, ${meta.semesterName}, ${meta.academicYearName}).\n\nDepartment of Science & Technology, Government of Bihar.\nBhagalpur College of Engineering (BCE Bhagalpur).\n\nPlease provide your Student Name, University Registration Number, and rate all 8 parameters objectively. Constructive comments and suggestions are welcome.`;
 }
 
 /**
- * Builds the Google Forms API batchUpdate request body to add the 8 BCE questions
+ * Builds the Google Forms API batchUpdate request body:
+ * 1. Student Name (Short answer, required)
+ * 2. University Registration Number (Short answer, required)
+ * 3. 8 Standard BCE Rating Parameters (Radio 1-4, required)
+ * 4. Comments / Suggestions (Paragraph text, optional)
  */
 export function buildCreateQuestionsBatchUpdateRequest() {
-  return BCE_FEEDBACK_PARAMETERS.map((param, index) => ({
+  const requests: any[] = [];
+  let currentIndex = 0;
+
+  // 1. Student Name
+  requests.push({
     createItem: {
       item: {
-        title: `${param.id}. ${param.title}`,
-        description: param.description,
+        title: 'Student Name',
+        description: 'Enter your full name as per official college records',
         questionItem: {
           question: {
             required: true,
-            choiceQuestion: {
-              type: 'RADIO' as const,
-              options: param.options.map(opt => ({ value: opt })),
-              shuffle: false,
+            textQuestion: {
+              paragraph: false,
             },
           },
         },
       },
       location: {
-        index,
+        index: currentIndex++,
       },
     },
-  }));
+  });
+
+  // 2. University Registration Number
+  requests.push({
+    createItem: {
+      item: {
+        title: 'University Registration Number',
+        description: 'Enter your official BCE / University registration number or roll number',
+        questionItem: {
+          question: {
+            required: true,
+            textQuestion: {
+              paragraph: false,
+            },
+          },
+        },
+      },
+      location: {
+        index: currentIndex++,
+      },
+    },
+  });
+
+  // 3. 8 Standard BCE Rating Parameters
+  BCE_FEEDBACK_PARAMETERS.forEach(param => {
+    requests.push({
+      createItem: {
+        item: {
+          title: `${param.id}. ${param.title}`,
+          description: param.description,
+          questionItem: {
+            question: {
+              required: true,
+              choiceQuestion: {
+                type: 'RADIO' as const,
+                options: param.options.map(opt => ({ value: opt })),
+                shuffle: false,
+              },
+            },
+          },
+        },
+        location: {
+          index: currentIndex++,
+        },
+      },
+    });
+  });
+
+  // 4. Comments / Suggestions (Optional)
+  requests.push({
+    createItem: {
+      item: {
+        title: 'Comments / Suggestions',
+        description: 'Any constructive feedback, suggestions, or specific observations for improvement (Optional)',
+        questionItem: {
+          question: {
+            required: false,
+            textQuestion: {
+              paragraph: true,
+            },
+          },
+        },
+      },
+      location: {
+        index: currentIndex++,
+      },
+    },
+  });
+
+  return requests;
 }

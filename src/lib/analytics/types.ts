@@ -15,6 +15,9 @@ export const RATING_WEIGHTS: Record<RatingOption, number> = {
 export interface CanonicalResponseRow {
   timestamp: string;
   responseId: string;
+  studentName?: string;
+  registrationNumber?: string;
+  comments?: string;
   ratings: Record<number, RatingOption | null>; // 1..8
   isValid: boolean;
 }

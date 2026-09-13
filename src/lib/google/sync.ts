@@ -23,22 +23,33 @@ export async function syncFormResponsesToSheet(params: {
   const { googleFormId, googleSheetId } = params;
 
   try {
-    const { forms } = getGoogleServices();
+    const { forms, sheets } = getGoogleServices();
 
-    // 1. Fetch form structure to map question IDs to questions 1..8
+    // 1. Fetch form structure to map question IDs
     const formMetadata = await forms.forms.get({ formId: googleFormId });
     const items = formMetadata.data.items || [];
 
-    // Map questionId -> parameter index (0..7)
+    // Map questionId -> parameter index (0..7) and identification / comment fields
     const questionIdToParamIndex = new Map<string, number>();
+    let studentNameQuestionId: string | null = null;
+    let regNoQuestionId: string | null = null;
+    let commentsQuestionId: string | null = null;
 
     items.forEach(item => {
       const qId = item.questionItem?.question?.questionId;
-      const title = item.title || '';
-      if (qId) {
-        // Find which parameter matches this item title
+      const title = (item.title || '').trim().toLowerCase();
+      if (!qId) return;
+
+      if (title.includes('student name') || (title.includes('name') && !title.includes('faculty') && !title.includes('subject'))) {
+        studentNameQuestionId = qId;
+      } else if (title.includes('registration') || title.includes('reg') || title.includes('roll')) {
+        regNoQuestionId = qId;
+      } else if (title.includes('comment') || title.includes('suggestion')) {
+        commentsQuestionId = qId;
+      } else {
+        // Find which 8-parameter matches this item title
         const paramIndex = BCE_FEEDBACK_PARAMETERS.findIndex(
-          p => title.toLowerCase().includes(p.title.toLowerCase())
+          p => title.includes(p.title.toLowerCase())
         );
         if (paramIndex !== -1) {
           questionIdToParamIndex.set(qId, paramIndex);
@@ -60,7 +71,22 @@ export async function syncFormResponsesToSheet(params: {
       };
     }
 
-    // 3. Check which responses are already recorded in the Google Sheet
+    // 3. Inspect target Google Sheet headers to format rows accordingly
+    let sheetHasStudentCols = true;
+    try {
+      const headerRes = await sheets.spreadsheets.values.get({
+        spreadsheetId: googleSheetId,
+        range: "'Form Responses'!1:1",
+      });
+      const headerValues = (headerRes.data.values?.[0] || []).map(h => String(h).toLowerCase());
+      if (headerValues.length > 0 && !headerValues.some(h => h.includes('student name') || h.includes('name'))) {
+        sheetHasStudentCols = false;
+      }
+    } catch {
+      sheetHasStudentCols = true;
+    }
+
+    // 4. Check which responses are already recorded in the Google Sheet
     const existingIds = await getExistingSheetResponseIds(googleSheetId);
 
     const rowsToAppend: (string | number)[][] = [];
@@ -72,6 +98,10 @@ export async function syncFormResponsesToSheet(params: {
       }
 
       const timestamp = resp.lastSubmittedTime || resp.createTime || new Date().toISOString();
+      const studentName = (studentNameQuestionId && resp.answers?.[studentNameQuestionId]?.textAnswers?.answers?.[0]?.value) || '';
+      const regNo = (regNoQuestionId && resp.answers?.[regNoQuestionId]?.textAnswers?.answers?.[0]?.value) || '';
+      const comments = (commentsQuestionId && resp.answers?.[commentsQuestionId]?.textAnswers?.answers?.[0]?.value) || '';
+
       const answerRow: string[] = new Array(8).fill('N/A');
 
       if (resp.answers) {
@@ -84,11 +114,22 @@ export async function syncFormResponsesToSheet(params: {
         }
       }
 
-      rowsToAppend.push([
-        timestamp,
-        responseId,
-        ...answerRow,
-      ]);
+      if (sheetHasStudentCols) {
+        rowsToAppend.push([
+          timestamp,
+          responseId,
+          studentName,
+          regNo,
+          ...answerRow,
+          comments,
+        ]);
+      } else {
+        rowsToAppend.push([
+          timestamp,
+          responseId,
+          ...answerRow,
+        ]);
+      }
     }
 
     // 4. Append new response rows to the sheet

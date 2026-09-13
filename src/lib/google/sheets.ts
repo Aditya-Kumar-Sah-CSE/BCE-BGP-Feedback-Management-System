@@ -6,10 +6,27 @@ export interface CreateSheetResult {
   spreadsheetUrl: string;
 }
 
+/**
+ * Converts 1-based column number to spreadsheet letter (e.g., 1 -> A, 13 -> M)
+ */
+export function getColumnLetter(colIndex: number): string {
+  let letter = '';
+  let temp = colIndex;
+  while (temp > 0) {
+    const mod = (temp - 1) % 26;
+    letter = String.fromCharCode(65 + mod) + letter;
+    temp = Math.floor((temp - mod) / 26);
+  }
+  return letter || 'A';
+}
+
 export const FEEDBACK_SHEET_HEADERS = [
   'Timestamp',
   'Response ID',
+  'Student Name',
+  'University Registration Number',
   ...BCE_FEEDBACK_PARAMETERS.map(p => `${p.id}. ${p.title}`),
+  'Comments / Suggestions',
 ];
 
 /**
@@ -48,10 +65,12 @@ export async function createFeedbackSpreadsheet(params: {
     throw new Error('Google Sheets API failed to create spreadsheet');
   }
 
+  const lastColLetter = getColumnLetter(FEEDBACK_SHEET_HEADERS.length);
+
   // 2. Initialize Header Row
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: "'Form Responses'!A1:J1",
+    range: `'Form Responses'!A1:${lastColLetter}1`,
     valueInputOption: 'USER_ENTERED',
     requestBody: {
       values: [FEEDBACK_SHEET_HEADERS],
@@ -129,10 +148,11 @@ export async function appendResponsesToSheet(
   if (rows.length === 0) return { updatedRows: 0 };
 
   const { sheets } = getGoogleServices();
+  const lastColLetter = getColumnLetter(FEEDBACK_SHEET_HEADERS.length);
 
   const res = await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: "'Form Responses'!A:J",
+    range: `'Form Responses'!A:${lastColLetter}`,
     valueInputOption: 'USER_ENTERED',
     insertDataOption: 'INSERT_ROWS',
     requestBody: {

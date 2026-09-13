@@ -633,11 +633,19 @@ export function CreateGoogleFormWizard({
                       </li>
                       <li className="flex items-center gap-1.5">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>All 8 BCE evaluation rating parameters added with 4 choices</span>
+                        <span>Student Identification fields (Student Name & Registration Number) added (Required)</span>
                       </li>
                       <li className="flex items-center gap-1.5">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>Dedicated response Google Sheet initialized with styled headers</span>
+                        <span>All 8 standard BCE faculty rating parameters added with 4 rating choices</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>Optional Comments / Suggestions text feedback field added</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>Dedicated response Google Sheet initialized with 13 styled headers</span>
                       </li>
                       <li className="flex items-center gap-1.5">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
@@ -754,29 +762,58 @@ export function CreateGoogleFormWizard({
                 </div>
               </div>
 
-              {/* 8 BCE Questions Preview */}
-              <div className="space-y-2 pt-2 border-t border-slate-100">
+              {/* Form Questions Preview */}
+              <div className="space-y-3 pt-2 border-t border-slate-100">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">
-                  8 Standard Evaluation Parameters
+                  Form Question Structure (11 Total Fields)
                 </span>
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                  {BCE_FEEDBACK_PARAMETERS.map(p => (
-                    <div key={p.id} className="p-2 bg-slate-50 rounded-lg border border-slate-100 text-[11px]">
-                      <div className="font-bold text-slate-800">
-                        {p.id}. {p.title}
-                      </div>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {p.options.map(opt => (
-                          <span
-                            key={opt}
-                            className="px-1.5 py-0.5 rounded text-[9px] bg-white border border-slate-200 text-slate-600"
-                          >
-                            {opt}
-                          </span>
-                        ))}
-                      </div>
+
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {/* Identification Fields */}
+                  <div className="p-2.5 bg-blue-50/60 rounded-xl border border-blue-100 text-[11px] space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-blue-950">Student Identification</span>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-100 text-blue-800 font-semibold">Required *</span>
                     </div>
-                  ))}
+                    <div className="text-[10px] text-blue-800 space-y-0.5">
+                      <div>• <span className="font-semibold">Student Name</span> (Short Answer)</div>
+                      <div>• <span className="font-semibold">University Registration Number</span> (Short Answer)</div>
+                    </div>
+                  </div>
+
+                  {/* 8 Evaluation Parameters */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase px-1">
+                      <span>8 Faculty Rating Parameters</span>
+                      <span className="text-[9px] text-slate-400">Required *</span>
+                    </div>
+                    {BCE_FEEDBACK_PARAMETERS.map(p => (
+                      <div key={p.id} className="p-2 bg-slate-50 rounded-lg border border-slate-100 text-[11px]">
+                        <div className="font-bold text-slate-800">
+                          {p.id}. {p.title}
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {p.options.map(opt => (
+                            <span
+                              key={opt}
+                              className="px-1.5 py-0.5 rounded text-[9px] bg-white border border-slate-200 text-slate-600"
+                            >
+                              {opt}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Optional Remarks Field */}
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800">Comments / Suggestions</span>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] bg-slate-200 text-slate-600 font-medium">Optional</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500">Constructive feedback / suggestions for improvement</p>
+                  </div>
                 </div>
               </div>
             </div>

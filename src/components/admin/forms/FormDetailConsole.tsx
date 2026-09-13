@@ -372,22 +372,46 @@ export function FormDetailConsole({ form, auditLogs, currentUserEmail }: Props) 
           </div>
 
           {/* Standard 8 BCE Evaluation Parameters */}
+          {/* Form Questions & Structure */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-sm font-bold text-slate-900">
-                  Standard BCE Evaluation Template (8 Parameters)
+                  Form Structure & Questionnaire (11 Fields)
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Official 4-point rating scale configured in this Google Form.
+                  Student identification, 8-parameter rating scale, and optional suggestion box.
                 </p>
               </div>
-              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-bold rounded">
-                8 Questions Active
+              <span className="px-2 py-0.5 bg-blue-50 text-bce-cobalt text-[10px] font-bold rounded border border-blue-200">
+                11 Fields Active
               </span>
             </div>
 
+            {/* Identification Fields */}
+            <div className="p-3.5 bg-blue-50/50 rounded-xl border border-blue-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-blue-950">Student Identification</span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-100 text-blue-800 font-semibold">Required *</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div className="p-2 bg-white rounded-lg border border-blue-100/80">
+                  <span className="font-bold text-slate-800">Student Name</span>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Short text (Official college records)</p>
+                </div>
+                <div className="p-2 bg-white rounded-lg border border-blue-100/80">
+                  <span className="font-bold text-slate-800">University Registration Number</span>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Short text (University / Roll number)</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 8 Rating Parameters */}
             <div className="space-y-2.5">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-xs font-bold text-slate-800">8 Faculty Evaluation Parameters</span>
+                <span className="text-[10px] text-slate-500 font-medium">4-Point Rating Scale (Required)</span>
+              </div>
               {BCE_FEEDBACK_PARAMETERS.map(param => (
                 <div
                   key={param.id}
@@ -413,6 +437,22 @@ export function FormDetailConsole({ form, auditLogs, currentUserEmail }: Props) 
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Optional Suggestions */}
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs text-slate-800">Comments / Suggestions</span>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] bg-slate-200 text-slate-600 font-medium">Optional</span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Long-form paragraph for student suggestions, observations, and constructive remarks.
+                </p>
+              </div>
+              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-white border border-slate-200 text-slate-600 shrink-0">
+                Paragraph Text
+              </span>
             </div>
           </div>
         </div>

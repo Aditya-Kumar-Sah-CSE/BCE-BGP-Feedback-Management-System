@@ -49,6 +49,9 @@ export function normalizeRatingValue(val: string | number | undefined | null): R
 export interface ColumnMapping {
   timestampColIndex: number;
   responseIdColIndex: number;
+  studentNameColIndex: number;
+  regNoColIndex: number;
+  commentsColIndex: number;
   paramColIndices: Record<number, number>; // paramId (1..8) -> colIndex
 }
 
@@ -59,17 +62,26 @@ export function detectColumnMapping(headers: string[]): ColumnMapping {
   const mapping: ColumnMapping = {
     timestampColIndex: -1,
     responseIdColIndex: -1,
+    studentNameColIndex: -1,
+    regNoColIndex: -1,
+    commentsColIndex: -1,
     paramColIndices: {},
   };
 
   const normalizedHeaders = headers.map(h => h.trim().toLowerCase());
 
-  // 1. Identify Timestamp and Response ID
+  // 1. Identify Timestamp, Response ID, Student Name, Reg No, Comments
   normalizedHeaders.forEach((header, index) => {
     if (header.includes('timestamp') || header === 'date' || header === 'time') {
       if (mapping.timestampColIndex === -1) mapping.timestampColIndex = index;
     } else if (header.includes('response id') || header === 'id' || header.includes('submission id')) {
       if (mapping.responseIdColIndex === -1) mapping.responseIdColIndex = index;
+    } else if (header.includes('student name') || (header.includes('name') && !header.includes('faculty') && !header.includes('subject'))) {
+      if (mapping.studentNameColIndex === -1) mapping.studentNameColIndex = index;
+    } else if (header.includes('registration') || header.includes('reg') || header.includes('roll')) {
+      if (mapping.regNoColIndex === -1) mapping.regNoColIndex = index;
+    } else if (header.includes('comment') || header.includes('suggestion')) {
+      if (mapping.commentsColIndex === -1) mapping.commentsColIndex = index;
     }
   });
 
@@ -101,10 +113,10 @@ export function detectColumnMapping(headers: string[]): ColumnMapping {
     }
   });
 
-  // Fallback: If headers were generic or empty, try standard Phase 2 layout
-  // Column 0: Timestamp, Column 1: Response ID, Columns 2..9: Parameters 1..8
+  // Fallback: If headers were generic or empty, try standard layout
+  // (Timestamp, Response ID, [Student Name, Reg No], 8 Parameters, [Comments])
   if (Object.keys(mapping.paramColIndices).length === 0 && headers.length >= 8) {
-    const offset = mapping.timestampColIndex !== -1 && mapping.responseIdColIndex !== -1 ? 2 : 0;
+    const offset = headers.length >= 12 ? 4 : (mapping.timestampColIndex !== -1 && mapping.responseIdColIndex !== -1 ? 2 : 0);
     for (let i = 1; i <= 8; i++) {
       const fallbackCol = offset + (i - 1);
       if (fallbackCol < headers.length) {
@@ -147,6 +159,21 @@ export function normalizeSheetRows(
         ? row[mapping.responseIdColIndex].trim()
         : `row-${rowIdx + 1}`;
 
+    const studentName =
+      mapping.studentNameColIndex !== -1 && row[mapping.studentNameColIndex]
+        ? row[mapping.studentNameColIndex].trim()
+        : undefined;
+
+    const registrationNumber =
+      mapping.regNoColIndex !== -1 && row[mapping.regNoColIndex]
+        ? row[mapping.regNoColIndex].trim()
+        : undefined;
+
+    const comments =
+      mapping.commentsColIndex !== -1 && row[mapping.commentsColIndex]
+        ? row[mapping.commentsColIndex].trim()
+        : undefined;
+
     const ratings: Record<number, RatingOption | null> = {};
     let validRatingsCount = 0;
 
@@ -169,6 +196,9 @@ export function normalizeSheetRows(
     results.push({
       timestamp,
       responseId,
+      studentName,
+      registrationNumber,
+      comments,
       ratings,
       isValid,
     });
