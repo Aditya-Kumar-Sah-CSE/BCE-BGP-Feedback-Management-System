@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import {
-  createFeedbackFormDraftAction,
   toggleFeedbackFormStatusAction
 } from '@/app/admin/actions';
 import {
@@ -11,7 +11,11 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  Info
+  ExternalLink,
+  Eye,
+  FileCode2,
+  ArrowRight,
+  Sparkles,
 } from 'lucide-react';
 import type {
   FeedbackForm,
@@ -33,51 +37,13 @@ interface Props {
 
 export function FeedbackFormsTab({
   feedbackForms,
-  academicYears,
   branches,
   semesters,
   faculties,
   subjects,
 }: Props) {
   const [isPending, startTransition] = useTransition();
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // Form states
-  const [title, setTitle] = useState('');
-  const [selectedYearId, setSelectedYearId] = useState(academicYears.find(y => y.is_active)?.id || academicYears[0]?.id || '');
-  const [selectedBranchId, setSelectedBranchId] = useState(branches[0]?.id || '');
-  const [selectedSemesterId, setSelectedSemesterId] = useState(semesters[0]?.id || '');
-  const [selectedFacultyId, setSelectedFacultyId] = useState(faculties[0]?.id || '');
-  const [selectedSubjectId, setSelectedSubjectId] = useState(subjects[0]?.id || '');
-
-  const handleCreateDraft = (e: React.FormEvent) => {
-    e.preventDefault();
-    setMessage(null);
-
-    const activeFac = faculties.find(f => f.id === selectedFacultyId);
-    const activeSub = subjects.find(s => s.id === selectedSubjectId);
-    const formTitle = title.trim() || `${activeFac?.name || 'Faculty'} - ${activeSub?.name || 'Subject'} Feedback`;
-
-    startTransition(async () => {
-      const res = await createFeedbackFormDraftAction({
-        title: formTitle,
-        academic_year_id: selectedYearId,
-        branch_id: selectedBranchId,
-        semester_id: selectedSemesterId,
-        faculty_id: selectedFacultyId,
-        subject_id: selectedSubjectId,
-      });
-
-      if (res.success) {
-        setMessage({ type: 'success', text: `Feedback Form foundation record created: ${formTitle}` });
-        setTitle('');
-        setShowCreateModal(false);
-      } else {
-        setMessage({ type: 'error', text: res.error || 'Failed to create form.' });
-      }
-    });
-  };
 
   const handleToggleStatus = (form: FeedbackForm) => {
     const nextStatus = form.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED';
@@ -96,32 +62,35 @@ export function FeedbackFormsTab({
       {/* Header Info */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-bce-cobalt" />
-            Feedback Forms Management (Phase 1 Foundation)
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-bce-cobalt" />
+              Google Feedback Forms Management
+            </h3>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-bce-cobalt uppercase">
+              Phase 2
+            </span>
+          </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Database schema & administrative publishing foundation prepared for Phase 2 Google Forms integration.
+            Create standard 8-parameter BCE Google Feedback Forms, manage connected response Sheets, and control publishing.
           </p>
         </div>
 
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold rounded-xl transition-colors shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Prepare Feedback Form</span>
-        </button>
-      </div>
-
-      {/* Phase Boundary Note */}
-      <div className="p-4 bg-blue-50/70 border border-blue-200/80 rounded-2xl flex items-start gap-3 text-xs text-blue-950">
-        <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-        <div>
-          <p className="font-bold">Phase 1 Boundary Notice</p>
-          <p className="text-blue-900/80 mt-0.5">
-            Phase 1 provides the data foundation, discovery links, and publishing status workflow. Google Forms API, Google Sheets responses syncing, and analytics will be connected in Phase 2.
-          </p>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/dashboard/forms"
+            className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
+          >
+            <span>Forms Catalog</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+          <Link
+            href="/admin/dashboard/forms/create"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold rounded-xl transition-colors shadow-xs"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Generate Google Form</span>
+          </Link>
         </div>
       </div>
 
@@ -154,8 +123,15 @@ export function FeedbackFormsTab({
             </div>
             <p className="text-sm font-bold text-slate-800">No Feedback Forms Created Yet</p>
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              Click &quot;Prepare Feedback Form&quot; above to create a foundation record for any faculty member and subject.
+              Click &quot;Generate Google Form&quot; above to launch the 6-step creation wizard for an assigned faculty and subject.
             </p>
+            <Link
+              href="/admin/dashboard/forms/create"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-bce-cobalt text-white text-xs font-bold rounded-xl hover:bg-bce-navy transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Generate First Google Form
+            </Link>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -163,39 +139,57 @@ export function FeedbackFormsTab({
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider">
                 <tr>
                   <th className="px-5 py-3">Form Title</th>
-                  <th className="px-5 py-3">Faculty</th>
-                  <th className="px-5 py-3">Subject</th>
+                  <th className="px-5 py-3">Faculty & Subject</th>
                   <th className="px-5 py-3">Branch & Sem</th>
+                  <th className="px-5 py-3">Response Mode</th>
                   <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3 text-right">Publishing</th>
+                  <th className="px-5 py-3">Google Links</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {feedbackForms.map((form) => {
                   const faculty = faculties.find(f => f.id === form.faculty_id) || form.faculty;
                   const subject = subjects.find(s => s.id === form.subject_id) || form.subject;
-                  const branch = branches.find(b => b.id === form.branch_id);
-                  const semester = semesters.find(s => s.id === form.semester_id);
+                  const branch = branches.find(b => b.id === form.branch_id) || form.branch;
+                  const semester = semesters.find(s => s.id === form.semester_id) || form.semester;
                   const isPublished = form.status === 'PUBLISHED';
+                  const isNative = form.response_destination_type === 'NATIVE_SHEET';
 
                   return (
                     <tr key={form.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-5 py-3.5 font-bold text-slate-800">
-                        {form.title}
+                        <Link
+                          href={`/admin/dashboard/forms/${form.id}`}
+                          className="hover:text-bce-cobalt transition-colors"
+                        >
+                          {form.title}
+                        </Link>
                         {form.slug && (
                           <span className="block font-mono text-[10px] text-slate-400 font-normal">
                             /{form.slug}
                           </span>
                         )}
                       </td>
-                      <td className="px-5 py-3.5 font-medium text-slate-700">
-                        {faculty?.name || 'Faculty'}
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-600">
-                        {subject?.name || 'Subject'} {subject?.code ? `(${subject.code})` : ''}
+                      <td className="px-5 py-3.5">
+                        <div className="font-medium text-slate-800">{faculty?.name || 'Faculty'}</div>
+                        <div className="text-slate-500 text-[11px]">
+                          {subject?.name || 'Subject'} {subject?.code ? `(${subject.code})` : ''}
+                        </div>
                       </td>
                       <td className="px-5 py-3.5 text-slate-500">
                         {branch?.code || 'Branch'} • {semester?.name || 'Sem'}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            isNative
+                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                              : 'bg-blue-100 text-blue-800 border border-blue-200'
+                          }`}
+                        >
+                          {isNative ? '⚡ Native Destination' : '🔄 App Managed Sync'}
+                        </span>
                       </td>
                       <td className="px-5 py-3.5">
                         <span
@@ -209,18 +203,60 @@ export function FeedbackFormsTab({
                           {form.status}
                         </span>
                       </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          {form.google_form_url && (
+                            <a
+                              href={form.google_form_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-purple-700 hover:text-purple-900 inline-flex items-center gap-0.5 text-[11px] font-semibold"
+                              title="Open Google Form Responder View"
+                            >
+                              <FileCode2 className="w-3.5 h-3.5" />
+                              <span>Form</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                          {form.google_sheet_url || form.google_sheet_id ? (
+                            <a
+                              href={
+                                form.google_sheet_url ||
+                                `https://docs.google.com/spreadsheets/d/${form.google_sheet_id}/edit`
+                              }
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-0.5 text-[11px] font-semibold ml-1.5"
+                              title="Open Google Sheet"
+                            >
+                              <FileSpreadsheet className="w-3.5 h-3.5" />
+                              <span>Sheet</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className="px-5 py-3.5 text-right">
-                        <button
-                          onClick={() => handleToggleStatus(form)}
-                          disabled={isPending}
-                          className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                            isPublished
-                              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
-                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          }`}
-                        >
-                          {isPublished ? 'Unpublish' : 'Publish'}
-                        </button>
+                        <div className="inline-flex items-center gap-2">
+                          <Link
+                            href={`/admin/dashboard/forms/${form.id}`}
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 hover:text-bce-cobalt bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>Manage</span>
+                          </Link>
+                          <button
+                            onClick={() => handleToggleStatus(form)}
+                            disabled={isPending}
+                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                              isPublished
+                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            }`}
+                          >
+                            {isPublished ? 'Unpublish' : 'Publish'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -230,122 +266,6 @@ export function FeedbackFormsTab({
           </div>
         )}
       </div>
-
-      {/* Create Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h4 className="text-base font-bold text-slate-900">Prepare Feedback Form (Foundation)</h4>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateDraft} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Form Title (Optional)</label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Auto-generated if left blank"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Academic Session</label>
-                  <select
-                    value={selectedYearId}
-                    onChange={(e) => setSelectedYearId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900"
-                  >
-                    {academicYears.map((y) => (
-                      <option key={y.id} value={y.id}>{y.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Branch</label>
-                  <select
-                    value={selectedBranchId}
-                    onChange={(e) => setSelectedBranchId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900"
-                  >
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Semester</label>
-                  <select
-                    value={selectedSemesterId}
-                    onChange={(e) => setSelectedSemesterId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900"
-                  >
-                    {semesters.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Faculty</label>
-                  <select
-                    value={selectedFacultyId}
-                    onChange={(e) => setSelectedFacultyId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900"
-                  >
-                    {faculties.map((f) => (
-                      <option key={f.id} value={f.id}>{f.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Subject</label>
-                <select
-                  value={selectedSubjectId}
-                  onChange={(e) => setSelectedSubjectId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900"
-                >
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-bce-cobalt hover:bg-bce-navy transition-colors disabled:opacity-50"
-                >
-                  {isPending ? 'Saving...' : 'Create Foundation Record'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

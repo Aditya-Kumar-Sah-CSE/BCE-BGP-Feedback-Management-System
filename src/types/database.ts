@@ -99,6 +99,7 @@ export interface AdminRequest {
 export interface FeedbackForm {
   id: string;
   title: string;
+  description?: string | null;
   academic_year_id: string;
   branch_id: string;
   semester_id: string;
@@ -110,10 +111,18 @@ export interface FeedbackForm {
   google_form_id?: string | null;
   google_sheet_id?: string | null;
   google_form_url?: string | null;
+  google_form_edit_url?: string | null;
+  google_sheet_url?: string | null;
+  response_destination_type?: 'NATIVE_SHEET' | 'APPLICATION_MANAGED' | string | null;
+  response_count?: number;
+  last_synced_at?: string | null;
   public_url?: string | null;
   created_by?: string | null;
   created_at: string;
   updated_at?: string;
+  published_at?: string | null;
+  closed_at?: string | null;
+  archived_at?: string | null;
   // joined relations
   faculty?: Faculty;
   subject?: Subject;
@@ -133,3 +142,4 @@ export interface AuditLog {
   metadata?: Record<string, unknown>;
   created_at: string;
 }
+
