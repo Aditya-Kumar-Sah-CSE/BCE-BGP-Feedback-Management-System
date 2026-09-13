@@ -19,8 +19,9 @@ export default async function FeedbackFormDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  // Fetch form with all relations
-  const { data: form, error } = await supabase
+  // Fetch form with relations (with robust fallback)
+  let form: any = null;
+  const { data: joinedForm, error: joinErr } = await supabase
     .from('feedback_forms')
     .select(`
       *,
@@ -31,10 +32,46 @@ export default async function FeedbackFormDetailPage({
       semester:semesters(*)
     `)
     .eq('id', id)
-    .single();
+    .maybeSingle();
 
-  if (error || !form) {
-    notFound();
+  if (joinedForm) {
+    form = joinedForm;
+  } else {
+    // Fallback: If relational join fails due to schema cache mismatch, fetch base record and resolve relations
+    console.warn('Nested join failed for form ID', id, joinErr?.message, 'Trying base query...');
+    const { data: baseForm, error: baseErr } = await supabase
+      .from('feedback_forms')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (baseForm) {
+      const [
+        { data: faculty },
+        { data: subject },
+        { data: year },
+        { data: branch },
+        { data: semester },
+      ] = await Promise.all([
+        supabase.from('faculties').select('*').eq('id', baseForm.faculty_id).maybeSingle(),
+        supabase.from('subjects').select('*').eq('id', baseForm.subject_id).maybeSingle(),
+        supabase.from('academic_years').select('*').eq('id', baseForm.academic_year_id).maybeSingle(),
+        supabase.from('branches').select('*').eq('id', baseForm.branch_id).maybeSingle(),
+        supabase.from('semesters').select('*').eq('id', baseForm.semester_id).maybeSingle(),
+      ]);
+
+      form = {
+        ...baseForm,
+        faculty,
+        subject,
+        academic_year: year,
+        branch,
+        semester,
+      };
+    } else {
+      console.error('FeedbackFormDetailPage form not found for ID', id, ':', baseErr || joinErr);
+      notFound();
+    }
   }
 
   // Fetch audit logs for this form

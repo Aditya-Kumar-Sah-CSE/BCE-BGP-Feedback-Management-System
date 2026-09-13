@@ -78,8 +78,47 @@ export default async function FeedbackFormsPage({
     query = query.eq('status', resolvedParams.status);
   }
 
-  const { data: formsData } = await query;
+  const { data: formsData, error: queryErr } = await query;
   let forms = (formsData || []) as FeedbackForm[];
+
+  // Fallback: If relational nested query returned error or empty due to schema cache join mismatch, fetch base and join in memory
+  if (queryErr) {
+    console.warn('Nested relational join failed in forms catalog:', queryErr.message, 'Falling back to base query...');
+    const [{ data: faculties }, { data: subjects }] = await Promise.all([
+      supabase.from('faculties').select('*'),
+      supabase.from('subjects').select('*'),
+    ]);
+
+    let baseQuery = supabase
+      .from('feedback_forms')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (resolvedParams.year && resolvedParams.year !== 'ALL') {
+      baseQuery = baseQuery.eq('academic_year_id', resolvedParams.year);
+    }
+    if (resolvedParams.branch && resolvedParams.branch !== 'ALL') {
+      baseQuery = baseQuery.eq('branch_id', resolvedParams.branch);
+    }
+    if (resolvedParams.semester && resolvedParams.semester !== 'ALL') {
+      baseQuery = baseQuery.eq('semester_id', resolvedParams.semester);
+    }
+    if (resolvedParams.status && resolvedParams.status !== 'ALL') {
+      baseQuery = baseQuery.eq('status', resolvedParams.status);
+    }
+
+    const { data: baseForms } = await baseQuery;
+    if (baseForms && baseForms.length > 0) {
+      forms = baseForms.map((f: any) => ({
+        ...f,
+        faculty: faculties?.find((fac: any) => fac.id === f.faculty_id),
+        subject: subjects?.find((sub: any) => sub.id === f.subject_id),
+        academic_year: years?.find((y: any) => y.id === f.academic_year_id),
+        branch: branches?.find((b: any) => b.id === f.branch_id),
+        semester: semesters?.find((s: any) => s.id === f.semester_id),
+      })) as FeedbackForm[];
+    }
+  }
 
 
   if (resolvedParams.search && resolvedParams.search.trim()) {
