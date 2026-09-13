@@ -29,6 +29,7 @@ import {
   Calendar,
   GraduationCap,
   Activity,
+  BarChart3,
 } from 'lucide-react';
 
 interface Props {
@@ -224,6 +225,14 @@ export function FormDetailConsole({ form, auditLogs, currentUserEmail }: Props) 
                 <ExternalLink className="w-3 h-3" />
               </a>
             ) : null}
+
+            <Link
+              href={`/admin/dashboard/results/${form.id}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-bce-navy hover:bg-slate-800 text-amber-300 border border-slate-700 rounded-xl text-xs font-bold transition-colors shadow-2xs"
+            >
+              <BarChart3 className="w-4 h-4 text-amber-400" />
+              <span>Results & Analytics</span>
+            </Link>
           </div>
 
           {/* Lifecycle State Changer */}

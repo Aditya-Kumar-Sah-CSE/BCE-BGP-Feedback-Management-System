@@ -1,0 +1,64 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getAdminSession } from '@/lib/auth/admin-auth';
+import { getOverallAnalyticsAction } from '@/app/admin/results/actions';
+import { generateOverallFeedbackPDF } from '@/lib/analytics/pdf-generator';
+
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+export async function GET(request: NextRequest) {
+  try {
+    // 1. Mandatory Admin Authentication Check
+    const session = await getAdminSession();
+    if (!session.isAuthenticated) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Admin credentials required to access institutional report PDFs.' },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const academicYearId = searchParams.get('academicYearId') || undefined;
+    const branchId = searchParams.get('branchId') || undefined;
+    const semesterId = searchParams.get('semesterId') || undefined;
+    const facultyId = searchParams.get('facultyId') || undefined;
+    const subjectId = searchParams.get('subjectId') || undefined;
+
+    // 2. Compute Aggregated Analytics
+    const result = await getOverallAnalyticsAction({
+      academicYearId,
+      branchId,
+      semesterId,
+      facultyId,
+      subjectId,
+    });
+
+    if (!result.success || !result.report) {
+      return NextResponse.json(
+        { error: result.error || 'Failed to generate analytics report.' },
+        { status: 400 }
+      );
+    }
+
+    // 3. Generate PDF Buffer
+    const pdfBuffer = await generateOverallFeedbackPDF(result.report);
+
+    const safeScopeName = result.report.scopeTitle
+      .replace(/[^a-zA-Z0-9-_]/g, '_')
+      .slice(0, 40);
+    const filename = `BCE-Institutional-Feedback-${safeScopeName}.pdf`;
+
+    return new Response(pdfBuffer as unknown as BodyInit, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Institutional PDF generation failed';
+    console.error('Institutional PDF export error:', err);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

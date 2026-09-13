@@ -6,12 +6,14 @@ import { AdminManagementTab } from './tabs/AdminManagementTab';
 import { AcademicManagementTab } from './tabs/AcademicManagementTab';
 import { FeedbackFormsTab } from './tabs/FeedbackFormsTab';
 import { AuditLogsTab } from './tabs/AuditLogsTab';
+import Link from 'next/link';
 import {
   LayoutDashboard,
   ShieldCheck,
   GraduationCap,
   FileSpreadsheet,
-  Activity
+  Activity,
+  BarChart3,
 } from 'lucide-react';
 import type {
   AcademicYear,
@@ -99,6 +101,17 @@ export function AdminDashboardTabs({
             </button>
           );
         })}
+
+        <Link
+          href="/admin/dashboard/results"
+          className="relative inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-700 hover:text-slate-950 hover:bg-amber-50/80 border border-amber-200/70 transition-all ml-auto"
+        >
+          <BarChart3 className="w-4 h-4 text-bce-cobalt" />
+          <span>Results & Analytics Hub</span>
+          <span className="text-[10px] font-extrabold uppercase bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-full shadow-2xs">
+            Phase 4
+          </span>
+        </Link>
       </div>
 
       {/* Tab Panels */}
