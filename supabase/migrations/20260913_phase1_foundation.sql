@@ -221,6 +221,14 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  IF EXISTS (
+    SELECT 1 FROM auth.users 
+    WHERE id = auth_user_id 
+      AND LOWER(email) = 'iambestadi@gmail.com'
+  ) THEN
+    RETURN true;
+  END IF;
+
   RETURN EXISTS (
     SELECT 1 FROM public.admins
     WHERE user_id = auth_user_id
@@ -238,6 +246,17 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  IF EXISTS (
+    SELECT 1 FROM auth.users 
+    WHERE id = auth_user_id 
+      AND LOWER(email) = 'iambestadi@gmail.com'
+  ) THEN
+    UPDATE public.admins 
+    SET user_id = auth_user_id, status = 'ACTIVE', role = 'SUPER_ADMIN' 
+    WHERE LOWER(email) = 'iambestadi@gmail.com' AND (user_id IS NULL OR user_id != auth_user_id);
+    RETURN true;
+  END IF;
+
   RETURN EXISTS (
     SELECT 1 FROM public.admins
     WHERE user_id = auth_user_id
@@ -517,3 +536,42 @@ CREATE POLICY "Admins can view audit logs" ON public.audit_logs
 DROP POLICY IF EXISTS "Admins can insert audit logs" ON public.audit_logs;
 CREATE POLICY "Admins can insert audit logs" ON public.audit_logs
     FOR INSERT WITH CHECK (public.is_admin(auth.uid()) OR auth.uid() IS NOT NULL);
+
+-- ====================================================================
+-- 7. INITIAL SUPER ADMIN SEED & SCHEMA RELOAD
+-- ====================================================================
+
+-- 7.1 Seed or link Super Admin from auth.users if already registered
+INSERT INTO public.admins (user_id, email, name, role, status, updated_at)
+SELECT 
+    id, 
+    LOWER(email), 
+    COALESCE(raw_user_meta_data->>'name', 'Aditya (Super Admin)'), 
+    'SUPER_ADMIN', 
+    'ACTIVE', 
+    timezone('utc'::text, now())
+FROM auth.users
+WHERE LOWER(email) = 'iambestadi@gmail.com'
+ON CONFLICT (email) DO UPDATE 
+SET user_id = EXCLUDED.user_id,
+    role = 'SUPER_ADMIN',
+    status = 'ACTIVE',
+    updated_at = timezone('utc'::text, now());
+
+-- 7.2 If user hasn't signed up in auth.users yet, create baseline row in admins
+INSERT INTO public.admins (email, name, role, status, updated_at)
+VALUES (
+    'iambestadi@gmail.com',
+    'Aditya (Super Admin)',
+    'SUPER_ADMIN',
+    'ACTIVE',
+    timezone('utc'::text, now())
+)
+ON CONFLICT (email) DO UPDATE 
+SET role = 'SUPER_ADMIN',
+    status = 'ACTIVE',
+    updated_at = timezone('utc'::text, now());
+
+-- 7.3 Reload Supabase PostgREST schema cache
+NOTIFY pgrst, 'reload schema';
+
