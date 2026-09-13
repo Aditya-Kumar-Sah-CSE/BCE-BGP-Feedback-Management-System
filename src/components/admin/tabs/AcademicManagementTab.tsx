@@ -324,10 +324,18 @@ export function AcademicManagementTab({
               <button
                 type="submit"
                 disabled={isPending}
-                className="w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                className={`w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 ${
+                  isPending
+                    ? 'btn-request-active'
+                    : message?.type === 'success'
+                    ? 'btn-response-success'
+                    : message?.type === 'error'
+                    ? 'btn-response-error'
+                    : ''
+                }`}
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                <span>Add Faculty</span>
+                <span>{isPending ? 'Adding Faculty...' : 'Add Faculty'}</span>
               </button>
             </form>
           </div>
@@ -446,10 +454,18 @@ export function AcademicManagementTab({
               <button
                 type="submit"
                 disabled={isPending}
-                className="w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                className={`w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 ${
+                  isPending
+                    ? 'btn-request-active'
+                    : message?.type === 'success'
+                    ? 'btn-response-success'
+                    : message?.type === 'error'
+                    ? 'btn-response-error'
+                    : ''
+                }`}
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                <span>Add Subject</span>
+                <span>{isPending ? 'Adding Subject...' : 'Add Subject'}</span>
               </button>
             </form>
           </div>
@@ -587,10 +603,18 @@ export function AcademicManagementTab({
               <button
                 type="submit"
                 disabled={isPending}
-                className="w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                className={`w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 ${
+                  isPending
+                    ? 'btn-request-active'
+                    : message?.type === 'success'
+                    ? 'btn-response-success'
+                    : message?.type === 'error'
+                    ? 'btn-response-error'
+                    : ''
+                }`}
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                <span>Assign Faculty</span>
+                <span>{isPending ? 'Assigning Faculty...' : 'Assign Faculty'}</span>
               </button>
             </form>
           </div>
@@ -682,10 +706,18 @@ export function AcademicManagementTab({
               <button
                 type="submit"
                 disabled={isPending}
-                className="w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                className={`w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 ${
+                  isPending
+                    ? 'btn-request-active'
+                    : message?.type === 'success'
+                    ? 'btn-response-success'
+                    : message?.type === 'error'
+                    ? 'btn-response-error'
+                    : ''
+                }`}
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                <span>Add Year</span>
+                <span>{isPending ? 'Adding Year...' : 'Add Year'}</span>
               </button>
             </form>
           </div>
@@ -769,10 +801,18 @@ export function AcademicManagementTab({
               <button
                 type="submit"
                 disabled={isPending}
-                className="w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                className={`w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 ${
+                  isPending
+                    ? 'btn-request-active'
+                    : message?.type === 'success'
+                    ? 'btn-response-success'
+                    : message?.type === 'error'
+                    ? 'btn-response-error'
+                    : ''
+                }`}
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                <span>Add Branch</span>
+                <span>{isPending ? 'Adding Branch...' : 'Add Branch'}</span>
               </button>
             </form>
           </div>

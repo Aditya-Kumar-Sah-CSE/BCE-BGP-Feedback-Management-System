@@ -694,10 +694,16 @@ export function CreateGoogleFormWizard({
                     type="button"
                     onClick={handleGenerateForm}
                     disabled={!canGoToNext() || isPending || !googleStatus.isConfigured}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-bce-cobalt to-indigo-600 hover:from-bce-navy hover:to-indigo-700 disabled:opacity-40 transition-all shadow-md"
+                    className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-bce-cobalt to-indigo-600 hover:from-bce-navy hover:to-indigo-700 disabled:opacity-40 transition-all shadow-md ${
+                      isPending ? 'btn-request-active' : ''
+                    }`}
                   >
-                    <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>Generate Google Feedback Form</span>
+                    {isPending ? (
+                      <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                    )}
+                    <span>{isPending ? 'Generating Form on Google...' : 'Generate Google Feedback Form'}</span>
                   </button>
                 )}
               </div>

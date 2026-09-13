@@ -95,7 +95,9 @@ export function FormResultsConsole({ initialReport }: Props) {
             <button
               onClick={handleSync}
               disabled={isSyncing}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-bce-cobalt hover:bg-bce-navy text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-xs"
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 bg-bce-cobalt hover:bg-bce-navy text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-xs ${
+                isSyncing ? 'btn-request-active' : ''
+              }`}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Syncing...' : 'Sync Responses'}</span>
