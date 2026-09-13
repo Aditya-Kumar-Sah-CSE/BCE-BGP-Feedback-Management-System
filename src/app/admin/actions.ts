@@ -443,11 +443,14 @@ export async function createFacultyAction(data: {
 
   const supabase = await getAdminDb();
 
+  const empCode = data.employee_id?.trim() || `EMP-${Date.now().toString().slice(-4)}`;
+
   const payload: Record<string, any> = {
     name: data.name.trim(),
     department: data.department.trim(),
     designation: data.designation.trim(),
     is_active: data.is_active,
+    employee_code: empCode,
   };
 
   if (data.employee_id?.trim()) {
@@ -460,9 +463,33 @@ export async function createFacultyAction(data: {
     .select('*')
     .single();
 
+  // If column employee_code does not exist in schema cache
+  if (error && (error.message.includes('employee_code') && (error.code === 'PGRST204' || error.message.includes('schema cache')))) {
+    delete payload.employee_code;
+    const fallbackRes = await supabase
+      .from('faculties')
+      .insert(payload)
+      .select('*')
+      .single();
+    newFaculty = fallbackRes.data;
+    error = fallbackRes.error;
+  }
+
   // If column employee_id is missing in database schema or schema cache
   if (error && (error.message.includes('employee_id') || error.code === 'PGRST204' || error.code === '42703')) {
     delete payload.employee_id;
+    const fallbackRes = await supabase
+      .from('faculties')
+      .insert(payload)
+      .select('*')
+      .single();
+    newFaculty = fallbackRes.data;
+    error = fallbackRes.error;
+  }
+
+  // If employee_code not-null constraint was violated
+  if (error && error.message.includes('employee_code') && error.message.includes('not-null')) {
+    payload.employee_code = empCode;
     const fallbackRes = await supabase
       .from('faculties')
       .insert(payload)
@@ -478,6 +505,7 @@ export async function createFacultyAction(data: {
       .from('faculties')
       .insert({
         name: data.name.trim(),
+        employee_code: empCode,
         is_active: data.is_active,
       })
       .select('*')
@@ -529,12 +557,23 @@ export async function updateFacultyAction(
 
   if (data.employee_id?.trim()) {
     payload.employee_id = data.employee_id.trim();
+    payload.employee_code = data.employee_id.trim();
   }
 
   let { error } = await supabase
     .from('faculties')
     .update(payload)
     .eq('id', id);
+
+  // If column employee_code is missing in database schema or schema cache
+  if (error && error.message.includes('employee_code')) {
+    delete payload.employee_code;
+    const fallbackRes = await supabase
+      .from('faculties')
+      .update(payload)
+      .eq('id', id);
+    error = fallbackRes.error;
+  }
 
   // If column employee_id is missing in database schema or schema cache
   if (error && (error.message.includes('employee_id') || error.code === 'PGRST204' || error.code === '42703')) {
