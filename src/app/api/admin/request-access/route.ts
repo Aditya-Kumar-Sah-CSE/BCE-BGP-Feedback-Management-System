@@ -19,75 +19,102 @@ export async function POST(request: Request) {
 
     // If Super Admin, promote immediately on the server
     if (isSuperAdminEmail) {
-      const { data: adminData, error: adminErr } = await supabase
+      const { data: existingAdmin } = await supabase
         .from('admins')
-        .upsert(
-          {
+        .select('*')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+
+      let adminData;
+      if (existingAdmin) {
+        const { data } = await supabase
+          .from('admins')
+          .update({
+            user_id: userId || existingAdmin.user_id,
+            name,
+            role: 'SUPER_ADMIN',
+          })
+          .eq('id', existingAdmin.id)
+          .select('*')
+          .maybeSingle();
+        adminData = data;
+      } else {
+        const { data } = await supabase
+          .from('admins')
+          .insert({
             user_id: userId || null,
             email: cleanEmail,
             name,
             role: 'SUPER_ADMIN',
-            status: 'ACTIVE',
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'email' }
-        )
-        .select('*')
-        .single();
-
-      if (adminErr) {
-        console.error('Super Admin upsert error:', adminErr);
+          })
+          .select('*')
+          .maybeSingle();
+        adminData = data;
       }
 
       // Also mark any request as approved
       await supabase
         .from('admin_requests')
-        .upsert(
-          {
-            user_id: userId || null,
-            email: cleanEmail,
-            name,
-            status: 'APPROVED',
-            reviewed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'email' }
-        );
+        .update({
+          status: 'APPROVED',
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('email', cleanEmail);
 
       return NextResponse.json({ success: true, isSuperAdmin: true, admin: adminData });
     }
 
     // Standard admin applicant: Insert or update PENDING request in admin_requests
-    const { data: reqData, error: reqErr } = await supabase
+    const { data: existingReq } = await supabase
       .from('admin_requests')
-      .upsert(
-        {
+      .select('id')
+      .eq('email', cleanEmail)
+      .maybeSingle();
+
+    let reqData;
+    if (existingReq) {
+      const { data, error } = await supabase
+        .from('admin_requests')
+        .update({
+          user_id: userId || null,
+          name: `${name} (${department || 'Faculty'})`,
+          status: 'PENDING',
+        })
+        .eq('id', existingReq.id)
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Admin request update error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      reqData = data;
+    } else {
+      const { data, error } = await supabase
+        .from('admin_requests')
+        .insert({
           user_id: userId || null,
           email: cleanEmail,
           name: `${name} (${department || 'Faculty'})`,
           status: 'PENDING',
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'email' }
-      )
-      .select('*')
-      .single();
+        })
+        .select('*')
+        .single();
 
-    if (reqErr) {
-      console.error('Admin request insert error:', reqErr);
-      return NextResponse.json({ error: reqErr.message }, { status: 500 });
+      if (error) {
+        console.error('Admin request insert error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      reqData = data;
     }
 
     // Record audit log for request submission
     await supabase.from('audit_logs').insert({
-      actor_email: cleanEmail,
       action: 'REQUEST_ADMIN_ACCESS',
-      entity_type: 'admin_requests',
-      entity_id: reqData?.id,
       details: `New admin access requested by ${name} (${cleanEmail})`,
     });
 
-    return NextResponse.json({ success: true, isSuperAdmin: false, status: 'PENDING' });
+    return NextResponse.json({ success: true, isSuperAdmin: false, status: 'PENDING', request: reqData });
   } catch (error: any) {
     console.error('Request access error:', error);
     return NextResponse.json(
