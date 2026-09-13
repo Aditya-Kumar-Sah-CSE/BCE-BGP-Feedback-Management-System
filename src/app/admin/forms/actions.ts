@@ -369,8 +369,19 @@ export async function createGoogleFeedbackFormAction(payload: CreateFormPayload)
 
     let savedForm: FeedbackForm | null = null;
     let currentPayload = { ...insertPayload };
+    let lastInsertError: any = null;
 
-    for (let attempt = 0; attempt < 8; attempt++) {
+    const extractMissingCol = (msg: string): string | null => {
+      const m1 = msg.match(/Could not find the '([^']+)' column/i);
+      if (m1) return m1[1];
+      const m2 = msg.match(/column (?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+) does not exist/i);
+      if (m2) return m2[1];
+      const m3 = msg.match(/column "([^"]+)"/i);
+      if (m3) return m3[1];
+      return null;
+    };
+
+    for (let attempt = 0; attempt < 20; attempt++) {
       const { data: inserted, error: insertErr } = await supabase
         .from('feedback_forms')
         .insert(currentPayload)
@@ -378,21 +389,21 @@ export async function createGoogleFeedbackFormAction(payload: CreateFormPayload)
         .single();
 
       if (!insertErr && inserted) {
-        savedForm = inserted as FeedbackForm;
+        savedForm = {
+          ...insertPayload,
+          ...inserted,
+        } as FeedbackForm;
         break;
       }
 
       if (insertErr) {
+        lastInsertError = insertErr;
         console.warn(`feedback_forms insert attempt ${attempt + 1} failed:`, insertErr.message);
 
-        // Pattern 1: PGRST204 "Could not find the 'xyz' column of 'feedback_forms' in the schema cache"
-        const missingColMatch = insertErr.message.match(/Could not find the '([^']+)' column/i);
-        // Pattern 2: Postgres 42703 'column "xyz" of relation "feedback_forms" does not exist'
-        const undefColMatch = insertErr.message.match(/column "([^"]+)"/i);
-        const colToRemove = missingColMatch?.[1] || undefColMatch?.[1];
+        const colToRemove = extractMissingCol(insertErr.message);
 
         if (colToRemove && colToRemove in currentPayload) {
-          console.warn(`Stripping missing column '${colToRemove}' and retrying insert...`);
+          console.warn(`Stripping missing column '${colToRemove}' from insert payload and retrying...`);
           delete currentPayload[colToRemove];
           continue;
         }
@@ -402,7 +413,7 @@ export async function createGoogleFeedbackFormAction(payload: CreateFormPayload)
     }
 
     if (!savedForm) {
-      throw new Error('Failed to save feedback form record to database: unknown database error');
+      throw new Error(`Failed to save feedback form record to database: ${lastInsertError?.message || 'Database schema column mismatch'}`);
     }
 
     revalidatePath('/admin/dashboard/forms');
