@@ -629,17 +629,33 @@ export async function createSubjectAction(data: {
   }
 
   const supabase = await getAdminDb();
-  const { data: newSubject, error } = await supabase
+  const payload: Record<string, any> = {
+    name: data.name.trim(),
+    code: data.code.trim().toUpperCase(),
+    semester_id: data.semester_id || null,
+    branch_id: data.branch_id || null,
+    is_active: data.is_active,
+  };
+
+  let { data: newSubject, error } = await supabase
     .from('subjects')
-    .insert({
-      name: data.name.trim(),
-      code: data.code.trim().toUpperCase(),
-      semester_id: data.semester_id || null,
-      branch_id: data.branch_id || null,
-      is_active: data.is_active,
-    })
+    .insert(payload)
     .select('*')
     .single();
+
+  if (error && (error.message.includes('branch_id') || error.code === 'PGRST204' || error.code === '42703')) {
+    delete payload.branch_id;
+    const res = await supabase.from('subjects').insert(payload).select('*').single();
+    newSubject = res.data;
+    error = res.error;
+  }
+
+  if (error && (error.message.includes('semester_id') || error.code === 'PGRST204' || error.code === '42703')) {
+    delete payload.semester_id;
+    const res = await supabase.from('subjects').insert(payload).select('*').single();
+    newSubject = res.data;
+    error = res.error;
+  }
 
   if (error) return { success: false, error: error.message };
 
@@ -673,17 +689,31 @@ export async function updateSubjectAction(
   }
 
   const supabase = await getAdminDb();
-  const { error } = await supabase
+  const payload: Record<string, any> = {
+    name: data.name.trim(),
+    code: data.code.trim().toUpperCase(),
+    semester_id: data.semester_id || null,
+    branch_id: data.branch_id || null,
+    is_active: data.is_active,
+    updated_at: new Date().toISOString(),
+  };
+
+  let { error } = await supabase
     .from('subjects')
-    .update({
-      name: data.name.trim(),
-      code: data.code.trim().toUpperCase(),
-      semester_id: data.semester_id || null,
-      branch_id: data.branch_id || null,
-      is_active: data.is_active,
-      updated_at: new Date().toISOString(),
-    })
+    .update(payload)
     .eq('id', id);
+
+  if (error && (error.message.includes('branch_id') || error.code === 'PGRST204' || error.code === '42703')) {
+    delete payload.branch_id;
+    const res = await supabase.from('subjects').update(payload).eq('id', id);
+    error = res.error;
+  }
+
+  if (error && (error.message.includes('semester_id') || error.code === 'PGRST204' || error.code === '42703')) {
+    delete payload.semester_id;
+    const res = await supabase.from('subjects').update(payload).eq('id', id);
+    error = res.error;
+  }
 
   if (error) return { success: false, error: error.message };
 
@@ -719,18 +749,57 @@ export async function createAssignmentAction(data: {
   }
 
   const supabase = await getAdminDb();
-  const { data: newAssign, error } = await supabase
+  const payload: Record<string, any> = {
+    faculty_id: data.faculty_id,
+    subject_id: data.subject_id,
+    academic_year_id: data.academic_year_id,
+    branch_id: data.branch_id || null,
+    semester_id: data.semester_id || null,
+    is_active: data.is_active,
+  };
+
+  let { data: newAssign, error } = await supabase
     .from('faculty_subject_assignments')
-    .insert({
-      faculty_id: data.faculty_id,
-      subject_id: data.subject_id,
-      academic_year_id: data.academic_year_id,
-      branch_id: data.branch_id || null,
-      semester_id: data.semester_id || null,
-      is_active: data.is_active,
-    })
+    .insert(payload)
     .select('*')
     .single();
+
+  if (error && (error.message.includes('branch_id') || error.code === 'PGRST204' || error.code === '42703')) {
+    delete payload.branch_id;
+    const retryRes = await supabase
+      .from('faculty_subject_assignments')
+      .insert(payload)
+      .select('*')
+      .single();
+    newAssign = retryRes.data;
+    error = retryRes.error;
+  }
+
+  if (error && (error.message.includes('semester_id') || error.code === 'PGRST204' || error.code === '42703')) {
+    delete payload.semester_id;
+    const retryRes = await supabase
+      .from('faculty_subject_assignments')
+      .insert(payload)
+      .select('*')
+      .single();
+    newAssign = retryRes.data;
+    error = retryRes.error;
+  }
+
+  if (error && (error.message.includes('column') || error.code === 'PGRST204' || error.code === '42703')) {
+    const minimalRes = await supabase
+      .from('faculty_subject_assignments')
+      .insert({
+        faculty_id: data.faculty_id,
+        subject_id: data.subject_id,
+        academic_year_id: data.academic_year_id,
+        is_active: data.is_active,
+      })
+      .select('*')
+      .single();
+    newAssign = minimalRes.data;
+    error = minimalRes.error;
+  }
 
   if (error) return { success: false, error: error.message };
 
