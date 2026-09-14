@@ -3,6 +3,14 @@ import { getAdminSession } from '@/lib/auth/admin-auth';
 import { redirect } from 'next/navigation';
 import { getGoogleConfigStatus } from '@/lib/google/auth';
 import { CreateGoogleFormWizard } from '@/components/admin/forms/CreateGoogleFormWizard';
+import type {
+  AcademicYear,
+  Branch,
+  Semester,
+  Faculty,
+  Subject,
+  FacultySubjectAssignment,
+} from '@/types/database';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +23,7 @@ export default async function CreateFeedbackFormPage() {
   const supabase = await createClient();
   const googleStatus = getGoogleConfigStatus();
 
-  // Fetch active academic masters
+  // Fetch active academic masters with lean column projections
   const [
     { data: years },
     { data: branches },
@@ -24,23 +32,23 @@ export default async function CreateFeedbackFormPage() {
     { data: subjects },
     { data: assignments },
   ] = await Promise.all([
-    supabase.from('academic_years').select('*').order('name', { ascending: false }),
-    supabase.from('branches').select('*').order('name'),
-    supabase.from('semesters').select('*').order('semester_number'),
-    supabase.from('faculties').select('*').order('name'),
-    supabase.from('subjects').select('*').order('name'),
-    supabase.from('faculty_subject_assignments').select('*').eq('is_active', true),
+    supabase.from('academic_years').select('id, name, is_active').order('name', { ascending: false }),
+    supabase.from('branches').select('id, name, code, is_active').order('name'),
+    supabase.from('semesters').select('id, name, semester_number, is_active').order('semester_number'),
+    supabase.from('faculties').select('id, name, department, is_active').order('name'),
+    supabase.from('subjects').select('id, name, code, branch_id, semester_id, is_active').order('name'),
+    supabase.from('faculty_subject_assignments').select('id, faculty_id, subject_id, academic_year_id, branch_id, semester_id, is_active').eq('is_active', true),
   ]);
 
   return (
     <div className="space-y-6">
       <CreateGoogleFormWizard
-        academicYears={years || []}
-        branches={branches || []}
-        semesters={semesters || []}
-        faculties={faculties || []}
-        subjects={subjects || []}
-        assignments={assignments || []}
+        academicYears={(years as unknown as AcademicYear[]) || []}
+        branches={(branches as unknown as Branch[]) || []}
+        semesters={(semesters as unknown as Semester[]) || []}
+        faculties={(faculties as unknown as Faculty[]) || []}
+        subjects={(subjects as unknown as Subject[]) || []}
+        assignments={(assignments as unknown as FacultySubjectAssignment[]) || []}
         googleStatus={googleStatus}
       />
     </div>

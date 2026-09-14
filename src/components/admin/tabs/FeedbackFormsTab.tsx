@@ -1,10 +1,8 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import {
-  toggleFeedbackFormStatusAction
-} from '@/app/admin/actions';
+import { toggleFeedbackFormStatusAction } from '@/app/admin/actions';
 import {
   FileSpreadsheet,
   Plus,
@@ -16,6 +14,7 @@ import {
   FileCode2,
   ArrowRight,
   Sparkles,
+  Search,
 } from 'lucide-react';
 import type {
   FeedbackForm,
@@ -23,8 +22,9 @@ import type {
   Branch,
   Semester,
   Faculty,
-  Subject
+  Subject,
 } from '@/types/database';
+import { PaginationControl } from '@/components/ui/PaginationControl';
 
 interface Props {
   feedbackForms: FeedbackForm[];
@@ -42,20 +42,76 @@ export function FeedbackFormsTab({
   faculties,
   subjects,
 }: Props) {
+  const [formsList, setFormsList] = useState<FeedbackForm[]>(feedbackForms);
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Search, filter, and pagination states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PUBLISHED' | 'DRAFT' | 'CLOSED'>('ALL');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Sync if parent prop updates
+  useEffect(() => {
+    setFormsList(feedbackForms);
+  }, [feedbackForms]);
+
+  // 300ms debounce on search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Fast in-place optimistic status toggle
   const handleToggleStatus = (form: FeedbackForm) => {
     const nextStatus = form.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED';
+    setFormsList((prev) =>
+      prev.map((f) => (f.id === form.id ? { ...f, status: nextStatus } : f))
+    );
+
     startTransition(async () => {
       const res = await toggleFeedbackFormStatusAction(form.id, nextStatus);
       if (res.success) {
         setMessage({ type: 'success', text: `Form status updated to ${nextStatus}.` });
       } else {
+        // Rollback
+        setFormsList((prev) =>
+          prev.map((f) => (f.id === form.id ? { ...f, status: form.status } : f))
+        );
         setMessage({ type: 'error', text: res.error || 'Failed to update status.' });
       }
     });
   };
+
+  // Filtered forms list
+  const filteredForms = useMemo(() => {
+    return formsList.filter((f) => {
+      const matchStatus = statusFilter === 'ALL' || f.status === statusFilter;
+      if (!matchStatus) return false;
+
+      if (!debouncedSearch.trim()) return true;
+      const q = debouncedSearch.toLowerCase().trim();
+      return (
+        f.title?.toLowerCase().includes(q) ||
+        f.faculty?.name?.toLowerCase().includes(q) ||
+        f.subject?.name?.toLowerCase().includes(q) ||
+        f.subject?.code?.toLowerCase().includes(q)
+      );
+    });
+  }, [formsList, statusFilter, debouncedSearch]);
+
+  const totalItems = filteredForms.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+
+  const paginatedForms = useMemo(() => {
+    const from = (page - 1) * pageSize;
+    return filteredForms.slice(from, from + pageSize);
+  }, [filteredForms, page, pageSize]);
 
   return (
     <div className="space-y-6">
@@ -107,16 +163,49 @@ export function FeedbackFormsTab({
         </div>
       )}
 
-      {/* Forms List Table */}
+      {/* Forms List Table with Filter Header */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-          <h4 className="text-sm font-bold text-slate-900">Configured Feedback Forms ({feedbackForms.length})</h4>
-          <span className="text-xs text-slate-400">
-            {feedbackForms.filter(f => f.status === 'PUBLISHED').length} Published
-          </span>
+        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/40">
+          <div>
+            <h4 className="text-sm font-bold text-slate-900">
+              Configured Feedback Forms ({totalItems})
+            </h4>
+            <span className="text-xs text-slate-400">
+              {formsList.filter((f) => f.status === 'PUBLISHED').length} Published Total
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            {/* Search Input */}
+            <div className="relative flex-1 sm:w-60">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search forms..."
+                className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+              />
+            </div>
+
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as any);
+                setPage(1);
+              }}
+              className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+            >
+              <option value="ALL">All Status</option>
+              <option value="PUBLISHED">Published</option>
+              <option value="DRAFT">Draft</option>
+              <option value="CLOSED">Closed</option>
+            </select>
+          </div>
         </div>
 
-        {feedbackForms.length === 0 ? (
+        {formsList.length === 0 ? (
           <div className="p-12 text-center space-y-3">
             <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
               <FileSpreadsheet className="w-6 h-6" />
@@ -133,6 +222,10 @@ export function FeedbackFormsTab({
               Generate First Google Form
             </Link>
           </div>
+        ) : paginatedForms.length === 0 ? (
+          <div className="p-8 text-center text-xs text-slate-400">
+            No feedback forms match your search or filter criteria.
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -148,11 +241,11 @@ export function FeedbackFormsTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {feedbackForms.map((form) => {
-                  const faculty = faculties.find(f => f.id === form.faculty_id) || form.faculty;
-                  const subject = subjects.find(s => s.id === form.subject_id) || form.subject;
-                  const branch = branches.find(b => b.id === form.branch_id) || form.branch;
-                  const semester = semesters.find(s => s.id === form.semester_id) || form.semester;
+                {paginatedForms.map((form) => {
+                  const faculty = faculties.find((f) => f.id === form.faculty_id) || form.faculty;
+                  const subject = subjects.find((s) => s.id === form.subject_id) || form.subject;
+                  const branch = branches.find((b) => b.id === form.branch_id) || form.branch;
+                  const semester = semesters.find((s) => s.id === form.semester_id) || form.semester;
                   const isPublished = form.status === 'PUBLISHED';
                   const isNative = form.response_destination_type === 'NATIVE_SHEET';
 
@@ -265,6 +358,20 @@ export function FeedbackFormsTab({
             </table>
           </div>
         )}
+
+        {/* Pagination Controls */}
+        <PaginationControl
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(sz) => {
+            setPageSize(sz);
+            setPage(1);
+          }}
+          pageSizeOptions={[10, 20, 50]}
+        />
       </div>
     </div>
   );

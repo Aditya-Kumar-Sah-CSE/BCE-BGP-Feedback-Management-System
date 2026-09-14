@@ -1,9 +1,10 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAdminSession, SUPER_ADMIN_EMAIL } from '@/lib/auth/admin-auth';
+import { ACADEMIC_CACHE_TAG } from '@/lib/supabase/academic-cache';
 
 async function getAdminDb() {
   return createAdminClient() || await createClient();
@@ -879,7 +880,7 @@ export async function createFeedbackFormDraftAction(data: {
   };
 
   let form: any = null;
-  let currentPayload = { ...insertPayload };
+  const currentPayload = { ...insertPayload };
 
   for (let attempt = 0; attempt < 6; attempt++) {
     const { data: inserted, error: insertErr } = await supabase
@@ -954,3 +955,298 @@ export async function toggleFeedbackFormStatusAction(formId: string, status: str
   revalidatePath('/');
   return { success: true };
 }
+
+// -------------------------------------------------------------
+// 9. HIGH-PERFORMANCE PAGINATED QUERIES
+// -------------------------------------------------------------
+
+export async function getPaginatedFacultiesAction(params: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  department?: string;
+  status?: 'ALL' | 'ACTIVE' | 'INACTIVE';
+}) {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized.', data: [], total: 0, page: 1, pageSize: 20, totalPages: 0 };
+  }
+
+  const page = Math.max(1, params.page || 1);
+  const pageSize = Math.max(5, Math.min(100, params.pageSize || 20));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const supabase = await getAdminDb();
+  let query = supabase
+    .from('faculties')
+    .select('id, name, department, designation, employee_id, is_active, created_at', { count: 'exact' });
+
+  if (params.search && params.search.trim()) {
+    const q = params.search.trim();
+    query = query.or(`name.ilike.%${q}%,department.ilike.%${q}%,employee_id.ilike.%${q}%`);
+  }
+
+  if (params.department && params.department !== 'ALL') {
+    query = query.eq('department', params.department);
+  }
+
+  if (params.status === 'ACTIVE') {
+    query = query.eq('is_active', true);
+  } else if (params.status === 'INACTIVE') {
+    query = query.eq('is_active', false);
+  }
+
+  query = query.order('name', { ascending: true }).range(from, to);
+
+  const { data, count, error } = await query;
+  if (error) {
+    return { success: false, error: error.message, data: [], total: 0, page, pageSize, totalPages: 0 };
+  }
+
+  const total = count || 0;
+  return {
+    success: true,
+    data: (data || []) as any[],
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+  };
+}
+
+export async function deleteFacultyAction(id: string) {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized.' };
+  }
+
+  const supabase = await getAdminDb();
+  const { error } = await supabase.from('faculties').delete().eq('id', id);
+  if (error) return { success: false, error: error.message };
+
+  await logAuditAction(
+    supabase,
+    { adminId: session.admin?.id, email: session.user?.email },
+    'DELETE_FACULTY',
+    'faculties',
+    id,
+    'Deleted faculty member'
+  );
+
+  return { success: true };
+}
+
+export async function getPaginatedSubjectsAction(params: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  branchId?: string;
+  semesterId?: string;
+  status?: 'ALL' | 'ACTIVE' | 'INACTIVE';
+}) {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized.', data: [], total: 0, page: 1, pageSize: 20, totalPages: 0 };
+  }
+
+  const page = Math.max(1, params.page || 1);
+  const pageSize = Math.max(5, Math.min(100, params.pageSize || 20));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const supabase = await getAdminDb();
+  let query = supabase
+    .from('subjects')
+    .select('id, name, code, branch_id, semester_id, is_active, created_at', { count: 'exact' });
+
+  if (params.search && params.search.trim()) {
+    const q = params.search.trim();
+    query = query.or(`name.ilike.%${q}%,code.ilike.%${q}%`);
+  }
+
+  if (params.branchId && params.branchId !== 'ALL') {
+    query = query.eq('branch_id', params.branchId);
+  }
+
+  if (params.semesterId && params.semesterId !== 'ALL') {
+    query = query.eq('semester_id', params.semesterId);
+  }
+
+  if (params.status === 'ACTIVE') {
+    query = query.eq('is_active', true);
+  } else if (params.status === 'INACTIVE') {
+    query = query.eq('is_active', false);
+  }
+
+  query = query.order('code', { ascending: true }).range(from, to);
+
+  const { data, count, error } = await query;
+  if (error) {
+    return { success: false, error: error.message, data: [], total: 0, page, pageSize, totalPages: 0 };
+  }
+
+  const total = count || 0;
+  return {
+    success: true,
+    data: (data || []) as any[],
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+  };
+}
+
+export async function deleteSubjectAction(id: string) {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized.' };
+  }
+
+  const supabase = await getAdminDb();
+  const { error } = await supabase.from('subjects').delete().eq('id', id);
+  if (error) return { success: false, error: error.message };
+
+  await logAuditAction(
+    supabase,
+    { adminId: session.admin?.id, email: session.user?.email },
+    'DELETE_SUBJECT',
+    'subjects',
+    id,
+    'Deleted subject'
+  );
+
+  return { success: true };
+}
+
+export async function getPaginatedAssignmentsAction(params: {
+  page?: number;
+  pageSize?: number;
+  academicYearId?: string;
+  branchId?: string;
+  semesterId?: string;
+  facultyId?: string;
+  subjectId?: string;
+}) {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized.', data: [], total: 0, page: 1, pageSize: 20, totalPages: 0 };
+  }
+
+  const page = Math.max(1, params.page || 1);
+  const pageSize = Math.max(5, Math.min(100, params.pageSize || 20));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const supabase = await getAdminDb();
+  let query = supabase
+    .from('faculty_subject_assignments')
+    .select(
+      `
+      id,
+      faculty_id,
+      subject_id,
+      academic_year_id,
+      branch_id,
+      semester_id,
+      is_active,
+      created_at,
+      faculty:faculties(id, name, department),
+      subject:subjects(id, name, code),
+      academic_year:academic_years(id, name),
+      branch:branches(id, name, code),
+      semester:semesters(id, name)
+    `,
+      { count: 'exact' }
+    );
+
+  if (params.academicYearId && params.academicYearId !== 'ALL') {
+    query = query.eq('academic_year_id', params.academicYearId);
+  }
+  if (params.branchId && params.branchId !== 'ALL') {
+    query = query.eq('branch_id', params.branchId);
+  }
+  if (params.semesterId && params.semesterId !== 'ALL') {
+    query = query.eq('semester_id', params.semesterId);
+  }
+  if (params.facultyId && params.facultyId !== 'ALL') {
+    query = query.eq('faculty_id', params.facultyId);
+  }
+  if (params.subjectId && params.subjectId !== 'ALL') {
+    query = query.eq('subject_id', params.subjectId);
+  }
+
+  query = query.order('created_at', { ascending: false }).range(from, to);
+
+  const { data, count, error } = await query;
+  if (error) {
+    return { success: false, error: error.message, data: [], total: 0, page, pageSize, totalPages: 0 };
+  }
+
+  const total = count || 0;
+  return {
+    success: true,
+    data: (data || []) as any[],
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+  };
+}
+
+export async function deleteBranchAction(id: string) {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized.' };
+  }
+
+  const supabase = await getAdminDb();
+  const { error } = await supabase.from('branches').delete().eq('id', id);
+  if (error) return { success: false, error: error.message };
+
+  await logAuditAction(
+    supabase,
+    { adminId: session.admin?.id, email: session.user?.email },
+    'DELETE_BRANCH',
+    'branches',
+    id,
+    'Deleted branch'
+  );
+
+  try {
+    revalidateTag(ACADEMIC_CACHE_TAG);
+  } catch {
+    // Ignore in unsupported environments
+  }
+
+  return { success: true };
+}
+
+export async function deleteAcademicYearAction(id: string) {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized.' };
+  }
+
+  const supabase = await getAdminDb();
+  const { error } = await supabase.from('academic_years').delete().eq('id', id);
+  if (error) return { success: false, error: error.message };
+
+  await logAuditAction(
+    supabase,
+    { adminId: session.admin?.id, email: session.user?.email },
+    'DELETE_ACADEMIC_YEAR',
+    'academic_years',
+    id,
+    'Deleted academic year'
+  );
+
+  try {
+    revalidateTag(ACADEMIC_CACHE_TAG);
+  } catch {
+    // Ignore in unsupported environments
+  }
+
+  return { success: true };
+}
+

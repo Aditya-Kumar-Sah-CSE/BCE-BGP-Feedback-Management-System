@@ -23,10 +23,11 @@ export function getColumnLetter(colIndex: number): string {
 export const FEEDBACK_SHEET_HEADERS = [
   'Timestamp',
   'Response ID',
+  'Email',
   'Student Name',
   'University Registration Number',
   ...BCE_FEEDBACK_PARAMETERS.map(p => `${p.id}. ${p.title}`),
-  'Comments / Suggestions',
+  'General Feedback',
 ];
 
 /**
@@ -60,6 +61,7 @@ export async function createFeedbackSpreadsheet(params: {
 
   const spreadsheetId = res.data.spreadsheetId;
   const spreadsheetUrl = res.data.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
+  const gridSheetId = res.data.sheets?.[0]?.properties?.sheetId ?? 0;
 
   if (!spreadsheetId) {
     throw new Error('Google Sheets API failed to create spreadsheet');
@@ -86,7 +88,7 @@ export async function createFeedbackSpreadsheet(params: {
           {
             repeatCell: {
               range: {
-                sheetId: 0,
+                sheetId: gridSheetId,
                 startRowIndex: 0,
                 endRowIndex: 1,
                 startColumnIndex: 0,
@@ -117,7 +119,7 @@ export async function createFeedbackSpreadsheet(params: {
           {
             autoResizeDimensions: {
               dimensions: {
-                sheetId: 0,
+                sheetId: gridSheetId,
                 dimension: 'COLUMNS',
                 startIndex: 0,
                 endIndex: FEEDBACK_SHEET_HEADERS.length,
@@ -171,9 +173,22 @@ export async function appendResponsesToSheet(
 export async function getExistingSheetResponseIds(spreadsheetId: string): Promise<Set<string>> {
   try {
     const { sheets } = getGoogleServices();
+    const headerRes = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: "'Form Responses'!1:1",
+    });
+
+    const headers = (headerRes.data.values?.[0] || []).map(h => String(h || '').trim().toLowerCase());
+    const respIdIdx = headers.findIndex(h => h.includes('response id') || (h === 'id' && !h.includes('student')));
+
+    if (respIdIdx === -1) {
+      return new Set();
+    }
+
+    const colLetter = getColumnLetter(respIdIdx + 1);
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: "'Form Responses'!B2:B",
+      range: `'Form Responses'!${colLetter}2:${colLetter}`,
     });
 
     const rows = res.data.values || [];

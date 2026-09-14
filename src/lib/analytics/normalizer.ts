@@ -80,7 +80,7 @@ export function detectColumnMapping(headers: string[]): ColumnMapping {
       if (mapping.studentNameColIndex === -1) mapping.studentNameColIndex = index;
     } else if (header.includes('registration') || header.includes('reg') || header.includes('roll')) {
       if (mapping.regNoColIndex === -1) mapping.regNoColIndex = index;
-    } else if (header.includes('comment') || header.includes('suggestion')) {
+    } else if (header.includes('comment') || header.includes('suggestion') || header.includes('general feedback') || (header.includes('feedback') && !header.includes('faculty'))) {
       if (mapping.commentsColIndex === -1) mapping.commentsColIndex = index;
     }
   });

@@ -1,11 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { OverviewTab } from './tabs/OverviewTab';
-import { AdminManagementTab } from './tabs/AdminManagementTab';
-import { AcademicManagementTab } from './tabs/AcademicManagementTab';
-import { FeedbackFormsTab } from './tabs/FeedbackFormsTab';
-import { AuditLogsTab } from './tabs/AuditLogsTab';
+import dynamic from 'next/dynamic';
+import { OverviewTab, type DashboardCounts } from './tabs/OverviewTab';
 import Link from 'next/link';
 import {
   LayoutDashboard,
@@ -28,6 +25,49 @@ import type {
   AuditLog
 } from '@/types/database';
 
+function TabLoadingSkeleton({ title: _title }: { title?: string }) {
+  return (
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 animate-pulse">
+      <div className="flex items-center justify-between">
+        <div className="h-6 w-48 bg-slate-200 rounded-md" />
+        <div className="h-8 w-28 bg-slate-200 rounded-xl" />
+      </div>
+      <div className="h-4 w-72 bg-slate-100 rounded-md" />
+      <div className="pt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="h-20 bg-slate-100 rounded-xl" />
+        <div className="h-20 bg-slate-100 rounded-xl" />
+        <div className="h-20 bg-slate-100 rounded-xl" />
+      </div>
+      <div className="h-64 bg-slate-50 rounded-xl border border-slate-100" />
+    </div>
+  );
+}
+
+const AcademicManagementTab = dynamic(
+  () => import('./tabs/AcademicManagementTab').then((mod) => mod.AcademicManagementTab),
+  {
+    loading: () => <TabLoadingSkeleton title="Academic Management" />,
+  }
+);
+const FeedbackFormsTab = dynamic(
+  () => import('./tabs/FeedbackFormsTab').then((mod) => mod.FeedbackFormsTab),
+  {
+    loading: () => <TabLoadingSkeleton title="Feedback Forms" />,
+  }
+);
+const AdminManagementTab = dynamic(
+  () => import('./tabs/AdminManagementTab').then((mod) => mod.AdminManagementTab),
+  {
+    loading: () => <TabLoadingSkeleton title="Admin Management" />,
+  }
+);
+const AuditLogsTab = dynamic(
+  () => import('./tabs/AuditLogsTab').then((mod) => mod.AuditLogsTab),
+  {
+    loading: () => <TabLoadingSkeleton title="Audit Trail" />,
+  }
+);
+
 interface Props {
   academicYears: AcademicYear[];
   branches: Branch[];
@@ -41,6 +81,7 @@ interface Props {
   auditLogs: AuditLog[];
   isSuperAdmin: boolean;
   currentUserEmail: string;
+  counts?: DashboardCounts;
 }
 
 export function AdminDashboardTabs({
@@ -56,6 +97,7 @@ export function AdminDashboardTabs({
   auditLogs,
   isSuperAdmin,
   currentUserEmail,
+  counts,
 }: Props) {
   const [activeTab, setActiveTab] = useState<'overview' | 'admins' | 'academic' | 'forms' | 'audit'>('overview');
 
@@ -129,6 +171,7 @@ export function AdminDashboardTabs({
             auditLogs={auditLogs}
             isSuperAdmin={isSuperAdmin}
             onNavigateTab={(tab) => setActiveTab(tab as any)}
+            counts={counts}
           />
         )}
 
@@ -149,6 +192,9 @@ export function AdminDashboardTabs({
             faculties={faculties}
             subjects={subjects}
             assignments={assignments}
+            initialFacultyTotal={counts?.totalFaculties}
+            initialSubjectTotal={counts?.totalSubjects}
+            initialAssignmentTotal={counts?.totalAssignments}
           />
         )}
 

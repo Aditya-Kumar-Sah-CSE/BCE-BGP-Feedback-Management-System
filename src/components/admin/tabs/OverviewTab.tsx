@@ -23,6 +23,16 @@ import type {
   AuditLog
 } from '@/types/database';
 
+export interface DashboardCounts {
+  totalFaculties?: number;
+  activeFaculties?: number;
+  totalSubjects?: number;
+  activeSubjects?: number;
+  totalAssignments?: number;
+  totalForms?: number;
+  publishedForms?: number;
+}
+
 interface Props {
   academicYears: AcademicYear[];
   branches: Branch[];
@@ -35,6 +45,7 @@ interface Props {
   auditLogs: AuditLog[];
   isSuperAdmin: boolean;
   onNavigateTab: (tab: string) => void;
+  counts?: DashboardCounts;
 }
 
 export function OverviewTab({
@@ -49,19 +60,28 @@ export function OverviewTab({
   auditLogs,
   isSuperAdmin,
   onNavigateTab,
+  counts,
 }: Props) {
   const pendingRequestsCount = adminRequests.filter((r) => r.status === 'PENDING').length;
   const activeYearsCount = academicYears.filter((y) => y.is_active).length;
   const activeBranchesCount = branches.filter((b) => b.is_active).length;
   const activeSemestersCount = semesters.filter((s) => s.is_active).length;
-  const activeFacultiesCount = faculties.filter((f) => f.is_active).length;
-  const activeSubjectsCount = subjects.filter((s) => s.is_active).length;
-  const publishedFormsCount = feedbackForms.filter((f) => f.status === 'PUBLISHED').length;
+
+  const totalFaculties = counts?.totalFaculties ?? faculties.length;
+  const activeFacultiesCount = counts?.activeFaculties ?? faculties.filter((f) => f.is_active).length;
+
+  const totalSubjects = counts?.totalSubjects ?? subjects.length;
+  const activeSubjectsCount = counts?.activeSubjects ?? subjects.filter((s) => s.is_active).length;
+
+  const totalAssignments = counts?.totalAssignments ?? assignments.length;
+
+  const totalForms = counts?.totalForms ?? feedbackForms.length;
+  const publishedFormsCount = counts?.publishedForms ?? feedbackForms.filter((f) => f.status === 'PUBLISHED').length;
 
   const stats = [
     {
       title: 'Faculties',
-      value: faculties.length,
+      value: totalFaculties,
       subtitle: `${activeFacultiesCount} active`,
       icon: Users,
       color: 'from-blue-600 to-indigo-600',
@@ -69,7 +89,7 @@ export function OverviewTab({
     },
     {
       title: 'Subjects',
-      value: subjects.length,
+      value: totalSubjects,
       subtitle: `${activeSubjectsCount} active`,
       icon: BookOpen,
       color: 'from-violet-600 to-purple-600',
@@ -93,7 +113,7 @@ export function OverviewTab({
     },
     {
       title: 'Faculty Assignments',
-      value: assignments.length,
+      value: totalAssignments,
       subtitle: 'Mapped to subjects',
       icon: GraduationCap,
       color: 'from-cyan-600 to-blue-600',
@@ -101,7 +121,7 @@ export function OverviewTab({
     },
     {
       title: 'Feedback Forms',
-      value: feedbackForms.length,
+      value: totalForms,
       subtitle: `${publishedFormsCount} published`,
       icon: FileSpreadsheet,
       color: 'from-pink-600 to-rose-600',

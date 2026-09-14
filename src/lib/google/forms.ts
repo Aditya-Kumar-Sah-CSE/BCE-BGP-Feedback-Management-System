@@ -33,7 +33,7 @@ export async function createGoogleFeedbackForm(params: {
     throw new Error('Google Forms API did not return valid formId or responderUri');
   }
 
-  // 2. Batch update: Add Form Description and all 8 BCE Questions
+  // 2. Batch update: Add Form Description, Email Collection Settings, and all Template Items
   const questionRequests = buildCreateQuestionsBatchUpdateRequest();
 
   const updateInfoRequest = {
@@ -45,11 +45,21 @@ export async function createGoogleFeedbackForm(params: {
     },
   };
 
+  const updateSettingsRequest = {
+    updateSettings: {
+      settings: {
+        emailCollectionType: 'VERIFIED',
+      },
+      updateMask: 'emailCollectionType',
+    },
+  };
+
   await forms.forms.batchUpdate({
     formId,
     requestBody: {
       requests: [
         updateInfoRequest,
+        updateSettingsRequest,
         ...questionRequests,
       ],
     },

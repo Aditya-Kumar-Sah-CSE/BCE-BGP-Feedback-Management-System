@@ -1,3 +1,4 @@
+import React from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { getAdminSession } from '@/lib/auth/admin-auth';
@@ -14,9 +15,11 @@ import {
   Eye,
   AlertTriangle,
   FileCode2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
-import { FeedbackForm, FeedbackFormStatus } from '@/types/database';
+import { FeedbackForm, FeedbackFormStatus, AcademicYear, Branch, Semester } from '@/types/database';
 import { FormsFilterClient } from '@/components/admin/forms/FormsFilterClient';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +33,8 @@ export default async function FeedbackFormsPage({
     semester?: string;
     status?: string;
     search?: string;
+    page?: string;
+    pageSize?: string;
   }>;
 }) {
   const session = await getAdminSession();
@@ -41,28 +46,53 @@ export default async function FeedbackFormsPage({
   const supabase = await createClient();
   const googleStatus = getGoogleConfigStatus();
 
-  // Fetch academic masters for filters
+  // Pagination calculations
+  const currentPage = resolvedParams.page ? Math.max(1, parseInt(resolvedParams.page, 10)) : 1;
+  const pageSize = resolvedParams.pageSize ? Math.max(5, Math.min(100, parseInt(resolvedParams.pageSize, 10))) : 20;
+  const from = (currentPage - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  // Fetch academic masters for filters (lean selects)
   const [
     { data: years },
     { data: branches },
     { data: semesters },
   ] = await Promise.all([
-    supabase.from('academic_years').select('*').order('name', { ascending: false }),
-    supabase.from('branches').select('*').order('name'),
-    supabase.from('semesters').select('*').order('semester_number'),
+    supabase.from('academic_years').select('id, name, is_active').order('name', { ascending: false }),
+    supabase.from('branches').select('id, name, code, is_active').order('name'),
+    supabase.from('semesters').select('id, name, semester_number, is_active').order('semester_number'),
   ]);
 
-  // Query forms with relations
+  // Query forms with lean relational projections
   let query = supabase
     .from('feedback_forms')
     .select(`
-      *,
-      faculty:faculties(*),
-      subject:subjects(*),
-      academic_year:academic_years(*),
-      branch:branches(*),
-      semester:semesters(*)
-    `)
+      id,
+      title,
+      description,
+      academic_year_id,
+      branch_id,
+      semester_id,
+      faculty_id,
+      subject_id,
+      form_type,
+      status,
+      slug,
+      google_form_url,
+      google_sheet_url,
+      google_form_id,
+      google_sheet_id,
+      response_destination_type,
+      response_count,
+      created_at,
+      published_at,
+      closed_at,
+      faculty:faculties(id, name, department),
+      subject:subjects(id, name, code),
+      academic_year:academic_years(id, name),
+      branch:branches(id, name, code),
+      semester:semesters(id, name)
+    `, { count: 'exact' })
     .order('created_at', { ascending: false });
 
   if (resolvedParams.year && resolvedParams.year !== 'ALL') {
@@ -77,21 +107,29 @@ export default async function FeedbackFormsPage({
   if (resolvedParams.status && resolvedParams.status !== 'ALL') {
     query = query.eq('status', resolvedParams.status);
   }
+  if (resolvedParams.search && resolvedParams.search.trim()) {
+    const q = resolvedParams.search.trim();
+    query = query.or(`title.ilike.%${q}%,slug.ilike.%${q}%`);
+  }
 
-  const { data: formsData, error: queryErr } = await query;
-  let forms = (formsData || []) as FeedbackForm[];
+  query = query.range(from, to);
+
+  const { data: formsData, count, error: queryErr } = await query;
+  let forms = (formsData || []) as unknown as FeedbackForm[];
+  const totalCount = count || 0;
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Fallback: If relational nested query returned error or empty due to schema cache join mismatch, fetch base and join in memory
   if (queryErr) {
     console.warn('Nested relational join failed in forms catalog:', queryErr.message, 'Falling back to base query...');
     const [{ data: faculties }, { data: subjects }] = await Promise.all([
-      supabase.from('faculties').select('*'),
-      supabase.from('subjects').select('*'),
+      supabase.from('faculties').select('id, name, department'),
+      supabase.from('subjects').select('id, name, code'),
     ]);
 
     let baseQuery = supabase
       .from('feedback_forms')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('created_at', { ascending: false });
 
     if (resolvedParams.year && resolvedParams.year !== 'ALL') {
@@ -106,6 +144,12 @@ export default async function FeedbackFormsPage({
     if (resolvedParams.status && resolvedParams.status !== 'ALL') {
       baseQuery = baseQuery.eq('status', resolvedParams.status);
     }
+    if (resolvedParams.search && resolvedParams.search.trim()) {
+      const q = resolvedParams.search.trim();
+      baseQuery = baseQuery.or(`title.ilike.%${q}%,slug.ilike.%${q}%`);
+    }
+
+    baseQuery = baseQuery.range(from, to);
 
     const { data: baseForms } = await baseQuery;
     if (baseForms && baseForms.length > 0) {
@@ -120,17 +164,18 @@ export default async function FeedbackFormsPage({
     }
   }
 
-
-  if (resolvedParams.search && resolvedParams.search.trim()) {
-    const q = resolvedParams.search.toLowerCase().trim();
-    forms = forms.filter(
-      f =>
-        f.title?.toLowerCase().includes(q) ||
-        f.faculty?.name?.toLowerCase().includes(q) ||
-        f.subject?.name?.toLowerCase().includes(q) ||
-        f.subject?.code?.toLowerCase().includes(q)
-    );
-  }
+  // Helper to construct pagination query URLs
+  const createPageUrl = (targetPage: number, targetPageSize?: number) => {
+    const params = new URLSearchParams();
+    if (resolvedParams.year && resolvedParams.year !== 'ALL') params.set('year', resolvedParams.year);
+    if (resolvedParams.branch && resolvedParams.branch !== 'ALL') params.set('branch', resolvedParams.branch);
+    if (resolvedParams.semester && resolvedParams.semester !== 'ALL') params.set('semester', resolvedParams.semester);
+    if (resolvedParams.status && resolvedParams.status !== 'ALL') params.set('status', resolvedParams.status);
+    if (resolvedParams.search && resolvedParams.search.trim()) params.set('search', resolvedParams.search.trim());
+    params.set('page', String(targetPage));
+    if (targetPageSize || pageSize !== 20) params.set('pageSize', String(targetPageSize || pageSize));
+    return `/admin/dashboard/forms?${params.toString()}`;
+  };
 
   const statusBadge = (status: FeedbackFormStatus) => {
     switch (status) {
@@ -229,9 +274,9 @@ export default async function FeedbackFormsPage({
 
       {/* Interactive Filters Bar */}
       <FormsFilterClient
-        academicYears={years || []}
-        branches={branches || []}
-        semesters={semesters || []}
+        academicYears={(years as unknown as AcademicYear[]) || []}
+        branches={(branches as unknown as Branch[]) || []}
+        semesters={(semesters as unknown as Semester[]) || []}
         selectedYear={resolvedParams.year || 'ALL'}
         selectedBranch={resolvedParams.branch || 'ALL'}
         selectedSemester={resolvedParams.semester || 'ALL'}
@@ -274,7 +319,8 @@ export default async function FeedbackFormsPage({
             </Link>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider">
                 <tr>
@@ -402,8 +448,77 @@ export default async function FeedbackFormsPage({
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+
+          {/* Pagination Controls */}
+          {totalCount > 0 && (
+            <div className="px-5 py-3.5 bg-slate-50/70 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+              <div>
+                Showing <strong className="font-semibold text-slate-900">{Math.min(from + 1, totalCount)}</strong>–
+                <strong className="font-semibold text-slate-900">{Math.min(to + 1, totalCount)}</strong> of{' '}
+                <strong className="font-semibold text-slate-900">{totalCount}</strong> feedback forms
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                {/* Previous button */}
+                <Link
+                  href={createPageUrl(Math.max(1, currentPage - 1))}
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 transition-colors ${
+                    currentPage <= 1
+                      ? 'opacity-40 pointer-events-none cursor-not-allowed'
+                      : 'hover:bg-slate-50 hover:text-bce-cobalt'
+                  }`}
+                  aria-disabled={currentPage <= 1}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Previous</span>
+                </Link>
+
+                {/* Page numbers */}
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                    .map((pageNum, idx, arr) => {
+                      const prev = arr[idx - 1];
+                      const showEllipsis = prev && pageNum - prev > 1;
+                      const isActive = pageNum === currentPage;
+
+                      return (
+                        <React.Fragment key={pageNum}>
+                          {showEllipsis && <span className="px-1.5 text-slate-400">…</span>}
+                          <Link
+                            href={createPageUrl(pageNum)}
+                            className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-bold inline-flex items-center justify-center transition-all ${
+                              isActive
+                                ? 'bg-bce-navy text-amber-400 shadow-2xs'
+                                : 'text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            {pageNum}
+                          </Link>
+                        </React.Fragment>
+                      );
+                    })}
+                </div>
+
+                {/* Next button */}
+                <Link
+                  href={createPageUrl(Math.min(totalPages, currentPage + 1))}
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 transition-colors ${
+                    currentPage >= totalPages
+                      ? 'opacity-40 pointer-events-none cursor-not-allowed'
+                      : 'hover:bg-slate-50 hover:text-bce-cobalt'
+                  }`}
+                  aria-disabled={currentPage >= totalPages}
+                >
+                  <span className="hidden sm:inline">Next</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
-  );
+  </div>
+);
 }

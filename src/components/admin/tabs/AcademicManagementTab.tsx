@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect, useMemo, useCallback } from 'react';
 import {
   createAcademicYearAction,
   updateAcademicYearAction,
@@ -9,10 +9,15 @@ import {
   updateSemesterAction,
   createFacultyAction,
   updateFacultyAction,
+  deleteFacultyAction,
   createSubjectAction,
   updateSubjectAction,
+  deleteSubjectAction,
   createAssignmentAction,
   deleteAssignmentAction,
+  getPaginatedFacultiesAction,
+  getPaginatedSubjectsAction,
+  getPaginatedAssignmentsAction,
 } from '@/app/admin/actions';
 import {
   Calendar,
@@ -24,7 +29,8 @@ import {
   Trash2,
   AlertCircle,
   Loader2,
-  Building2
+  Building2,
+  Search,
 } from 'lucide-react';
 import type {
   AcademicYear,
@@ -32,8 +38,10 @@ import type {
   Semester,
   Faculty,
   Subject,
-  FacultySubjectAssignment
+  FacultySubjectAssignment,
 } from '@/types/database';
+import { PaginationControl } from '@/components/ui/PaginationControl';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 
 interface Props {
   academicYears: AcademicYear[];
@@ -42,49 +50,210 @@ interface Props {
   faculties: Faculty[];
   subjects: Subject[];
   assignments: FacultySubjectAssignment[];
+  initialFacultyTotal?: number;
+  initialSubjectTotal?: number;
+  initialAssignmentTotal?: number;
 }
 
 export function AcademicManagementTab({
   academicYears,
   branches,
   semesters,
-  faculties,
-  subjects,
-  assignments,
+  faculties: initialFaculties,
+  subjects: initialSubjects,
+  assignments: initialAssignments,
+  initialFacultyTotal,
+  initialSubjectTotal,
+  initialAssignmentTotal,
 }: Props) {
-  const [activeSubTab, setActiveSubTab] = useState<'faculties' | 'subjects' | 'assignments' | 'years' | 'branches' | 'semesters'>('faculties');
+  const [activeSubTab, setActiveSubTab] = useState<
+    'faculties' | 'subjects' | 'assignments' | 'years' | 'branches' | 'semesters'
+  >('faculties');
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Form states
-  // 1. Faculty form
+  // Masters local state (for fast in-place mutation without full dashboard re-fetch)
+  const [branchList, setBranchList] = useState<Branch[]>(branches);
+  const [yearList, setYearList] = useState<AcademicYear[]>(academicYears);
+  const [semesterList, setSemesterList] = useState<Semester[]>(semesters);
+
+  // -------------------------------------------------------------
+  // 1. FACULTIES STATE & PAGINATION
+  // -------------------------------------------------------------
+  const [facultyList, setFacultyList] = useState<Faculty[]>(initialFaculties);
+  const [facultyTotal, setFacultyTotal] = useState<number>(initialFacultyTotal ?? initialFaculties.length);
+  const [facultyPage, setFacultyPage] = useState<number>(1);
+  const [facultyPageSize, setFacultyPageSize] = useState<number>(20);
+  const [facultySearch, setFacultySearch] = useState<string>('');
+  const [debouncedFacultySearch, setDebouncedFacultySearch] = useState<string>('');
+  const [facultyDeptFilter, setFacultyDeptFilter] = useState<string>('ALL');
+  const [facultyStatusFilter, setFacultyStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [facultyLoading, setFacultyLoading] = useState<boolean>(false);
+
+  // Faculty form
   const [facName, setFacName] = useState('');
   const [facDept, setFacDept] = useState('Computer Science & Engineering');
   const [facDesig, setFacDesig] = useState('Assistant Professor');
   const [facEmpId, setFacEmpId] = useState('');
 
-  // 2. Subject form
+  // 300ms debounce on faculty search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedFacultySearch(facultySearch);
+      setFacultyPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [facultySearch]);
+
+  const loadFaculties = useCallback(async () => {
+    setFacultyLoading(true);
+    const res = await getPaginatedFacultiesAction({
+      page: facultyPage,
+      pageSize: facultyPageSize,
+      search: debouncedFacultySearch,
+      department: facultyDeptFilter,
+      status: facultyStatusFilter,
+    });
+    setFacultyLoading(false);
+    if (res.success) {
+      setFacultyList(res.data as Faculty[]);
+      setFacultyTotal(res.total);
+    }
+  }, [facultyPage, facultyPageSize, debouncedFacultySearch, facultyDeptFilter, facultyStatusFilter]);
+
+  useEffect(() => {
+    // Only fetch if filters or page actually changed from initial state
+    if (debouncedFacultySearch || facultyDeptFilter !== 'ALL' || facultyStatusFilter !== 'ALL' || facultyPage > 1 || facultyPageSize !== 20) {
+      loadFaculties();
+    }
+  }, [loadFaculties, debouncedFacultySearch, facultyDeptFilter, facultyStatusFilter, facultyPage, facultyPageSize]);
+
+  // -------------------------------------------------------------
+  // 2. SUBJECTS STATE & PAGINATION
+  // -------------------------------------------------------------
+  const [subjectList, setSubjectList] = useState<Subject[]>(initialSubjects);
+  const [subjectTotal, setSubjectTotal] = useState<number>(initialSubjectTotal ?? initialSubjects.length);
+  const [subjectPage, setSubjectPage] = useState<number>(1);
+  const [subjectPageSize, setSubjectPageSize] = useState<number>(20);
+  const [subjectSearch, setSubjectSearch] = useState<string>('');
+  const [debouncedSubjectSearch, setDebouncedSubjectSearch] = useState<string>('');
+  const [subjectBranchFilter, setSubjectBranchFilter] = useState<string>('ALL');
+  const [subjectSemesterFilter, setSubjectSemesterFilter] = useState<string>('ALL');
+  const [subjectStatusFilter, setSubjectStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [subjectLoading, setSubjectLoading] = useState<boolean>(false);
+
+  // Subject form
   const [subName, setSubName] = useState('');
   const [subCode, setSubCode] = useState('');
   const [subBranchId, setSubBranchId] = useState(branches[0]?.id || '');
   const [subSemesterId, setSubSemesterId] = useState(semesters[0]?.id || '');
 
-  // 3. Assignment form
-  const [assignFacultyId, setAssignFacultyId] = useState(faculties[0]?.id || '');
-  const [assignSubjectId, setAssignSubjectId] = useState(subjects[0]?.id || '');
-  const [assignYearId, setAssignYearId] = useState(academicYears.find(y => y.is_active)?.id || academicYears[0]?.id || '');
+  // 300ms debounce on subject search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSubjectSearch(subjectSearch);
+      setSubjectPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [subjectSearch]);
+
+  const loadSubjects = useCallback(async () => {
+    setSubjectLoading(true);
+    const res = await getPaginatedSubjectsAction({
+      page: subjectPage,
+      pageSize: subjectPageSize,
+      search: debouncedSubjectSearch,
+      branchId: subjectBranchFilter,
+      semesterId: subjectSemesterFilter,
+      status: subjectStatusFilter,
+    });
+    setSubjectLoading(false);
+    if (res.success) {
+      setSubjectList(res.data as Subject[]);
+      setSubjectTotal(res.total);
+    }
+  }, [subjectPage, subjectPageSize, debouncedSubjectSearch, subjectBranchFilter, subjectSemesterFilter, subjectStatusFilter]);
+
+  useEffect(() => {
+    if (debouncedSubjectSearch || subjectBranchFilter !== 'ALL' || subjectSemesterFilter !== 'ALL' || subjectStatusFilter !== 'ALL' || subjectPage > 1 || subjectPageSize !== 20) {
+      loadSubjects();
+    }
+  }, [loadSubjects, debouncedSubjectSearch, subjectBranchFilter, subjectSemesterFilter, subjectStatusFilter, subjectPage, subjectPageSize]);
+
+  // -------------------------------------------------------------
+  // 3. ASSIGNMENTS STATE & PAGINATION
+  // -------------------------------------------------------------
+  const [assignmentList, setAssignmentList] = useState<FacultySubjectAssignment[]>(initialAssignments);
+  const [assignTotal, setAssignTotal] = useState<number>(initialAssignmentTotal ?? initialAssignments.length);
+  const [assignPage, setAssignPage] = useState<number>(1);
+  const [assignPageSize, setAssignPageSize] = useState<number>(20);
+  const [assignYearFilter, setAssignYearFilter] = useState<string>('ALL');
+  const [assignBranchFilter, setAssignBranchFilter] = useState<string>('ALL');
+  const [assignSemesterFilter, setAssignSemesterFilter] = useState<string>('ALL');
+  const [assignLoading, setAssignLoading] = useState<boolean>(false);
+
+  // Assignment form
+  const [assignFacultyId, setAssignFacultyId] = useState(initialFaculties[0]?.id || '');
+  const [assignSubjectId, setAssignSubjectId] = useState(initialSubjects[0]?.id || '');
+  const [assignYearId, setAssignYearId] = useState(
+    academicYears.find((y) => y.is_active)?.id || academicYears[0]?.id || ''
+  );
   const [assignBranchId, setAssignBranchId] = useState(branches[0]?.id || '');
   const [assignSemesterId, setAssignSemesterId] = useState(semesters[0]?.id || '');
 
-  // 4. Year form
+  const loadAssignments = useCallback(async () => {
+    setAssignLoading(true);
+    const res = await getPaginatedAssignmentsAction({
+      page: assignPage,
+      pageSize: assignPageSize,
+      academicYearId: assignYearFilter,
+      branchId: assignBranchFilter,
+      semesterId: assignSemesterFilter,
+    });
+    setAssignLoading(false);
+    if (res.success) {
+      setAssignmentList(res.data as FacultySubjectAssignment[]);
+      setAssignTotal(res.total);
+    }
+  }, [assignPage, assignPageSize, assignYearFilter, assignBranchFilter, assignSemesterFilter]);
+
+  useEffect(() => {
+    if (assignYearFilter !== 'ALL' || assignBranchFilter !== 'ALL' || assignSemesterFilter !== 'ALL' || assignPage > 1 || assignPageSize !== 20) {
+      loadAssignments();
+    }
+  }, [loadAssignments, assignYearFilter, assignBranchFilter, assignSemesterFilter, assignPage, assignPageSize]);
+
+  // Options for SearchableSelect
+  const facultyOptions = useMemo(
+    () =>
+      facultyList.map((f) => ({
+        id: f.id,
+        label: f.name,
+        sublabel: f.department || 'General',
+      })),
+    [facultyList]
+  );
+
+  const subjectOptions = useMemo(
+    () =>
+      subjectList.map((s) => ({
+        id: s.id,
+        label: s.name,
+        sublabel: s.code,
+      })),
+    [subjectList]
+  );
+
+  // 4. Year & Branch forms
   const [yearName, setYearName] = useState('');
   const [yearActive, setYearActive] = useState(true);
-
-  // 5. Branch form
   const [branchName, setBranchName] = useState('');
   const [branchCode, setBranchCode] = useState('');
 
-  // Handlers
+  // -------------------------------------------------------------
+  // HANDLERS (With immediate local state updates)
+  // -------------------------------------------------------------
+
   const handleCreateFaculty = (e: React.FormEvent) => {
     e.preventDefault();
     setMessage(null);
@@ -96,12 +265,59 @@ export function AcademicManagementTab({
         employee_id: facEmpId || undefined,
         is_active: true,
       });
-      if (res.success) {
+      if (res.success && res.faculty) {
         setMessage({ type: 'success', text: `Faculty ${facName} added successfully.` });
+        setFacultyList((prev) => [res.faculty as Faculty, ...prev]);
+        setFacultyTotal((prev) => prev + 1);
         setFacName('');
         setFacEmpId('');
       } else {
         setMessage({ type: 'error', text: res.error || 'Failed to create faculty.' });
+      }
+    });
+  };
+
+  const handleToggleFacultyActive = (f: Faculty) => {
+    const nextActive = !f.is_active;
+    // Optimistic update
+    setFacultyList((prev) =>
+      prev.map((item) => (item.id === f.id ? { ...item, is_active: nextActive } : item))
+    );
+
+    startTransition(async () => {
+      const res = await updateFacultyAction(f.id, {
+        name: f.name,
+        department: f.department,
+        designation: f.designation,
+        employee_id: f.employee_id || undefined,
+        is_active: nextActive,
+      });
+      if (!res.success) {
+        // Rollback
+        setFacultyList((prev) =>
+          prev.map((item) => (item.id === f.id ? { ...item, is_active: f.is_active } : item))
+        );
+        setMessage({ type: 'error', text: res.error || 'Failed to update faculty status.' });
+      }
+    });
+  };
+
+  const handleDeleteFaculty = (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete faculty member ${name}?`)) return;
+    setMessage(null);
+
+    const prevList = [...facultyList];
+    setFacultyList((prev) => prev.filter((item) => item.id !== id));
+    setFacultyTotal((prev) => Math.max(0, prev - 1));
+
+    startTransition(async () => {
+      const res = await deleteFacultyAction(id);
+      if (res.success) {
+        setMessage({ type: 'success', text: `Faculty ${name} deleted successfully.` });
+      } else {
+        setFacultyList(prevList);
+        setFacultyTotal((prev) => prev + 1);
+        setMessage({ type: 'error', text: res.error || 'Failed to delete faculty.' });
       }
     });
   };
@@ -117,12 +333,57 @@ export function AcademicManagementTab({
         semester_id: subSemesterId || undefined,
         is_active: true,
       });
-      if (res.success) {
+      if (res.success && res.subject) {
         setMessage({ type: 'success', text: `Subject ${subName} (${subCode}) added successfully.` });
+        setSubjectList((prev) => [res.subject as Subject, ...prev]);
+        setSubjectTotal((prev) => prev + 1);
         setSubName('');
         setSubCode('');
       } else {
         setMessage({ type: 'error', text: res.error || 'Failed to create subject.' });
+      }
+    });
+  };
+
+  const handleToggleSubjectActive = (s: Subject) => {
+    const nextActive = !s.is_active;
+    setSubjectList((prev) =>
+      prev.map((item) => (item.id === s.id ? { ...item, is_active: nextActive } : item))
+    );
+
+    startTransition(async () => {
+      const res = await updateSubjectAction(s.id, {
+        name: s.name,
+        code: s.code,
+        branch_id: s.branch_id || undefined,
+        semester_id: s.semester_id || undefined,
+        is_active: nextActive,
+      });
+      if (!res.success) {
+        setSubjectList((prev) =>
+          prev.map((item) => (item.id === s.id ? { ...item, is_active: s.is_active } : item))
+        );
+        setMessage({ type: 'error', text: res.error || 'Failed to update subject status.' });
+      }
+    });
+  };
+
+  const handleDeleteSubject = (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete subject ${name}?`)) return;
+    setMessage(null);
+
+    const prevList = [...subjectList];
+    setSubjectList((prev) => prev.filter((item) => item.id !== id));
+    setSubjectTotal((prev) => Math.max(0, prev - 1));
+
+    startTransition(async () => {
+      const res = await deleteSubjectAction(id);
+      if (res.success) {
+        setMessage({ type: 'success', text: `Subject ${name} deleted successfully.` });
+      } else {
+        setSubjectList(prevList);
+        setSubjectTotal((prev) => prev + 1);
+        setMessage({ type: 'error', text: res.error || 'Failed to delete subject.' });
       }
     });
   };
@@ -143,8 +404,26 @@ export function AcademicManagementTab({
         semester_id: assignSemesterId || undefined,
         is_active: true,
       });
-      if (res.success) {
+      if (res.success && res.assignment) {
         setMessage({ type: 'success', text: 'Faculty assignment created successfully.' });
+        // Enhance with relations for instant display
+        const faculty = facultyList.find((f) => f.id === assignFacultyId);
+        const subject = subjectList.find((s) => s.id === assignSubjectId);
+        const year = yearList.find((y) => y.id === assignYearId);
+        const branch = branchList.find((b) => b.id === assignBranchId);
+        const semester = semesterList.find((s) => s.id === assignSemesterId);
+
+        const newObj = {
+          ...res.assignment,
+          faculty,
+          subject,
+          academic_year: year,
+          branch,
+          semester,
+        } as FacultySubjectAssignment;
+
+        setAssignmentList((prev) => [newObj, ...prev]);
+        setAssignTotal((prev) => prev + 1);
       } else {
         setMessage({ type: 'error', text: res.error || 'Failed to create assignment.' });
       }
@@ -154,11 +433,18 @@ export function AcademicManagementTab({
   const handleDeleteAssignment = (id: string) => {
     if (!confirm('Are you sure you want to remove this faculty assignment?')) return;
     setMessage(null);
+
+    const prevList = [...assignmentList];
+    setAssignmentList((prev) => prev.filter((item) => item.id !== id));
+    setAssignTotal((prev) => Math.max(0, prev - 1));
+
     startTransition(async () => {
       const res = await deleteAssignmentAction(id);
       if (res.success) {
         setMessage({ type: 'success', text: 'Assignment removed.' });
       } else {
+        setAssignmentList(prevList);
+        setAssignTotal((prev) => prev + 1);
         setMessage({ type: 'error', text: res.error || 'Failed to remove assignment.' });
       }
     });
@@ -169,11 +455,29 @@ export function AcademicManagementTab({
     setMessage(null);
     startTransition(async () => {
       const res = await createAcademicYearAction({ name: yearName, is_active: yearActive });
-      if (res.success) {
+      if (res.success && res.year) {
         setMessage({ type: 'success', text: `Academic Year ${yearName} added.` });
+        setYearList((prev) => [res.year as AcademicYear, ...prev]);
         setYearName('');
       } else {
         setMessage({ type: 'error', text: res.error || 'Failed to add year.' });
+      }
+    });
+  };
+
+  const handleToggleYear = (y: AcademicYear) => {
+    const nextActive = !y.is_active;
+    setYearList((prev) =>
+      prev.map((item) => (item.id === y.id ? { ...item, is_active: nextActive } : item))
+    );
+
+    startTransition(async () => {
+      const res = await updateAcademicYearAction(y.id, { name: y.name, is_active: nextActive });
+      if (!res.success) {
+        setYearList((prev) =>
+          prev.map((item) => (item.id === y.id ? { ...item, is_active: y.is_active } : item))
+        );
+        setMessage({ type: 'error', text: res.error || 'Failed to update year.' });
       }
     });
   };
@@ -183,8 +487,9 @@ export function AcademicManagementTab({
     setMessage(null);
     startTransition(async () => {
       const res = await createBranchAction({ name: branchName, code: branchCode, is_active: true });
-      if (res.success) {
+      if (res.success && res.branch) {
         setMessage({ type: 'success', text: `Branch ${branchName} (${branchCode}) created.` });
+        setBranchList((prev) => [...prev, res.branch as Branch]);
         setBranchName('');
         setBranchCode('');
       } else {
@@ -193,27 +498,42 @@ export function AcademicManagementTab({
     });
   };
 
-  const handleToggleFacultyActive = (f: Faculty) => {
+  const handleToggleBranch = (b: Branch) => {
+    const nextActive = !b.is_active;
+    setBranchList((prev) =>
+      prev.map((item) => (item.id === b.id ? { ...item, is_active: nextActive } : item))
+    );
+
     startTransition(async () => {
-      await updateFacultyAction(f.id, {
-        name: f.name,
-        department: f.department,
-        designation: f.designation,
-        employee_id: f.employee_id || undefined,
-        is_active: !f.is_active,
-      });
+      const res = await updateBranchAction(b.id, { name: b.name, code: b.code, is_active: nextActive });
+      if (!res.success) {
+        setBranchList((prev) =>
+          prev.map((item) => (item.id === b.id ? { ...item, is_active: b.is_active } : item))
+        );
+        setMessage({ type: 'error', text: res.error || 'Failed to update branch.' });
+      }
     });
   };
 
-  const handleToggleSubjectActive = (s: Subject) => {
+  const handleToggleSemester = (s: Semester) => {
+    const nextActive = !s.is_active;
+    setSemesterList((prev) =>
+      prev.map((item) => (item.id === s.id ? { ...item, is_active: nextActive } : item))
+    );
+
     startTransition(async () => {
-      await updateSubjectAction(s.id, {
+      const res = await updateSemesterAction(s.id, {
         name: s.name,
-        code: s.code,
-        branch_id: s.branch_id || undefined,
-        semester_id: s.semester_id || undefined,
-        is_active: !s.is_active,
+        year_number: s.year_number,
+        semester_number: s.semester_number,
+        is_active: nextActive,
       });
+      if (!res.success) {
+        setSemesterList((prev) =>
+          prev.map((item) => (item.id === s.id ? { ...item, is_active: s.is_active } : item))
+        );
+        setMessage({ type: 'error', text: res.error || 'Failed to update semester.' });
+      }
     });
   };
 
@@ -222,12 +542,12 @@ export function AcademicManagementTab({
       {/* Sub-Navigation Tabs */}
       <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap gap-1.5">
         {[
-          { id: 'faculties', label: `Faculties (${faculties.length})`, icon: Users },
-          { id: 'subjects', label: `Subjects (${subjects.length})`, icon: BookOpen },
-          { id: 'assignments', label: `Assignments (${assignments.length})`, icon: GraduationCap },
-          { id: 'years', label: `Academic Years (${academicYears.length})`, icon: Calendar },
-          { id: 'branches', label: `Branches (${branches.length})`, icon: Layers },
-          { id: 'semesters', label: `Semesters (${semesters.length})`, icon: Building2 },
+          { id: 'faculties', label: `Faculties (${facultyTotal})`, icon: Users },
+          { id: 'subjects', label: `Subjects (${subjectTotal})`, icon: BookOpen },
+          { id: 'assignments', label: `Assignments (${assignTotal})`, icon: GraduationCap },
+          { id: 'years', label: `Academic Years (${yearList.length})`, icon: Calendar },
+          { id: 'branches', label: `Branches (${branchList.length})`, icon: Layers },
+          { id: 'semesters', label: `Semesters (${semesterList.length})`, icon: Building2 },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeSubTab === tab.id;
@@ -290,8 +610,10 @@ export function AcademicManagementTab({
                   onChange={(e) => setFacDept(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
                 >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.name}>{b.name}</option>
+                  {branchList.map((b) => (
+                    <option key={b.id} value={b.name}>
+                      {b.name}
+                    </option>
                   ))}
                   <option value="Applied Science & Humanities">Applied Science & Humanities</option>
                   <option value="General">General</option>
@@ -324,15 +646,7 @@ export function AcademicManagementTab({
               <button
                 type="submit"
                 disabled={isPending}
-                className={`w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 ${
-                  isPending
-                    ? 'btn-request-active'
-                    : message?.type === 'success'
-                    ? 'btn-response-success'
-                    : message?.type === 'error'
-                    ? 'btn-response-error'
-                    : ''
-                }`}
+                className="w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-xs"
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                 <span>{isPending ? 'Adding Faculty...' : 'Add Faculty'}</span>
@@ -340,16 +654,67 @@ export function AcademicManagementTab({
             </form>
           </div>
 
-          {/* Faculty List */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h4 className="text-sm font-bold text-slate-900">Faculty Directory ({faculties.length})</h4>
-              <span className="text-xs text-slate-400">Click status to toggle active</span>
+          {/* Faculty List with Fast Search, Filter & Pagination */}
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
+            {/* Filter / Search Header */}
+            <div className="p-3.5 border-b border-slate-100 bg-slate-50/40 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+              <div className="relative w-full sm:w-56">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                <input
+                  type="text"
+                  value={facultySearch}
+                  onChange={(e) => setFacultySearch(e.target.value)}
+                  placeholder="Search faculty..."
+                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <select
+                  value={facultyDeptFilter}
+                  onChange={(e) => {
+                    setFacultyDeptFilter(e.target.value);
+                    setFacultyPage(1);
+                  }}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+                >
+                  <option value="ALL">All Departments</option>
+                  {branchList.map((b) => (
+                    <option key={b.id} value={b.name}>
+                      {b.code}
+                    </option>
+                  ))}
+                  <option value="Applied Science & Humanities">Applied Science</option>
+                  <option value="General">General</option>
+                </select>
+
+                <select
+                  value={facultyStatusFilter}
+                  onChange={(e) => {
+                    setFacultyStatusFilter(e.target.value as any);
+                    setFacultyPage(1);
+                  }}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+                >
+                  <option value="ALL">All Status</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                </select>
+              </div>
             </div>
-            {faculties.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-400">No faculty members added yet.</div>
-            ) : (
-              <div className="overflow-x-auto">
+
+            {/* Table */}
+            <div className="flex-1 overflow-x-auto">
+              {facultyLoading ? (
+                <div className="p-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-bce-cobalt" />
+                  <span>Loading faculties...</span>
+                </div>
+              ) : facultyList.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  No faculty members found matching your search.
+                </div>
+              ) : (
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider">
                     <tr>
@@ -357,20 +722,21 @@ export function AcademicManagementTab({
                       <th className="px-4 py-2.5">Department</th>
                       <th className="px-4 py-2.5">Designation</th>
                       <th className="px-4 py-2.5">Emp ID</th>
-                      <th className="px-4 py-2.5 text-right">Status</th>
+                      <th className="px-4 py-2.5 text-center">Status</th>
+                      <th className="px-4 py-2.5 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {faculties.map((f) => (
-                      <tr key={f.id} className="hover:bg-slate-50">
+                    {facultyList.map((f) => (
+                      <tr key={f.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-4 py-2.5 font-bold text-slate-800">{f.name}</td>
                         <td className="px-4 py-2.5 text-slate-600">{f.department}</td>
                         <td className="px-4 py-2.5 text-slate-500">{f.designation}</td>
                         <td className="px-4 py-2.5 font-mono text-slate-400">{f.employee_id || '—'}</td>
-                        <td className="px-4 py-2.5 text-right">
+                        <td className="px-4 py-2.5 text-center">
                           <button
                             onClick={() => handleToggleFacultyActive(f)}
-                            className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
+                            className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
                               f.is_active
                                 ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
                                 : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
@@ -379,12 +745,36 @@ export function AcademicManagementTab({
                             {f.is_active ? 'ACTIVE' : 'INACTIVE'}
                           </button>
                         </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <button
+                            onClick={() => handleDeleteFaculty(f.id, f.name)}
+                            className="p-1 rounded text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Delete faculty member"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-            )}
+              )}
+            </div>
+
+            {/* Pagination Controls */}
+            <PaginationControl
+              currentPage={facultyPage}
+              totalPages={Math.ceil(facultyTotal / facultyPageSize)}
+              totalItems={facultyTotal}
+              pageSize={facultyPageSize}
+              onPageChange={setFacultyPage}
+              onPageSizeChange={(sz) => {
+                setFacultyPageSize(sz);
+                setFacultyPage(1);
+              }}
+              pageSizeOptions={[10, 20, 50]}
+              isLoading={facultyLoading}
+            />
           </div>
         </div>
       )}
@@ -431,8 +821,10 @@ export function AcademicManagementTab({
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
                 >
                   <option value="">Common / All Branches</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                  {branchList.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.code})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -445,8 +837,10 @@ export function AcademicManagementTab({
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
                 >
                   <option value="">Any Semester</option>
-                  {semesters.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                  {semesterList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -454,15 +848,7 @@ export function AcademicManagementTab({
               <button
                 type="submit"
                 disabled={isPending}
-                className={`w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 ${
-                  isPending
-                    ? 'btn-request-active'
-                    : message?.type === 'success'
-                    ? 'btn-response-success'
-                    : message?.type === 'error'
-                    ? 'btn-response-error'
-                    : ''
-                }`}
+                className="w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-xs"
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                 <span>{isPending ? 'Adding Subject...' : 'Add Subject'}</span>
@@ -471,15 +857,80 @@ export function AcademicManagementTab({
           </div>
 
           {/* Subjects List */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h4 className="text-sm font-bold text-slate-900">Registered Subjects ({subjects.length})</h4>
-              <span className="text-xs text-slate-400">Curriculum Catalog</span>
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
+            {/* Filter Header */}
+            <div className="p-3.5 border-b border-slate-100 bg-slate-50/40 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+              <div className="relative w-full sm:w-56">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                <input
+                  type="text"
+                  value={subjectSearch}
+                  onChange={(e) => setSubjectSearch(e.target.value)}
+                  placeholder="Code or name..."
+                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <select
+                  value={subjectBranchFilter}
+                  onChange={(e) => {
+                    setSubjectBranchFilter(e.target.value);
+                    setSubjectPage(1);
+                  }}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+                >
+                  <option value="ALL">All Branches</option>
+                  {branchList.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.code}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={subjectSemesterFilter}
+                  onChange={(e) => {
+                    setSubjectSemesterFilter(e.target.value);
+                    setSubjectPage(1);
+                  }}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+                >
+                  <option value="ALL">All Semesters</option>
+                  {semesterList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={subjectStatusFilter}
+                  onChange={(e) => {
+                    setSubjectStatusFilter(e.target.value as any);
+                    setSubjectPage(1);
+                  }}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+                >
+                  <option value="ALL">All</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                </select>
+              </div>
             </div>
-            {subjects.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-400">No subjects registered yet.</div>
-            ) : (
-              <div className="overflow-x-auto">
+
+            {/* Table */}
+            <div className="flex-1 overflow-x-auto">
+              {subjectLoading ? (
+                <div className="p-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-bce-cobalt" />
+                  <span>Loading subjects...</span>
+                </div>
+              ) : subjectList.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  No subjects registered matching your criteria.
+                </div>
+              ) : (
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider">
                     <tr>
@@ -487,23 +938,24 @@ export function AcademicManagementTab({
                       <th className="px-4 py-2.5">Subject Name</th>
                       <th className="px-4 py-2.5">Branch</th>
                       <th className="px-4 py-2.5">Semester</th>
-                      <th className="px-4 py-2.5 text-right">Status</th>
+                      <th className="px-4 py-2.5 text-center">Status</th>
+                      <th className="px-4 py-2.5 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {subjects.map((s) => {
-                      const branch = branches.find(b => b.id === s.branch_id);
-                      const sem = semesters.find(sm => sm.id === s.semester_id);
+                    {subjectList.map((s) => {
+                      const branch = branchList.find((b) => b.id === s.branch_id);
+                      const sem = semesterList.find((sm) => sm.id === s.semester_id);
                       return (
-                        <tr key={s.id} className="hover:bg-slate-50">
+                        <tr key={s.id} className="hover:bg-slate-50 transition-colors">
                           <td className="px-4 py-2.5 font-mono font-bold text-slate-800">{s.code}</td>
                           <td className="px-4 py-2.5 font-semibold text-slate-800">{s.name}</td>
                           <td className="px-4 py-2.5 text-slate-600">{branch?.code || 'All'}</td>
                           <td className="px-4 py-2.5 text-slate-500">{sem?.name || '—'}</td>
-                          <td className="px-4 py-2.5 text-right">
+                          <td className="px-4 py-2.5 text-center">
                             <button
                               onClick={() => handleToggleSubjectActive(s)}
-                              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
+                              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
                                 s.is_active
                                   ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
                                   : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
@@ -512,13 +964,37 @@ export function AcademicManagementTab({
                               {s.is_active ? 'ACTIVE' : 'INACTIVE'}
                             </button>
                           </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <button
+                              onClick={() => handleDeleteSubject(s.id, s.name)}
+                              className="p-1 rounded text-rose-600 hover:bg-rose-50 transition-colors"
+                              title="Delete subject"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
-              </div>
-            )}
+              )}
+            </div>
+
+            {/* Pagination Controls */}
+            <PaginationControl
+              currentPage={subjectPage}
+              totalPages={Math.ceil(subjectTotal / subjectPageSize)}
+              totalItems={subjectTotal}
+              pageSize={subjectPageSize}
+              onPageChange={setSubjectPage}
+              onPageSizeChange={(sz) => {
+                setSubjectPageSize(sz);
+                setSubjectPage(1);
+              }}
+              pageSizeOptions={[10, 20, 50]}
+              isLoading={subjectLoading}
+            />
           </div>
         </div>
       )}
@@ -526,7 +1002,7 @@ export function AcademicManagementTab({
       {/* 3. ASSIGNMENTS SUBTAB */}
       {activeSubTab === 'assignments' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Add Assignment Form */}
+          {/* Add Assignment Form with SearchableSelect */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
             <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Plus className="w-4 h-4 text-bce-cobalt" />
@@ -535,30 +1011,26 @@ export function AcademicManagementTab({
             <form onSubmit={handleCreateAssignment} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Faculty Member</label>
-                <select
+                <SearchableSelect
+                  options={facultyOptions}
                   value={assignFacultyId}
-                  onChange={(e) => setAssignFacultyId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
-                >
-                  {faculties.length === 0 && <option value="">No faculties available</option>}
-                  {faculties.map((f) => (
-                    <option key={f.id} value={f.id}>{f.name} ({f.department})</option>
-                  ))}
-                </select>
+                  onChange={setAssignFacultyId}
+                  placeholder="Choose faculty..."
+                  searchPlaceholder="Search faculty by name..."
+                  required
+                />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Subject</label>
-                <select
+                <SearchableSelect
+                  options={subjectOptions}
                   value={assignSubjectId}
-                  onChange={(e) => setAssignSubjectId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
-                >
-                  {subjects.length === 0 && <option value="">No subjects available</option>}
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-                  ))}
-                </select>
+                  onChange={setAssignSubjectId}
+                  placeholder="Choose subject..."
+                  searchPlaceholder="Search subject by code or title..."
+                  required
+                />
               </div>
 
               <div>
@@ -568,8 +1040,10 @@ export function AcademicManagementTab({
                   onChange={(e) => setAssignYearId(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
                 >
-                  {academicYears.map((y) => (
-                    <option key={y.id} value={y.id}>{y.name} {y.is_active ? '(Active)' : ''}</option>
+                  {yearList.map((y) => (
+                    <option key={y.id} value={y.id}>
+                      {y.name} {y.is_active ? '(Active)' : ''}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -581,8 +1055,10 @@ export function AcademicManagementTab({
                   onChange={(e) => setAssignBranchId(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
                 >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                  {branchList.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.code})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -594,8 +1070,10 @@ export function AcademicManagementTab({
                   onChange={(e) => setAssignSemesterId(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
                 >
-                  {semesters.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                  {semesterList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -603,15 +1081,7 @@ export function AcademicManagementTab({
               <button
                 type="submit"
                 disabled={isPending}
-                className={`w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 ${
-                  isPending
-                    ? 'btn-request-active'
-                    : message?.type === 'success'
-                    ? 'btn-response-success'
-                    : message?.type === 'error'
-                    ? 'btn-response-error'
-                    : ''
-                }`}
+                className="w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-xs"
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                 <span>{isPending ? 'Assigning Faculty...' : 'Assign Faculty'}</span>
@@ -620,15 +1090,73 @@ export function AcademicManagementTab({
           </div>
 
           {/* Assignments List */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h4 className="text-sm font-bold text-slate-900">Current Faculty Assignments ({assignments.length})</h4>
-              <span className="text-xs text-slate-400">Maps Faculty to Subject & Semester</span>
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
+            {/* Filter Header */}
+            <div className="p-3.5 border-b border-slate-100 bg-slate-50/40 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+              <div className="text-xs font-bold text-slate-700">Filter Assignments:</div>
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                <select
+                  value={assignYearFilter}
+                  onChange={(e) => {
+                    setAssignYearFilter(e.target.value);
+                    setAssignPage(1);
+                  }}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+                >
+                  <option value="ALL">All Sessions</option>
+                  {yearList.map((y) => (
+                    <option key={y.id} value={y.id}>
+                      {y.name}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={assignBranchFilter}
+                  onChange={(e) => {
+                    setAssignBranchFilter(e.target.value);
+                    setAssignPage(1);
+                  }}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+                >
+                  <option value="ALL">All Branches</option>
+                  {branchList.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.code}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={assignSemesterFilter}
+                  onChange={(e) => {
+                    setAssignSemesterFilter(e.target.value);
+                    setAssignPage(1);
+                  }}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+                >
+                  <option value="ALL">All Semesters</option>
+                  {semesterList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            {assignments.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-400">No faculty assignments configured yet.</div>
-            ) : (
-              <div className="overflow-x-auto">
+
+            {/* Table */}
+            <div className="flex-1 overflow-x-auto">
+              {assignLoading ? (
+                <div className="p-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-bce-cobalt" />
+                  <span>Loading assignments...</span>
+                </div>
+              ) : assignmentList.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  No faculty assignments configured for the selected filters.
+                </div>
+              ) : (
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider">
                     <tr>
@@ -640,13 +1168,13 @@ export function AcademicManagementTab({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {assignments.map((a) => {
-                      const faculty = faculties.find(f => f.id === a.faculty_id) || a.faculty;
-                      const subject = subjects.find(s => s.id === a.subject_id) || a.subject;
-                      const year = academicYears.find(y => y.id === a.academic_year_id);
-                      const branch = branches.find(b => b.id === a.branch_id);
+                    {assignmentList.map((a) => {
+                      const faculty = a.faculty || facultyList.find((f) => f.id === a.faculty_id);
+                      const subject = a.subject || subjectList.find((s) => s.id === a.subject_id);
+                      const year = a.academic_year || yearList.find((y) => y.id === a.academic_year_id);
+                      const branch = a.branch || branchList.find((b) => b.id === a.branch_id);
                       return (
-                        <tr key={a.id} className="hover:bg-slate-50">
+                        <tr key={a.id} className="hover:bg-slate-50 transition-colors">
                           <td className="px-4 py-2.5 font-bold text-slate-800">{faculty?.name || 'Faculty'}</td>
                           <td className="px-4 py-2.5 text-slate-700">{subject?.name || 'Subject'}</td>
                           <td className="px-4 py-2.5 text-slate-500 font-mono">{year?.name || '—'}</td>
@@ -665,8 +1193,23 @@ export function AcademicManagementTab({
                     })}
                   </tbody>
                 </table>
-              </div>
-            )}
+              )}
+            </div>
+
+            {/* Pagination Controls */}
+            <PaginationControl
+              currentPage={assignPage}
+              totalPages={Math.ceil(assignTotal / assignPageSize)}
+              totalItems={assignTotal}
+              pageSize={assignPageSize}
+              onPageChange={setAssignPage}
+              onPageSizeChange={(sz) => {
+                setAssignPageSize(sz);
+                setAssignPage(1);
+              }}
+              pageSizeOptions={[10, 20, 50]}
+              isLoading={assignLoading}
+            />
           </div>
         </div>
       )}
@@ -700,21 +1243,15 @@ export function AcademicManagementTab({
                   onChange={(e) => setYearActive(e.target.checked)}
                   className="rounded border-slate-300 text-bce-cobalt focus:ring-bce-cobalt"
                 />
-                <label htmlFor="yrActive" className="text-xs text-slate-700 font-medium">Set as Active Session</label>
+                <label htmlFor="yrActive" className="text-xs text-slate-700 font-medium">
+                  Set as Active Session
+                </label>
               </div>
 
               <button
                 type="submit"
                 disabled={isPending}
-                className={`w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 ${
-                  isPending
-                    ? 'btn-request-active'
-                    : message?.type === 'success'
-                    ? 'btn-response-success'
-                    : message?.type === 'error'
-                    ? 'btn-response-error'
-                    : ''
-                }`}
+                className="w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-xs"
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                 <span>{isPending ? 'Adding Year...' : 'Add Year'}</span>
@@ -724,7 +1261,7 @@ export function AcademicManagementTab({
 
           <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h4 className="text-sm font-bold text-slate-900">Academic Sessions ({academicYears.length})</h4>
+              <h4 className="text-sm font-bold text-slate-900">Academic Sessions ({yearList.length})</h4>
             </div>
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100">
@@ -735,24 +1272,22 @@ export function AcademicManagementTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {academicYears.map((y) => (
-                  <tr key={y.id} className="hover:bg-slate-50">
+                {yearList.map((y) => (
+                  <tr key={y.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-5 py-3 font-bold text-slate-800">{y.name}</td>
                     <td className="px-5 py-3">
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
-                        y.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
-                      }`}>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                          y.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                        }`}
+                      >
                         {y.is_active ? 'ACTIVE' : 'INACTIVE'}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right">
                       <button
-                        onClick={() => {
-                          startTransition(async () => {
-                            await updateAcademicYearAction(y.id, { name: y.name, is_active: !y.is_active });
-                          });
-                        }}
-                        className="text-bce-cobalt hover:underline text-xs font-semibold"
+                        onClick={() => handleToggleYear(y)}
+                        className="text-bce-cobalt hover:underline text-xs font-semibold cursor-pointer"
                       >
                         {y.is_active ? 'Deactivate' : 'Activate'}
                       </button>
@@ -801,15 +1336,7 @@ export function AcademicManagementTab({
               <button
                 type="submit"
                 disabled={isPending}
-                className={`w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 ${
-                  isPending
-                    ? 'btn-request-active'
-                    : message?.type === 'success'
-                    ? 'btn-response-success'
-                    : message?.type === 'error'
-                    ? 'btn-response-error'
-                    : ''
-                }`}
+                className="w-full py-2.5 px-4 rounded-xl bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-xs"
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                 <span>{isPending ? 'Adding Branch...' : 'Add Branch'}</span>
@@ -819,7 +1346,7 @@ export function AcademicManagementTab({
 
           <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h4 className="text-sm font-bold text-slate-900">Engineering Branches ({branches.length})</h4>
+              <h4 className="text-sm font-bold text-slate-900">Engineering Branches ({branchList.length})</h4>
             </div>
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100">
@@ -831,25 +1358,23 @@ export function AcademicManagementTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {branches.map((b) => (
-                  <tr key={b.id} className="hover:bg-slate-50">
+                {branchList.map((b) => (
+                  <tr key={b.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-5 py-3 font-mono font-bold text-slate-800">{b.code}</td>
                     <td className="px-5 py-3 font-semibold text-slate-800">{b.name}</td>
                     <td className="px-5 py-3">
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
-                        b.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
-                      }`}>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                          b.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                        }`}
+                      >
                         {b.is_active ? 'ACTIVE' : 'INACTIVE'}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right">
                       <button
-                        onClick={() => {
-                          startTransition(async () => {
-                            await updateBranchAction(b.id, { name: b.name, code: b.code, is_active: !b.is_active });
-                          });
-                        }}
-                        className="text-bce-cobalt hover:underline text-xs font-semibold"
+                        onClick={() => handleToggleBranch(b)}
+                        className="text-bce-cobalt hover:underline text-xs font-semibold cursor-pointer"
                       >
                         {b.is_active ? 'Deactivate' : 'Activate'}
                       </button>
@@ -866,7 +1391,7 @@ export function AcademicManagementTab({
       {activeSubTab === 'semesters' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h4 className="text-sm font-bold text-slate-900">Configured Semesters ({semesters.length})</h4>
+            <h4 className="text-sm font-bold text-slate-900">Configured Semesters ({semesterList.length})</h4>
             <span className="text-xs text-slate-400">8 Semester Curriculum Structure</span>
           </div>
           <table className="w-full text-left text-xs">
@@ -880,31 +1405,24 @@ export function AcademicManagementTab({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {semesters.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50">
+              {semesterList.map((s) => (
+                <tr key={s.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-5 py-3 font-bold text-slate-800">{s.name}</td>
                   <td className="px-5 py-3 text-slate-600">Year {s.year_number}</td>
                   <td className="px-5 py-3 text-slate-600">Semester {s.semester_number}</td>
                   <td className="px-5 py-3">
-                    <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
-                      s.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
-                    }`}>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                        s.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
                       {s.is_active ? 'ACTIVE' : 'INACTIVE'}
                     </span>
                   </td>
                   <td className="px-5 py-3 text-right">
                     <button
-                      onClick={() => {
-                        startTransition(async () => {
-                          await updateSemesterAction(s.id, {
-                            name: s.name,
-                            year_number: s.year_number,
-                            semester_number: s.semester_number,
-                            is_active: !s.is_active,
-                          });
-                        });
-                      }}
-                      className="text-bce-cobalt hover:underline text-xs font-semibold"
+                      onClick={() => handleToggleSemester(s)}
+                      className="text-bce-cobalt hover:underline text-xs font-semibold cursor-pointer"
                     >
                       {s.is_active ? 'Deactivate' : 'Activate'}
                     </button>

@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  Check,
   AlertCircle,
   FileSpreadsheet,
   FileCode2,
@@ -49,7 +50,6 @@ export function CreateGoogleFormWizard({
   const [isPending, startTransition] = useTransition();
 
   // Step state (1 to 6)
-
   const [currentStep, setCurrentStep] = useState<number>(1);
 
   // Form selections
@@ -63,6 +63,8 @@ export function CreateGoogleFormWizard({
   const [formType, setFormType] = useState<'FACULTY_SPECIFIC' | 'BRANCH_SPECIFIC'>('FACULTY_SPECIFIC');
 
   // Creation progress & result state
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [activeStepNumber, setActiveStepNumber] = useState<number>(1);
   const [creationStepMsg, setCreationStepMsg] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [createdForm, setCreatedForm] = useState<FeedbackForm | null>(null);
@@ -162,8 +164,8 @@ export function CreateGoogleFormWizard({
     }
   };
 
-  // Trigger form generation
-  const handleGenerateForm = () => {
+  // Trigger form generation with real-time staged progress
+  const handleGenerateForm = async () => {
     if (!googleStatus.isConfigured) {
       setErrorMsg(
         'Google API credentials are not configured in .env.local. Please configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN before creating live forms.'
@@ -172,29 +174,93 @@ export function CreateGoogleFormWizard({
     }
 
     setErrorMsg(null);
-    setCreationStepMsg('Validating academic assignment & credentials...');
+    setIsGenerating(true);
+    setActiveStepNumber(1);
+    setCreationStepMsg('Validating academic assignment & session configuration...');
 
-    startTransition(async () => {
-      setCreationStepMsg('Creating Google Form & adding 8 BCE evaluation parameters...');
-
-      const result = await createGoogleFeedbackFormAction({
-        academicYearId,
-        branchId,
-        semesterId,
-        facultyId,
-        subjectId,
-        formType,
+    try {
+      const response = await fetch('/api/admin/forms/stream-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          academicYearId,
+          branchId,
+          semesterId,
+          facultyId,
+          subjectId,
+          formType,
+        }),
       });
 
-      if (!result.success) {
-        setErrorMsg(result.error || 'Failed to generate Google Form.');
-        setCreationStepMsg('');
-      } else {
-        setCreatedForm(result.form as FeedbackForm);
-        setDestinationType(result.destinationType || 'APPLICATION_MANAGED');
-        setCreationStepMsg('');
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP error ${response.status}: Failed to connect to form generator`);
       }
-    });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            if (event.stepNumber) {
+              setActiveStepNumber(event.stepNumber);
+            }
+            if (event.message) {
+              setCreationStepMsg(event.message);
+            }
+
+            if (event.status === 'COMPLETED' && event.form) {
+              setCreatedForm(event.form as FeedbackForm);
+              setDestinationType(event.form.response_destination_type || 'APPLICATION_MANAGED');
+              setIsGenerating(false);
+              return;
+            }
+
+            if (event.status === 'ERROR') {
+              setErrorMsg(event.error || 'Failed to generate Google Form.');
+              setIsGenerating(false);
+              return;
+            }
+          } catch (e) {
+            console.warn('Failed to parse SSE line:', e);
+          }
+        }
+      }
+
+      setIsGenerating(false);
+    } catch (err: unknown) {
+      console.warn('Streaming generation fallback to direct action:', err);
+      setCreationStepMsg('Creating Google Form & Sheet concurrently (fallback mode)...');
+
+      startTransition(async () => {
+        const result = await createGoogleFeedbackFormAction({
+          academicYearId,
+          branchId,
+          semesterId,
+          facultyId,
+          subjectId,
+          formType,
+        });
+
+        setIsGenerating(false);
+        if (!result.success) {
+          setErrorMsg(result.error || 'Failed to generate Google Form.');
+        } else {
+          setCreatedForm(result.form as FeedbackForm);
+          setDestinationType(result.destinationType || 'APPLICATION_MANAGED');
+        }
+      });
+    }
   };
 
   const steps = [
@@ -347,12 +413,83 @@ export function CreateGoogleFormWizard({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Wizard Form (2 Cols) */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Step Stepper Header */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="grid grid-cols-6 gap-2">
+        <div className="space-y-6">
+          {/* Dedicated Real-Time Staged Progress Stepper */}
+          {isGenerating && (
+            <div className="bg-white p-6 rounded-2xl border-2 border-bce-cobalt/40 shadow-lg space-y-4 animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">Provisioning Google Feedback Form</h4>
+                    <p className="text-[11px] text-slate-500">Live multi-stage Google Forms & Sheets automated generator</p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-bold text-bce-cobalt bg-blue-50 px-3 py-1 rounded-full border border-blue-200 shadow-2xs">
+                  Stage {activeStepNumber} of 5
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 pt-1">
+                {[
+                  { num: 1, title: 'Validation', desc: 'Verify assignment & session' },
+                  { num: 2, title: 'Draft Record', desc: 'Initialize draft in Supabase' },
+                  { num: 3, title: 'Google Form', desc: 'Populate 8 BCE parameters' },
+                  { num: 4, title: 'Google Sheet', desc: 'Configure formatted headers' },
+                  { num: 5, title: 'Finalizing', desc: 'Link response destination' },
+                ].map((s) => {
+                  const isDone = activeStepNumber > s.num;
+                  const isCurrent = activeStepNumber === s.num;
+
+                  return (
+                    <div
+                      key={s.num}
+                      className={`p-3 rounded-xl border text-center transition-all ${
+                        isCurrent
+                          ? 'bg-bce-navy text-white border-bce-cobalt shadow-sm'
+                          : isDone
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                          : 'bg-slate-50 border-slate-200 text-slate-400'
+                      }`}
+                    >
+                      <div className="flex justify-center mb-1.5">
+                        <div
+                          className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] ${
+                            isDone
+                              ? 'bg-emerald-500 text-white'
+                              : isCurrent
+                              ? 'bg-amber-400 text-slate-950 shadow-2xs'
+                              : 'bg-slate-200 text-slate-500'
+                          }`}
+                        >
+                          {isDone ? <Check className="w-3.5 h-3.5" /> : isCurrent ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : s.num}
+                        </div>
+                      </div>
+                      <div className="font-bold text-xs">{s.title}</div>
+                      <div className={`text-[10px] mt-0.5 ${isCurrent ? 'text-slate-300' : isDone ? 'text-emerald-700' : 'text-slate-400'}`}>
+                        {s.desc}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-2.5 text-xs text-slate-700">
+                <Loader2 className="w-4 h-4 text-bce-cobalt animate-spin shrink-0" />
+                <span className="font-medium">{creationStepMsg || 'Processing Google Cloud requests...'}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Wizard Form (2 Cols) */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Step Stepper Header */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                <div className="grid grid-cols-6 gap-2">
                 {steps.map(s => {
                   const isCompleted = s.num < currentStep;
                   const isCurrent = s.num === currentStep;
@@ -681,7 +818,7 @@ export function CreateGoogleFormWizard({
                 <button
                   type="button"
                   onClick={handleBack}
-                  disabled={currentStep === 1 || isPending}
+                  disabled={currentStep === 1 || isPending || isGenerating}
                   className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent"
                 >
                   ← Back
@@ -691,7 +828,7 @@ export function CreateGoogleFormWizard({
                   <button
                     type="button"
                     onClick={handleNext}
-                    disabled={!canGoToNext() || isPending}
+                    disabled={!canGoToNext() || isPending || isGenerating}
                     className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-bce-cobalt hover:bg-bce-navy disabled:opacity-40 transition-colors shadow-xs"
                   >
                     <span>Next Step</span>
@@ -701,17 +838,17 @@ export function CreateGoogleFormWizard({
                   <button
                     type="button"
                     onClick={handleGenerateForm}
-                    disabled={!canGoToNext() || isPending || !googleStatus.isConfigured}
+                    disabled={!canGoToNext() || isPending || isGenerating || !googleStatus.isConfigured}
                     className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-bce-cobalt to-indigo-600 hover:from-bce-navy hover:to-indigo-700 disabled:opacity-40 transition-all shadow-md ${
-                      isPending ? 'btn-request-active' : ''
+                      isPending || isGenerating ? 'btn-request-active opacity-80 cursor-wait' : ''
                     }`}
                   >
-                    {isPending ? (
+                    {isPending || isGenerating ? (
                       <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
                     ) : (
                       <Sparkles className="w-4 h-4 text-amber-300" />
                     )}
-                    <span>{isPending ? 'Generating Form on Google...' : 'Generate Google Feedback Form'}</span>
+                    <span>{isGenerating || isPending ? 'Generating Form on Google...' : 'Generate Google Feedback Form'}</span>
                   </button>
                 )}
               </div>
@@ -819,6 +956,7 @@ export function CreateGoogleFormWizard({
             </div>
           </div>
         </div>
+      </div>
       )}
     </div>
   );

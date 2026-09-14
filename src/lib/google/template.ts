@@ -77,30 +77,47 @@ export interface FormFieldDefinition {
   options?: string[];
 }
 
+export const PUBLIC_FEEDBACK_PORTAL_URL =
+  process.env.NEXT_PUBLIC_APP_URL || 'https://bce-bgp-feedback-management-system.vercel.app/';
+
 export const STUDENT_IDENTIFIER_FIELDS = [
   {
     id: 'student_name',
     title: 'Student Name',
-    description: 'Enter your full name as per official college records',
+    description: 'Enter your full name as per college records.',
     required: true,
   },
   {
     id: 'reg_no',
     title: 'University Registration Number',
-    description: 'Enter your official BCE / University registration number or roll number',
+    description: 'Enter your university registration number.',
     required: true,
   },
 ] as const;
 
+export const GENERAL_FEEDBACK_FIELD = {
+  id: 'general_feedback',
+  title: 'General Feedback',
+  description: 'Share any additional comments, suggestions, or feedback regarding the faculty or subject.',
+  required: false,
+  paragraph: true,
+} as const;
+
+// Backward-compatibility alias
 export const ADDITIONAL_FEEDBACK_FIELDS = [
   {
     id: 'comments',
-    title: 'Comments / Suggestions',
-    description: 'Any constructive feedback, suggestions, or specific observations for improvement (Optional)',
+    title: 'General Feedback',
+    description: 'Share any additional comments, suggestions, or feedback regarding the faculty or subject.',
     required: false,
     paragraph: true,
   },
 ] as const;
+
+export const MORE_FEEDBACK_INFO_ITEM = {
+  title: 'More Feedback Forms',
+  description: `Want to provide feedback for another faculty or subject?\nVisit:\n${PUBLIC_FEEDBACK_PORTAL_URL}`,
+} as const;
 
 export interface FormMetadataInputs {
   facultyName: string;
@@ -119,7 +136,7 @@ export function generateFeedbackFormTitle(meta: FormMetadataInputs): string {
 }
 
 export function generateFeedbackFormDescription(meta: FormMetadataInputs): string {
-  return `Official Student Feedback Form for ${meta.facultyName} teaching ${meta.subjectName} (${meta.branchName}, ${meta.semesterName}, ${meta.academicYearName}).\n\nDepartment of Science & Technology, Government of Bihar.\nBhagalpur College of Engineering (BCE Bhagalpur).\n\nPlease provide your Student Name, University Registration Number, and rate all 8 parameters objectively. Constructive comments and suggestions are welcome.`;
+  return `Official Student Feedback Form for ${meta.facultyName} teaching ${meta.subjectName} (${meta.branchName}, ${meta.semesterName}, ${meta.academicYearName}).\n\nDepartment of Science & Technology, Government of Bihar.\nBhagalpur College of Engineering (BCE Bhagalpur).\n\nNOTE: Please provide your student details accurately. Feedback responses are collected for academic feedback analysis and record purposes.\n\nPlease rate all 8 parameters objectively. Constructive comments and suggestions are welcome.`;
 }
 
 /**
@@ -127,7 +144,8 @@ export function generateFeedbackFormDescription(meta: FormMetadataInputs): strin
  * 1. Student Name (Short answer, required)
  * 2. University Registration Number (Short answer, required)
  * 3. 8 Standard BCE Rating Parameters (Radio 1-4, required)
- * 4. Comments / Suggestions (Paragraph text, optional)
+ * 4. General Feedback (Paragraph text, optional)
+ * 5. More Feedback Forms (Text item with public portal link)
  */
 export function buildCreateQuestionsBatchUpdateRequest() {
   const requests: any[] = [];
@@ -138,7 +156,7 @@ export function buildCreateQuestionsBatchUpdateRequest() {
     createItem: {
       item: {
         title: 'Student Name',
-        description: 'Enter your full name as per official college records',
+        description: 'Enter your full name as per college records.',
         questionItem: {
           question: {
             required: true,
@@ -159,7 +177,7 @@ export function buildCreateQuestionsBatchUpdateRequest() {
     createItem: {
       item: {
         title: 'University Registration Number',
-        description: 'Enter your official BCE / University registration number or roll number',
+        description: 'Enter your university registration number.',
         questionItem: {
           question: {
             required: true,
@@ -200,12 +218,12 @@ export function buildCreateQuestionsBatchUpdateRequest() {
     });
   });
 
-  // 4. Comments / Suggestions (Optional)
+  // 9. General Feedback (Optional)
   requests.push({
     createItem: {
       item: {
-        title: 'Comments / Suggestions',
-        description: 'Any constructive feedback, suggestions, or specific observations for improvement (Optional)',
+        title: 'General Feedback',
+        description: 'Share any additional comments, suggestions, or feedback regarding the faculty or subject.',
         questionItem: {
           question: {
             required: false,
@@ -214,6 +232,20 @@ export function buildCreateQuestionsBatchUpdateRequest() {
             },
           },
         },
+      },
+      location: {
+        index: currentIndex++,
+      },
+    },
+  });
+
+  // 10. More Feedback Forms (Informational Text Item)
+  requests.push({
+    createItem: {
+      item: {
+        title: 'More Feedback Forms',
+        description: `Want to provide feedback for another faculty or subject?\nVisit:\n${PUBLIC_FEEDBACK_PORTAL_URL}`,
+        textItem: {},
       },
       location: {
         index: currentIndex++,

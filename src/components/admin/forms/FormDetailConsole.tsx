@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   FeedbackForm,
   FeedbackFormStatus,
@@ -39,8 +38,8 @@ interface Props {
 }
 
 
-export function FormDetailConsole({ form, auditLogs, currentUserEmail }: Props) {
-  const router = useRouter();
+export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEmail }: Props) {
+  const [form, setForm] = useState<FeedbackForm>(initialForm);
   const [isPending, startTransition] = useTransition();
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -57,12 +56,13 @@ export function FormDetailConsole({ form, auditLogs, currentUserEmail }: Props) 
 
   const handleStatusChange = (newStatus: FeedbackFormStatus) => {
     setMessage(null);
+    setForm((prev) => ({ ...prev, status: newStatus }));
     startTransition(async () => {
       const res = await updateFormStatusAction(form.id, newStatus);
       if (res.success) {
         setMessage({ type: 'success', text: res.message || `Form status changed to ${newStatus}.` });
-        router.refresh();
       } else {
+        setForm(initialForm); // rollback
         setMessage({ type: 'error', text: res.error || 'Failed to update status.' });
       }
     });
@@ -73,11 +73,13 @@ export function FormDetailConsole({ form, auditLogs, currentUserEmail }: Props) 
     startTransition(async () => {
       const res = await syncFormResponsesAction(form.id);
       if (res.success) {
+        if (res.totalResponses !== undefined) {
+          setForm((prev) => ({ ...prev, response_count: res.totalResponses ?? prev.response_count }));
+        }
         setMessage({
           type: 'success',
           text: res.message || `Synced ${res.syncedCount} response(s). Total: ${res.totalResponses}.`,
         });
-        router.refresh();
       } else {
         setMessage({ type: 'error', text: res.error || 'Failed to sync responses.' });
       }

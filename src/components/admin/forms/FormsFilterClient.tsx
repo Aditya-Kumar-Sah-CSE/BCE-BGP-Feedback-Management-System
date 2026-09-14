@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, RotateCcw } from 'lucide-react';
 import { AcademicYear, Branch, Semester } from '@/types/database';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect, useCallback } from 'react';
 
 interface Props {
   academicYears: AcademicYear[];
@@ -36,40 +36,55 @@ export function FormsFilterClient({
   const [semester, setSemester] = useState(selectedSemester);
   const [status, setStatus] = useState(selectedStatus);
 
-  const applyFilters = (newParams: {
-    year?: string;
-    branch?: string;
-    semester?: string;
-    status?: string;
-    search?: string;
-  }) => {
-    const params = new URLSearchParams(searchParams.toString());
+  const applyFilters = useCallback(
+    (newParams: {
+      year?: string;
+      branch?: string;
+      semester?: string;
+      status?: string;
+      search?: string;
+    }) => {
+      const params = new URLSearchParams(searchParams.toString());
 
-    const finalYear = newParams.year !== undefined ? newParams.year : year;
-    const finalBranch = newParams.branch !== undefined ? newParams.branch : branch;
-    const finalSem = newParams.semester !== undefined ? newParams.semester : semester;
-    const finalStatus = newParams.status !== undefined ? newParams.status : status;
-    const finalSearch = newParams.search !== undefined ? newParams.search : search;
+      const finalYear = newParams.year !== undefined ? newParams.year : year;
+      const finalBranch = newParams.branch !== undefined ? newParams.branch : branch;
+      const finalSem = newParams.semester !== undefined ? newParams.semester : semester;
+      const finalStatus = newParams.status !== undefined ? newParams.status : status;
+      const finalSearch = newParams.search !== undefined ? newParams.search : search;
 
-    if (finalYear && finalYear !== 'ALL') params.set('year', finalYear);
-    else params.delete('year');
+      if (finalYear && finalYear !== 'ALL') params.set('year', finalYear);
+      else params.delete('year');
 
-    if (finalBranch && finalBranch !== 'ALL') params.set('branch', finalBranch);
-    else params.delete('branch');
+      if (finalBranch && finalBranch !== 'ALL') params.set('branch', finalBranch);
+      else params.delete('branch');
 
-    if (finalSem && finalSem !== 'ALL') params.set('semester', finalSem);
-    else params.delete('semester');
+      if (finalSem && finalSem !== 'ALL') params.set('semester', finalSem);
+      else params.delete('semester');
 
-    if (finalStatus && finalStatus !== 'ALL') params.set('status', finalStatus);
-    else params.delete('status');
+      if (finalStatus && finalStatus !== 'ALL') params.set('status', finalStatus);
+      else params.delete('status');
 
-    if (finalSearch && finalSearch.trim()) params.set('search', finalSearch.trim());
-    else params.delete('search');
+      if (finalSearch && finalSearch.trim()) params.set('search', finalSearch.trim());
+      else params.delete('search');
 
-    startTransition(() => {
-      router.push(`/admin/dashboard/forms?${params.toString()}`);
-    });
-  };
+      // Reset to page 1 on filter change
+      params.delete('page');
+
+      startTransition(() => {
+        router.push(`/admin/dashboard/forms?${params.toString()}`);
+      });
+    },
+    [searchParams, year, branch, semester, status, search, router]
+  );
+
+  // 300ms debounce for search to prevent database requests on every keystroke
+  useEffect(() => {
+    if (search === initialSearch) return;
+    const timer = setTimeout(() => {
+      applyFilters({ search });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, initialSearch, applyFilters]);
 
   const handleReset = () => {
     setSearch('');
@@ -95,10 +110,7 @@ export function FormsFilterClient({
             <input
               type="text"
               value={search}
-              onChange={e => {
-                setSearch(e.target.value);
-                applyFilters({ search: e.target.value });
-              }}
+              onChange={e => setSearch(e.target.value)}
               placeholder="Faculty, subject, code..."
               className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
             />
