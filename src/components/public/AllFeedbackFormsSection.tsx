@@ -24,6 +24,39 @@ interface Props {
   initialData: PublicActiveFormsResult;
 }
 
+/**
+ * Generate an array of page numbers and '...' ellipsis markers for pagination.
+ * Shows first, last, current and 1 neighbour on each side.
+ */
+function getPageNumbers(current: number, total: number): (number | '...')[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+
+  const pages: (number | '...')[] = [];
+  const showSet = new Set<number>();
+
+  // Always show first and last
+  showSet.add(1);
+  showSet.add(total);
+
+  // Current and neighbours
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
+    showSet.add(i);
+  }
+
+  const sorted = Array.from(showSet).sort((a, b) => a - b);
+
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) {
+      pages.push('...');
+    }
+    pages.push(sorted[i]);
+  }
+
+  return pages;
+}
+
 export function AllFeedbackFormsSection({ initialData }: Props) {
   const [data, setData] = useState<PublicActiveFormsResult>(initialData);
   const [search, setSearch] = useState('');
@@ -242,24 +275,53 @@ export function AllFeedbackFormsSection({ initialData }: Props) {
             <span className="font-bold text-slate-900">{data.totalPages}</span> ({data.totalCount} active forms)
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            {/* Previous Button */}
             <button
               type="button"
               onClick={() => handlePageChange(currentPage - 1)}
               disabled={currentPage <= 1 || isPending}
-              className="inline-flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-30 transition-colors"
+              className="inline-flex items-center gap-1 px-2.5 py-2 sm:py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-30 transition-colors"
+              aria-label="Previous page"
             >
               <ChevronLeft className="w-4 h-4" />
-              <span>Previous</span>
+              <span className="hidden sm:inline">Prev</span>
             </button>
 
+            {/* Page Number Buttons */}
+            {getPageNumbers(currentPage, data.totalPages).map((item, idx) =>
+              item === '...' ? (
+                <span key={`ellipsis-${idx}`} className="px-1 text-slate-400 select-none">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={`page-${item}`}
+                  type="button"
+                  onClick={() => handlePageChange(item as number)}
+                  disabled={isPending}
+                  className={`min-w-[32px] h-8 sm:h-7 px-2 rounded-lg text-xs font-bold transition-all ${
+                    currentPage === item
+                      ? 'bg-bce-navy text-white shadow-sm border border-bce-cobalt'
+                      : 'border border-slate-200 text-slate-700 hover:bg-slate-100'
+                  } disabled:opacity-40`}
+                  aria-label={`Go to page ${item}`}
+                  aria-current={currentPage === item ? 'page' : undefined}
+                >
+                  {item}
+                </button>
+              )
+            )}
+
+            {/* Next Button */}
             <button
               type="button"
               onClick={() => handlePageChange(currentPage + 1)}
               disabled={currentPage >= data.totalPages || isPending}
-              className="inline-flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-30 transition-colors"
+              className="inline-flex items-center gap-1 px-2.5 py-2 sm:py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-30 transition-colors"
+              aria-label="Next page"
             >
-              <span>Next</span>
+              <span className="hidden sm:inline">Next</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>

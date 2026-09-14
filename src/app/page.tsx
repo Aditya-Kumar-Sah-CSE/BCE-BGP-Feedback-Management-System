@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { HeroSection } from '@/components/public/HeroSection';
 import { StudentDiscoveryFlow } from '@/components/public/StudentDiscoveryFlow';
 import { AllFeedbackFormsSection } from '@/components/public/AllFeedbackFormsSection';
 import { getPublicActiveFormsAction } from '@/app/feedback/actions';
-import { GraduationCap, ShieldCheck, UserCheck, School, ArrowRight } from 'lucide-react';
+import { School, UserCheck, ArrowRight } from 'lucide-react';
 import type { AcademicYear, Branch, Semester } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
@@ -75,50 +76,10 @@ export default async function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="bg-gradient-to-b from-white via-slate-50 to-slate-100 border-b border-slate-200 py-6 sm:py-10 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center space-y-3 sm:space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-amber-50 border border-amber-200/80 text-amber-900 text-xs font-semibold shadow-sm">
-            <GraduationCap className="w-4 h-4 text-amber-600" />
-            <span>Student Anonymous Evaluation System</span>
-          </div>
-
-          <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
-            Constructive Feedback Drives <span className="text-bce-cobalt">Academic Excellence</span>
-          </h2>
-
-          <p className="text-xs sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Welcome to the official BCE feedback portal. Students do not need to log in. Select your academic session, branch, and semester to view faculty assignments and published feedback forms.
-          </p>
-
-          {/* Key Privacy Highlights */}
-          <div className="pt-2 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 max-w-2xl mx-auto text-left">
-            <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs flex items-start gap-2.5">
-              <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-semibold text-slate-800">100% Anonymous</p>
-                <p className="text-[11px] text-slate-500">Zero student identity or credentials recorded</p>
-              </div>
-            </div>
-            <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs flex items-start gap-2.5">
-              <GraduationCap className="w-5 h-5 text-bce-cobalt shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-semibold text-slate-800">Direct Impact</p>
-                <p className="text-[11px] text-slate-500">Helps improve teaching and syllabus delivery</p>
-              </div>
-            </div>
-            <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs flex items-start gap-2.5">
-              <School className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-semibold text-slate-800">All Departments</p>
-                <p className="text-[11px] text-slate-500">CSE, CE, ME, EE, ECE across all 8 semesters</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <HeroSection />
 
       {/* Discovery Flow Area */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-3.5 sm:px-6 lg:px-8 py-6 sm:py-10">
+      <main id="discovery-section" className="flex-1 max-w-6xl mx-auto w-full px-3.5 sm:px-6 lg:px-8 py-6 sm:py-10 scroll-mt-14">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -153,11 +114,20 @@ export default async function HomePage() {
               Sabour, Bhagalpur - 813210, Bihar, India
             </p>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-6">
             <span>Official Faculty Feedback System</span>
             <Link href="/admin/login" className="text-amber-400 hover:underline">
               Administrator Login
             </Link>
+            <a
+              href="https://portfolio-two-ashen-zseywond41.vercel.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-slate-500 hover:text-amber-400 transition-colors flex items-center gap-1.5"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
+              <span>Developed by <span className="font-semibold text-slate-300">Aditya Kumar Sah</span></span>
+            </a>
           </div>
         </div>
       </footer>
