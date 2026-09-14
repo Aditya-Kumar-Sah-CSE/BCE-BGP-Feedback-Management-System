@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth/admin-auth';
-import { getFormAnalyticsAction } from '@/app/admin/results/actions';
+import { getFormAnalyticsData } from '@/lib/analytics/service';
 import {
   generateIndividualFacultyPDF,
   generateSemesterComparativePDF,
@@ -14,7 +14,11 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  let formId = 'unknown';
   try {
+    const params = await context.params;
+    formId = params?.id || 'unknown';
+
     // 1. Mandatory Active Admin Authentication Check
     const session = await getAdminSession();
     if (!session.isAuthenticated || !session.isActive) {
@@ -24,13 +28,12 @@ export async function GET(
       );
     }
 
-    const { id: formId } = await context.params;
     if (!formId || !isValidUUID(formId)) {
       return NextResponse.json({ error: 'Valid Feedback Form ID is required.' }, { status: 400 });
     }
 
-    // 2. Fetch Form Analytics using shared authoritative action (guaranteeing 100% parity with dashboard)
-    const result = await getFormAnalyticsAction(formId);
+    // 2. Fetch Form Analytics using shared authoritative service (guaranteeing 100% parity with dashboard)
+    const result = await getFormAnalyticsData(formId);
     if (!result.success || !result.report) {
       return NextResponse.json(
         { error: result.error || 'Feedback form not found or analytics unavailable.' },
@@ -79,8 +82,13 @@ export async function GET(
       },
     });
   } catch (err: unknown) {
-    console.error('PDF generation error:', err);
+    const errorObj = err instanceof Error ? err : new Error(String(err));
+    console.error('[PDF_GENERATION_ERROR]', {
+      formId,
+      errorName: errorObj.name,
+      message: errorObj.message,
+      stack: errorObj.stack,
+    });
     return NextResponse.json({ error: 'Failed to generate report PDF.' }, { status: 500 });
   }
 }
-

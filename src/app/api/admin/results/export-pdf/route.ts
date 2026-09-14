@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth/admin-auth';
-import { getOverallAnalyticsAction } from '@/app/admin/results/actions';
+import { getOverallAnalyticsData } from '@/lib/analytics/service';
 import { generateOverallFeedbackPDF } from '@/lib/analytics/pdf-generator';
 
 export const dynamic = 'force-dynamic';
@@ -24,8 +24,8 @@ export async function GET(request: NextRequest) {
     const facultyId = searchParams.get('facultyId') || undefined;
     const subjectId = searchParams.get('subjectId') || undefined;
 
-    // 2. Compute Aggregated Analytics
-    const result = await getOverallAnalyticsAction({
+    // 2. Compute Aggregated Analytics using pure service
+    const result = await getOverallAnalyticsData({
       academicYearId,
       branchId,
       semesterId,
@@ -57,7 +57,12 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (err: unknown) {
-    console.error('Institutional PDF export error:', err);
+    const errorObj = err instanceof Error ? err : new Error(String(err));
+    console.error('[INSTITUTIONAL_PDF_GENERATION_ERROR]', {
+      errorName: errorObj.name,
+      message: errorObj.message,
+      stack: errorObj.stack,
+    });
     return NextResponse.json({ error: 'Failed to generate institutional report PDF.' }, { status: 500 });
   }
 }

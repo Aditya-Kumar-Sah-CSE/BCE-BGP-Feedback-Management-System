@@ -2,8 +2,12 @@
 
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 import { fetchSingleResponseFromSheet } from '@/lib/google/sheets';
+import { syncFormResponsesToSheet } from '@/lib/google/sync';
+import { isGoogleConfigured } from '@/lib/google/auth';
 import { BCE_FEEDBACK_PARAMETERS } from '@/lib/google/template';
+import { isValidUUID } from '@/lib/validation';
 
 export interface AdminResponseItem {
   id: string;
@@ -49,20 +53,28 @@ export interface StudentResponseDetail {
   generalFeedback: string | null;
 }
 
+async function getAdminDb(client?: any) {
+  return createAdminClient() || client || (await createClient());
+}
+
 /**
  * Server action to fetch paginated feedback response records with search and filters.
  * Lean columns only — no select("*").
+ * Multi-faculty semester feedback guarantees: 1 Google submission = 1 student response record.
  */
-export async function getFormResponsesAction(params: {
-  formId: string;
-  page?: number;
-  pageSize?: number;
-  search?: string;
-  startDate?: string;
-  endDate?: string;
-}): Promise<AdminResponsesResult> {
-  const session = await getAdminSession();
-  if (!session.isAuthenticated) {
+export async function getFormResponsesAction(
+  params: {
+    formId: string;
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+  },
+  options?: { client?: any }
+): Promise<AdminResponsesResult> {
+  const session = await getAdminSession(options?.client);
+  if (!session.isAuthenticated || !session.isActive) {
     return {
       success: false,
       responses: [],
@@ -72,16 +84,28 @@ export async function getFormResponsesAction(params: {
       totalPages: 0,
       formTitle: '',
       formType: '',
-      error: 'Unauthorized. Admin session required.',
+      error: 'Unauthorized. Active admin session required.',
     };
   }
 
   const { formId, page = 1, pageSize = 20, search, startDate, endDate } = params;
   const validPageSize = [10, 20, 50].includes(pageSize) ? pageSize : 20;
-  const from = (page - 1) * validPageSize;
-  const to = from + validPageSize - 1;
 
-  const supabase = createAdminClient();
+  if (!isValidUUID(formId)) {
+    return {
+      success: false,
+      responses: [],
+      totalCount: 0,
+      page: 1,
+      pageSize: validPageSize,
+      totalPages: 0,
+      formTitle: '',
+      formType: '',
+      error: 'Invalid feedback form identifier format.',
+    };
+  }
+
+  const supabase = await getAdminDb(options?.client);
   if (!supabase) {
     return {
       success: false,
@@ -99,7 +123,7 @@ export async function getFormResponsesAction(params: {
   // 1. Fetch form metadata
   const { data: form } = await supabase
     .from('feedback_forms')
-    .select('id, title, form_type')
+    .select('id, title, form_type, google_form_id, google_sheet_id, google_form_url, google_sheet_url')
     .eq('id', formId)
     .maybeSingle();
 
@@ -117,7 +141,38 @@ export async function getFormResponsesAction(params: {
     };
   }
 
-  // 2. Query response records with lean columns and count
+  // 2. Auto-sync if records table is empty but Google is configured
+  const { count: currentRecordCount } = await supabase
+    .from('feedback_response_records')
+    .select('id', { count: 'exact', head: true })
+    .eq('form_id', formId);
+
+  if ((currentRecordCount === 0 || currentRecordCount === null) && isGoogleConfigured()) {
+    const resolvedFormId =
+      form.google_form_id ||
+      form.google_form_edit_url?.match(/\/forms\/d\/([a-zA-Z0-9_-]+)/)?.[1] ||
+      form.google_form_url?.match(/\/forms\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+    const resolvedSheetId =
+      form.google_sheet_id ||
+      form.google_sheet_url?.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+
+    if (resolvedFormId && resolvedSheetId) {
+      try {
+        await syncFormResponsesToSheet({
+          googleFormId: resolvedFormId,
+          googleSheetId: resolvedSheetId,
+          formId,
+        });
+      } catch (syncErr) {
+        console.warn('Auto-sync in getFormResponsesAction encountered an issue:', syncErr);
+      }
+    }
+  }
+
+  // 3. Query response records with lean columns and pagination
+  const from = (page - 1) * validPageSize;
+  const to = from + validPageSize - 1;
+
   let query = supabase
     .from('feedback_response_records')
     .select(
@@ -189,19 +244,27 @@ export async function getFormResponsesAction(params: {
 /**
  * Server action to fetch individual student response details from authoritative Google Sheet
  */
-export async function getResponseDetailAction(params: {
-  formId: string;
-  responseId: string;
-}): Promise<{ success: boolean; detail?: StudentResponseDetail; error?: string }> {
-  const session = await getAdminSession();
-  if (!session.isAuthenticated) {
-    return { success: false, error: 'Unauthorized. Admin session required.' };
+export async function getResponseDetailAction(
+  params: {
+    formId: string;
+    responseId: string;
+  },
+  options?: { client?: any }
+): Promise<{ success: boolean; detail?: StudentResponseDetail; error?: string }> {
+  const session = await getAdminSession(options?.client);
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized. Active admin session required.' };
   }
 
   const { formId, responseId } = params;
-  const supabase = createAdminClient();
+
+  if (!isValidUUID(formId)) {
+    return { success: false, error: 'Invalid feedback form identifier format.' };
+  }
+
+  const supabase = await getAdminDb(options?.client);
   if (!supabase) {
-    return { success: false, error: 'Database service unavailable' };
+    return { success: false, error: 'Database service unavailable.' };
   }
 
   const { data: form } = await supabase
@@ -225,7 +288,7 @@ export async function getResponseDetailAction(params: {
     .maybeSingle();
 
   if (!form) {
-    return { success: false, error: 'Feedback form not found' };
+    return { success: false, error: 'Feedback form not found.' };
   }
 
   const sheetId =
@@ -233,12 +296,12 @@ export async function getResponseDetailAction(params: {
     form.google_sheet_url?.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)?.[1];
 
   if (!sheetId) {
-    return { success: false, error: 'Connected Google Sheet not found' };
+    return { success: false, error: 'Connected Google Sheet not found.' };
   }
 
   const sheetData = await fetchSingleResponseFromSheet(sheetId, responseId);
   if (!sheetData) {
-    return { success: false, error: 'Response record not found in Google Sheet' };
+    return { success: false, error: 'Response record not found in Google Sheet.' };
   }
 
   const { headers, row } = sheetData;
