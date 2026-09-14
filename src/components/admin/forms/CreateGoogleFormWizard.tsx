@@ -13,7 +13,7 @@ import {
 } from '@/types/database';
 import { GoogleConfigStatus } from '@/lib/google/auth';
 import { createGoogleFeedbackFormAction } from '@/app/admin/forms/actions';
-import { BCE_FEEDBACK_PARAMETERS, MultiFacultyGridItem } from '@/lib/google/template';
+import { BCE_FEEDBACK_PARAMETERS, BCE_RATING_OPTIONS, MultiFacultyGridItem } from '@/lib/google/template';
 import {
   ArrowLeft,
   ArrowRight,
@@ -291,14 +291,11 @@ export function CreateGoogleFormWizard({
       formType: scope,
       facultyId: scope === 'FACULTY_FEEDBACK' ? facultyId : undefined,
       subjectId: scope === 'FACULTY_FEEDBACK' ? subjectId : undefined,
-      items:
-        scope === 'SEMESTER_FEEDBACK'
-          ? normalizedItems.map(it => ({
-              facultyId: it.facultyId!,
-              subjectId: it.subjectId!,
-              assignmentId: it.assignmentId,
-            }))
-          : undefined,
+      items: normalizedItems.map(it => ({
+        facultyId: it.facultyId!,
+        subjectId: it.subjectId!,
+        assignmentId: it.assignmentId,
+      })),
     };
 
     try {
@@ -1035,7 +1032,7 @@ export function CreateGoogleFormWizard({
                         <li className="flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                           <span>
-                            {normalizedItems.length} Multiple Choice Grid{normalizedItems.length > 1 ? 's' : ''} populated (8 BCE parameters × 4 rating choices)
+                            {normalizedItems.length} Multiple Choice Grid{normalizedItems.length > 1 ? 's' : ''} populated (8 BCE parameters × 5 rating choices)
                           </span>
                         </li>
                         <li className="flex items-center gap-2">
@@ -1198,7 +1195,7 @@ export function CreateGoogleFormWizard({
                             {item.gridTitle}
                           </span>
                           <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-100 text-purple-800 font-semibold shrink-0">
-                            Grid (8 Rows × 4 Cols)
+                            Grid (8 Rows × 5 Cols)
                           </span>
                         </div>
                         <div className="text-[10px] text-purple-900/80">
@@ -1207,7 +1204,7 @@ export function CreateGoogleFormWizard({
                           ))}
                         </div>
                         <div className="flex items-center gap-1 text-[9px] text-purple-700 pt-0.5">
-                          <span className="font-semibold">Columns:</span> Very Good | Good | Satisfactory | Unsatisfactory
+                          <span className="font-semibold">Columns:</span> {BCE_RATING_OPTIONS.join(' | ')}
                         </div>
                       </div>
                     ))}

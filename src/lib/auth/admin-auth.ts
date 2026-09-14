@@ -20,8 +20,8 @@ export interface AdminAuthResult {
  * Server-side admin verification and Super Admin auto-promotion.
  * Never relies on client-side email checks alone.
  */
-export async function getAdminSession(): Promise<AdminAuthResult> {
-  const supabase = await createClient();
+export async function getAdminSession(client?: any): Promise<AdminAuthResult> {
+  const supabase = client || (await createClient());
   const adminDb = createAdminClient() || supabase;
 
   const { data: { user }, error: userError } = await supabase.auth.getUser();

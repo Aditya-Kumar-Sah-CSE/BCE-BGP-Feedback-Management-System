@@ -28,13 +28,13 @@ export default async function FeedbackPortalPage() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
       {/* Top Banner */}
-      <div className="bg-bce-navy text-white text-xs py-2 px-4 border-b border-bce-cobalt/40">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Government of Bihar | Department of Science, Technology & Technical Education</span>
+      <div className="bg-bce-navy text-white text-[11px] sm:text-xs py-1.5 sm:py-2 px-3 sm:px-4 border-b border-bce-cobalt/40">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-1 sm:gap-2 text-center sm:text-left">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="truncate">Government of Bihar | Department of Science, Technology & Technical Education</span>
           </div>
-          <Link href="/" className="text-slate-300 hover:text-white flex items-center gap-1">
+          <Link href="/" className="text-slate-300 hover:text-white flex items-center gap-1 text-[10px] sm:text-xs shrink-0">
             <ArrowLeft className="w-3 h-3" /> BCE Home
           </Link>
         </div>
@@ -42,30 +42,31 @@ export default async function FeedbackPortalPage() {
 
       {/* Header */}
       <header className="bg-white border-b border-slate-200 shadow-xs sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-bce-navy to-bce-cobalt text-amber-400 flex items-center justify-center font-bold text-lg shadow-md border border-bce-cobalt/50">
+        <div className="max-w-6xl mx-auto px-3.5 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 flex justify-between items-center gap-2">
+          <Link href="/" className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-bce-navy to-bce-cobalt text-amber-400 flex items-center justify-center font-bold text-base sm:text-lg shadow-md border border-bce-cobalt/50 shrink-0">
               <School className="w-5 h-5 text-amber-400" />
             </div>
-            <div>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight text-bce-navy">
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-lg font-bold tracking-tight text-bce-navy truncate">
                 Bhagalpur College of Engineering
               </h1>
-              <p className="text-[11px] text-slate-500 font-medium">
+              <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium truncate">
                 Student Feedback & Faculty Evaluation Portal
               </p>
             </div>
           </Link>
 
-          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>100% Anonymous • No Login Required</span>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 px-2.5 sm:px-3 py-1.5 rounded-full border border-emerald-200 shrink-0">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="hidden sm:inline">100% Anonymous • No Login Required</span>
+            <span className="sm:hidden text-[11px]">100% Anonymous</span>
           </div>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <main className="flex-1 max-w-6xl mx-auto w-full px-3.5 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-bce-cobalt text-xs font-semibold mb-2">
             <GraduationCap className="w-3.5 h-3.5" />

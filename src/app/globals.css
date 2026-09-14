@@ -156,4 +156,32 @@ body {
   animation: responseErrorFlash 0.85s cubic-bezier(0.1, 0.8, 0.3, 1) forwards !important;
 }
 
+/* ========================================================
+   MOBILE RESPONSIVENESS & PWA UTILITIES
+   ======================================================== */
+
+/* Safe area padding for notch & home indicator on mobile devices */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Hide scrollbar while preserving touch scrolling on mobile tab strips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Fast tap response without gray highlight box on mobile WebKit */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+
 

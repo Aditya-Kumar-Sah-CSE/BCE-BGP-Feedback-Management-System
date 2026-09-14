@@ -19,7 +19,7 @@ const PARAMETER_KEYWORD_RULES: Record<number, string[]> = {
 };
 
 /**
- * Maps a raw cell value to a canonical RatingOption ('Very Good' | 'Good' | 'Satisfactory' | 'Unsatisfactory') or null.
+ * Maps a raw cell value to a canonical RatingOption ('Excellent' | 'Very Good' | 'Good' | 'Satisfactory' | 'Unsatisfactory') or null.
  */
 export function normalizeRatingValue(val: string | number | undefined | null): RatingOption | null {
   if (val === undefined || val === null) return null;

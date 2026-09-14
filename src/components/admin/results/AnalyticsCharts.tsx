@@ -48,7 +48,7 @@ export function ParameterScoreBarChart({ parameters, hasData }: ParameterChartPr
   }
 
   const data = parameters.map(p => ({
-    name: p.title.length > 18 ? `${p.title.slice(0, 16)}…` : p.title,
+    name: p.title.length > 15 ? `${p.title.slice(0, 13)}…` : p.title,
     fullName: `${p.parameterId}. ${p.title}`,
     score: p.averageScore,
     validCount: p.validCount,
@@ -60,7 +60,7 @@ export function ParameterScoreBarChart({ parameters, hasData }: ParameterChartPr
         <BarChart
           data={data}
           layout="vertical"
-          margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
+          margin={{ top: 10, right: 20, left: -5, bottom: 10 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} horizontal={false} />
           <XAxis
@@ -68,15 +68,15 @@ export function ParameterScoreBarChart({ parameters, hasData }: ParameterChartPr
             domain={[0, 5]}
             ticks={[0, 1, 2, 3, 4, 5]}
             stroke="#94A3B8"
-            fontSize={12}
+            fontSize={11}
             tickFormatter={val => `${val}.0`}
           />
           <YAxis
             type="category"
             dataKey="name"
             stroke="#94A3B8"
-            fontSize={12}
-            width={130}
+            fontSize={11}
+            width={105}
             tickLine={false}
           />
           <Tooltip
@@ -153,14 +153,14 @@ export function ParameterDistributionStackedChart({
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={data}
-          margin={{ top: 20, right: 20, left: -10, bottom: 25 }}
+          margin={{ top: 15, right: 15, left: -20, bottom: 25 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
           <XAxis
             dataKey="name"
             stroke="#94A3B8"
-            fontSize={11}
-            angle={-20}
+            fontSize={10}
+            angle={-25}
             textAnchor="end"
             interval={0}
           />

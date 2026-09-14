@@ -174,33 +174,33 @@ export function OverviewTab({
       )}
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {stats.map((item, idx) => {
           const Icon = item.icon;
           return (
             <button
               key={idx}
               onClick={() => onNavigateTab(item.tab)}
-              className="text-left bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between group"
+              className="text-left bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between group"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider line-clamp-1">
                     {item.title}
                   </p>
-                  <p className="text-2xl font-extrabold text-slate-900 mt-1">
+                  <p className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-1">
                     {item.value}
                   </p>
                 </div>
                 <div
-                  className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${item.color} text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform`}
+                  className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr ${item.color} text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform shrink-0`}
                 >
-                  <Icon className="w-5 h-5" />
+                  <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span>{item.subtitle}</span>
-                <span className="text-bce-cobalt font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="mt-3 sm:mt-4 pt-2 sm:pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] sm:text-xs text-slate-500">
+                <span className="truncate">{item.subtitle}</span>
+                <span className="text-bce-cobalt font-semibold opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">
                   Manage →
                 </span>
               </div>
@@ -212,7 +212,7 @@ export function OverviewTab({
       {/* Quick Launch & Recent Activity Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Quick Launch Actions */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-bce-cobalt" />
             Quick Administration
@@ -224,7 +224,7 @@ export function OverviewTab({
           <div className="space-y-2.5 pt-1">
             <button
               onClick={() => onNavigateTab('academic')}
-              className="w-full text-left p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-colors flex items-center justify-between"
+              className="w-full text-left p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-colors flex items-center justify-between min-h-[44px]"
             >
               <div>
                 <p className="text-xs font-bold text-slate-800">Add Faculty Member</p>
@@ -235,7 +235,7 @@ export function OverviewTab({
 
             <button
               onClick={() => onNavigateTab('academic')}
-              className="w-full text-left p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-colors flex items-center justify-between"
+              className="w-full text-left p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-colors flex items-center justify-between min-h-[44px]"
             >
               <div>
                 <p className="text-xs font-bold text-slate-800">Assign Subject to Faculty</p>
@@ -246,7 +246,7 @@ export function OverviewTab({
 
             <button
               onClick={() => onNavigateTab('forms')}
-              className="w-full text-left p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-colors flex items-center justify-between"
+              className="w-full text-left p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-colors flex items-center justify-between min-h-[44px]"
             >
               <div>
                 <p className="text-xs font-bold text-slate-800">Prepare Feedback Forms</p>
@@ -258,7 +258,7 @@ export function OverviewTab({
         </div>
 
         {/* Recent Audit Timeline Preview */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Activity className="w-4 h-4 text-bce-cobalt" />

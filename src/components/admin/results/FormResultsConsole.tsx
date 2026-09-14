@@ -468,7 +468,7 @@ export function FormResultsConsole({ initialReport }: Props) {
               Parameter Rating Distribution (%)
             </h3>
             <p className="text-xs text-slate-500">
-              Detailed percentage breakdown of Very Good, Good, Satisfactory, and Unsatisfactory.
+              Detailed percentage breakdown of Excellent, Very Good, Good, Satisfactory, and Unsatisfactory.
             </p>
           </div>
           <ParameterDistributionStackedChart

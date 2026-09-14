@@ -299,7 +299,7 @@ function ConfirmationContent() {
                   value={lookupFormId}
                   onChange={e => setLookupFormId(e.target.value)}
                   required
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm text-white placeholder-slate-600 outline-none transition-all"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base sm:text-sm text-white placeholder-slate-600 outline-none transition-all"
                 />
                 <span className="text-[11px] text-slate-500 mt-1 block">
                   Find the form ID on the landing page or in your feedback URL.
@@ -316,7 +316,7 @@ function ConfirmationContent() {
                   value={lookupEmail}
                   onChange={e => setLookupEmail(e.target.value)}
                   required
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm text-white placeholder-slate-600 outline-none transition-all"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base sm:text-sm text-white placeholder-slate-600 outline-none transition-all"
                 />
                 <span className="text-[11px] text-slate-500 mt-1 block">
                   Must match the verified email you used when submitting the Google Form.

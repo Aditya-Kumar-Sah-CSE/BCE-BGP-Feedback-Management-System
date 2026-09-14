@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import {
   validateAndPrepareFormDraftAction,
@@ -13,6 +15,28 @@ export async function POST(req: NextRequest) {
   if (!session.isAuthenticated || !session.isActive) {
     return NextResponse.json({ error: 'Unauthorized. Active admin session required.' }, { status: 401 });
   }
+
+  // Obtain authenticated client & session while request context is valid
+  const sessionClient = await createClient();
+  const { data: { session: authSession } } = await sessionClient.auth.getSession();
+  const accessToken = authSession?.access_token;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://cblbvsvftltothhrzehw.supabase.co';
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_1wMh7c9tkiD3NgM_BYLLQg_KOxX46za';
+
+  const authenticatedClient = accessToken
+    ? createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+        global: {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      })
+    : sessionClient;
 
   let payload: CreateFormPayload;
   try {
@@ -51,7 +75,7 @@ export async function POST(req: NextRequest) {
         message: 'Validating academic assignment & session configuration...',
       });
 
-      const prepRes = await validateAndPrepareFormDraftAction(payload);
+      const prepRes = await validateAndPrepareFormDraftAction(payload, authenticatedClient);
       if (!prepRes.success || !prepRes.draftFormId) {
         await sendEvent({
           status: 'ERROR',
@@ -81,6 +105,7 @@ export async function POST(req: NextRequest) {
         title: prepRes.title || 'Faculty Feedback Form',
         description: prepRes.description || '',
         items: (prepRes as any).validatedItems,
+        client: authenticatedClient,
       });
 
       if (!provRes.success || !provRes.form) {

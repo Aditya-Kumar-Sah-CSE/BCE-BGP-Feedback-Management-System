@@ -49,7 +49,7 @@ export default function AdminPendingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gradient-to-br from-slate-950 via-bce-navy to-slate-900">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-center py-8 sm:py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-slate-950 via-bce-navy to-slate-900">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <div className="mx-auto w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shadow-lg">
           <Clock className="w-8 h-8 text-amber-400 animate-pulse" />
@@ -64,7 +64,7 @@ export default function AdminPendingPage() {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
-        <div className="bg-slate-800/90 backdrop-blur-md py-8 px-6 sm:px-10 shadow-2xl rounded-2xl border border-slate-700/60 text-center space-y-6">
+        <div className="bg-slate-800/90 backdrop-blur-md py-8 px-4 sm:px-10 shadow-2xl rounded-2xl border border-slate-700/60 text-center space-y-6">
           <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-700 text-left space-y-2">
             <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
               <ShieldAlert className="w-4 h-4" />
@@ -87,7 +87,7 @@ export default function AdminPendingPage() {
             <button
               onClick={checkStatus}
               disabled={isChecking}
-              className="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 transition-colors disabled:opacity-50"
+              className="w-full flex justify-center items-center gap-2 py-2.5 px-4 min-h-[44px] rounded-xl text-sm font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isChecking ? 'animate-spin' : ''}`} />
               <span>{isChecking ? 'Checking Status...' : 'Check Approval Status'}</span>
@@ -95,7 +95,7 @@ export default function AdminPendingPage() {
 
             <button
               onClick={handleSignOut}
-              className="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold text-slate-300 bg-slate-700/60 hover:bg-slate-700 border border-slate-600 transition-colors"
+              className="w-full flex justify-center items-center gap-2 py-2.5 px-4 min-h-[44px] rounded-xl text-sm font-semibold text-slate-300 bg-slate-700/60 hover:bg-slate-700 border border-slate-600 transition-colors"
             >
               <LogOut className="w-4 h-4" />
               <span>Sign Out</span>

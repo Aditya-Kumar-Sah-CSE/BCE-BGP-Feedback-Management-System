@@ -205,16 +205,16 @@ export function FeedbackFormsTab({
             </span>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
             {/* Search Input */}
             <div className="relative flex-1 sm:w-60">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search forms..."
-                className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+                className="w-full pl-8 pr-3 py-2 sm:py-1.5 min-h-[40px] bg-white border border-slate-200 rounded-lg text-base sm:text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
               />
             </div>
 
@@ -225,7 +225,7 @@ export function FeedbackFormsTab({
                 setStatusFilter(e.target.value as any);
                 setPage(1);
               }}
-              className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
+              className="px-3 py-2 sm:py-1.5 min-h-[40px] bg-white border border-slate-200 rounded-lg text-base sm:text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
             >
               <option value="ALL">All Status</option>
               <option value="PUBLISHED">Published</option>
@@ -257,162 +257,292 @@ export function FeedbackFormsTab({
             No feedback forms match your search or filter criteria.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider">
-                <tr>
-                  <th className="px-5 py-3">Form Title</th>
-                  <th className="px-5 py-3">Faculty & Subject</th>
-                  <th className="px-5 py-3">Branch & Sem</th>
-                  <th className="px-5 py-3">Response Mode</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Google Links</th>
-                  <th className="px-5 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {paginatedForms.map((form) => {
-                  const faculty = faculties.find((f) => f.id === form.faculty_id) || form.faculty;
-                  const subject = subjects.find((s) => s.id === form.subject_id) || form.subject;
-                  const branch = branches.find((b) => b.id === form.branch_id) || form.branch;
-                  const semester = semesters.find((s) => s.id === form.semester_id) || form.semester;
-                  const isPublished = form.status === 'PUBLISHED';
-                  const isNative = form.response_destination_type === 'NATIVE_SHEET';
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-5 py-3">Form Title</th>
+                    <th className="px-5 py-3">Faculty & Subject</th>
+                    <th className="px-5 py-3">Branch & Sem</th>
+                    <th className="px-5 py-3">Response Mode</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3">Google Links</th>
+                    <th className="px-5 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedForms.map((form) => {
+                    const faculty = faculties.find((f) => f.id === form.faculty_id) || form.faculty;
+                    const subject = subjects.find((s) => s.id === form.subject_id) || form.subject;
+                    const branch = branches.find((b) => b.id === form.branch_id) || form.branch;
+                    const semester = semesters.find((s) => s.id === form.semester_id) || form.semester;
+                    const isPublished = form.status === 'PUBLISHED';
+                    const isNative = form.response_destination_type === 'NATIVE_SHEET';
 
-                  return (
-                    <tr key={form.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-5 py-3.5 font-bold text-slate-800">
+                    return (
+                      <tr key={form.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-5 py-3.5 font-bold text-slate-800">
+                          <Link
+                            href={`/admin/dashboard/forms/${form.id}`}
+                            className="hover:text-bce-cobalt transition-colors"
+                          >
+                            {form.title}
+                          </Link>
+                          {form.slug && (
+                            <span className="block font-mono text-[10px] text-slate-400 font-normal">
+                              /{form.slug}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {form.form_type === 'SEMESTER_FEEDBACK' ? (
+                            <div>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                Multi-Faculty Grid
+                              </span>
+                              <div className="text-slate-500 text-[11px] mt-0.5">
+                                All Semester Assigned Courses
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="font-medium text-slate-800">{faculty?.name || 'Faculty'}</div>
+                              <div className="text-slate-500 text-[11px]">
+                                {subject?.name || 'Subject'} {subject?.code ? `(${subject.code})` : ''}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-slate-500">
+                          {branch?.code || 'Branch'} • {semester?.name || 'Sem'}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                              isNative
+                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                : 'bg-blue-100 text-blue-800 border border-blue-200'
+                            }`}
+                          >
+                            {isNative ? '⚡ Native Destination' : '🔄 App Managed Sync'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                              isPublished
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {isPublished ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                            {form.status}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-2">
+                            {form.google_form_url && (
+                              <a
+                                href={form.google_form_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-purple-700 hover:text-purple-900 inline-flex items-center gap-0.5 text-[11px] font-semibold"
+                                title="Open Google Form Responder View"
+                              >
+                                <FileCode2 className="w-3.5 h-3.5" />
+                                <span>Form</span>
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )}
+                            {form.google_sheet_url || form.google_sheet_id ? (
+                              <a
+                                href={
+                                  form.google_sheet_url ||
+                                  `https://docs.google.com/spreadsheets/d/${form.google_sheet_id}/edit`
+                                }
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-0.5 text-[11px] font-semibold ml-1.5"
+                                title="Open Google Sheet"
+                              >
+                                <FileSpreadsheet className="w-3.5 h-3.5" />
+                                <span>Sheet</span>
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <div className="inline-flex items-center gap-1.5">
+                            <Link
+                              href={`/admin/dashboard/forms/${form.id}`}
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 hover:text-bce-cobalt bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>Manage</span>
+                            </Link>
+                            <button
+                              onClick={() => handleToggleStatus(form)}
+                              disabled={isPending || deletingId === form.id}
+                              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                                isPublished
+                                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                              }`}
+                            >
+                              {isPublished ? 'Unpublish' : 'Publish'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteForm(form)}
+                              disabled={isPending || deletingId === form.id}
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-rose-600 transition-all inline-flex items-center gap-1 disabled:opacity-50"
+                              title="Delete Form"
+                            >
+                              {deletingId === form.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3 h-3" />
+                              )}
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {paginatedForms.map((form) => {
+                const faculty = faculties.find((f) => f.id === form.faculty_id) || form.faculty;
+                const subject = subjects.find((s) => s.id === form.subject_id) || form.subject;
+                const branch = branches.find((b) => b.id === form.branch_id) || form.branch;
+                const semester = semesters.find((s) => s.id === form.semester_id) || form.semester;
+                const isPublished = form.status === 'PUBLISHED';
+                const isNative = form.response_destination_type === 'NATIVE_SHEET';
+
+                return (
+                  <div key={form.id} className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
                         <Link
                           href={`/admin/dashboard/forms/${form.id}`}
-                          className="hover:text-bce-cobalt transition-colors"
+                          className="font-bold text-slate-900 text-sm hover:text-bce-cobalt transition-colors truncate block"
                         >
                           {form.title}
                         </Link>
                         {form.slug && (
-                          <span className="block font-mono text-[10px] text-slate-400 font-normal">
+                          <span className="block font-mono text-[10px] text-slate-400 font-normal truncate">
                             /{form.slug}
                           </span>
                         )}
-                      </td>
-                      <td className="px-5 py-3.5">
+                      </div>
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold shrink-0 ${
+                          isPublished
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {isPublished ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                        {form.status}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-medium">Evaluation Target</span>
                         {form.form_type === 'SEMESTER_FEEDBACK' ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                              Multi-Faculty Grid
-                            </span>
-                            <div className="text-slate-500 text-[11px] mt-0.5">
-                              All Semester Assigned Courses
-                            </div>
-                          </div>
+                          <span className="text-purple-700 font-bold text-[11px]">Multi-Faculty Grid</span>
                         ) : (
-                          <div>
-                            <div className="font-medium text-slate-800">{faculty?.name || 'Faculty'}</div>
-                            <div className="text-slate-500 text-[11px]">
-                              {subject?.name || 'Subject'} {subject?.code ? `(${subject.code})` : ''}
-                            </div>
-                          </div>
+                          <>
+                            <div className="font-semibold text-slate-800 text-[11px] truncate">{faculty?.name || 'Faculty'}</div>
+                            <div className="text-[10px] text-slate-500 truncate">{subject?.name}</div>
+                          </>
                         )}
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-500">
-                        {branch?.code || 'Branch'} • {semester?.name || 'Sem'}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
-                            isNative
-                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                              : 'bg-blue-100 text-blue-800 border border-blue-200'
-                          }`}
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-medium">Cohort & Mode</span>
+                        <div className="font-semibold text-slate-700 text-[11px]">{branch?.code} • {semester?.name}</div>
+                        <div className="text-[10px] text-slate-500">{isNative ? '⚡ Native Sheet' : '🔄 Managed Sync'}</div>
+                      </div>
+                    </div>
+
+                    {/* Links & Actions */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <div className="flex items-center gap-2">
+                        {form.google_form_url && (
+                          <a
+                            href={form.google_form_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-purple-700 hover:text-purple-900 inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg bg-purple-50"
+                          >
+                            <FileCode2 className="w-3.5 h-3.5" />
+                            <span>Form</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        )}
+                        {(form.google_sheet_url || form.google_sheet_id) && (
+                          <a
+                            href={
+                              form.google_sheet_url ||
+                              `https://docs.google.com/spreadsheets/d/${form.google_sheet_id}/edit`
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg bg-emerald-50"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                            <span>Sheet</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        <Link
+                          href={`/admin/dashboard/forms/${form.id}`}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:text-bce-cobalt bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1"
                         >
-                          {isNative ? '⚡ Native Destination' : '🔄 App Managed Sync'}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                          <Eye className="w-3 h-3" />
+                          <span>Manage</span>
+                        </Link>
+                        <button
+                          onClick={() => handleToggleStatus(form)}
+                          disabled={isPending || deletingId === form.id}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                             isPublished
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-slate-100 text-slate-600'
+                              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                           }`}
                         >
-                          {isPublished ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-                          {form.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-2">
-                          {form.google_form_url && (
-                            <a
-                              href={form.google_form_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-purple-700 hover:text-purple-900 inline-flex items-center gap-0.5 text-[11px] font-semibold"
-                              title="Open Google Form Responder View"
-                            >
-                              <FileCode2 className="w-3.5 h-3.5" />
-                              <span>Form</span>
-                              <ExternalLink className="w-2.5 h-2.5" />
-                            </a>
+                          {isPublished ? 'Unpublish' : 'Publish'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteForm(form)}
+                          disabled={isPending || deletingId === form.id}
+                          className="p-1.5 rounded-lg text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-rose-600 transition-all inline-flex items-center disabled:opacity-50 cursor-pointer"
+                          title="Delete Form"
+                        >
+                          {deletingId === form.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
                           )}
-                          {form.google_sheet_url || form.google_sheet_id ? (
-                            <a
-                              href={
-                                form.google_sheet_url ||
-                                `https://docs.google.com/spreadsheets/d/${form.google_sheet_id}/edit`
-                              }
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-0.5 text-[11px] font-semibold ml-1.5"
-                              title="Open Google Sheet"
-                            >
-                              <FileSpreadsheet className="w-3.5 h-3.5" />
-                              <span>Sheet</span>
-                              <ExternalLink className="w-2.5 h-2.5" />
-                            </a>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <div className="inline-flex items-center gap-1.5">
-                          <Link
-                            href={`/admin/dashboard/forms/${form.id}`}
-                            className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 hover:text-bce-cobalt bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1"
-                          >
-                            <Eye className="w-3 h-3" />
-                            <span>Manage</span>
-                          </Link>
-                          <button
-                            onClick={() => handleToggleStatus(form)}
-                            disabled={isPending || deletingId === form.id}
-                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                              isPublished
-                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
-                                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                            }`}
-                          >
-                            {isPublished ? 'Unpublish' : 'Publish'}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteForm(form)}
-                            disabled={isPending || deletingId === form.id}
-                            className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-rose-600 transition-all inline-flex items-center gap-1 disabled:opacity-50"
-                            title="Delete Form"
-                          >
-                            {deletingId === form.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3 h-3" />
-                            )}
-                            <span>Delete</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
 
         {/* Pagination Controls */}

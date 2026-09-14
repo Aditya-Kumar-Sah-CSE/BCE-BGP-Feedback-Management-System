@@ -28,13 +28,13 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
       {/* Top Banner */}
-      <div className="bg-bce-navy text-white text-xs py-2 px-4 border-b border-bce-cobalt/40">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Government of Bihar | Department of Science, Technology & Technical Education</span>
+      <div className="bg-bce-navy text-white text-[11px] sm:text-xs py-1.5 sm:py-2 px-3 sm:px-4 border-b border-bce-cobalt/40">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-1 sm:gap-2 text-center sm:text-left">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="truncate">Government of Bihar | Department of Science, Technology & Technical Education</span>
           </div>
-          <div className="flex items-center gap-4 text-slate-300">
+          <div className="flex items-center gap-3 sm:gap-4 text-slate-300 text-[10px] sm:text-xs">
             <span>Estd. 1960</span>
             <span>•</span>
             <span>AICTE Approved</span>
@@ -48,16 +48,16 @@ export default async function HomePage() {
 
       {/* Main Header */}
       <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-bce-navy to-bce-cobalt text-amber-400 flex items-center justify-center font-bold text-xl shadow-md border border-bce-cobalt/50">
-              <School className="w-6 h-6 text-amber-400" />
+        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 flex justify-between items-center gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-bce-navy to-bce-cobalt text-amber-400 flex items-center justify-center font-bold text-lg sm:text-xl shadow-md border border-bce-cobalt/50 shrink-0">
+              <School className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" />
             </div>
-            <div>
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-bce-navy">
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-xl font-bold tracking-tight text-bce-navy truncate sm:whitespace-normal">
                 Bhagalpur College of Engineering
               </h1>
-              <p className="text-xs text-slate-500 font-medium">
+              <p className="text-[10px] sm:text-xs text-slate-500 font-medium truncate sm:whitespace-normal">
                 Faculty Feedback & Evaluation Portal (BCE BGP)
               </p>
             </div>
@@ -65,47 +65,48 @@ export default async function HomePage() {
 
           <Link
             href="/admin/login"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-bce-navy bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-all hover:shadow-sm"
+            className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 text-xs sm:text-sm font-medium text-bce-navy bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-all shrink-0 active:scale-98"
           >
-            <UserCheck className="w-4 h-4 text-bce-cobalt" />
-            <span>Faculty / Admin Login</span>
+            <UserCheck className="w-4 h-4 text-bce-cobalt shrink-0" />
+            <span className="hidden sm:inline">Faculty / Admin Login</span>
+            <span className="sm:hidden font-semibold">Admin Login</span>
           </Link>
         </div>
       </header>
 
       {/* Hero Section */}
-      <section className="bg-gradient-to-b from-white via-slate-50 to-slate-100 border-b border-slate-200 py-10 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-50 border border-amber-200/80 text-amber-900 text-xs font-semibold shadow-sm">
+      <section className="bg-gradient-to-b from-white via-slate-50 to-slate-100 border-b border-slate-200 py-6 sm:py-10 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto text-center space-y-3 sm:space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-amber-50 border border-amber-200/80 text-amber-900 text-xs font-semibold shadow-sm">
             <GraduationCap className="w-4 h-4 text-amber-600" />
             <span>Student Anonymous Evaluation System</span>
           </div>
 
-          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
+          <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
             Constructive Feedback Drives <span className="text-bce-cobalt">Academic Excellence</span>
           </h2>
 
-          <p className="text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-xs sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
             Welcome to the official BCE feedback portal. Students do not need to log in. Select your academic session, branch, and semester to view faculty assignments and published feedback forms.
           </p>
 
           {/* Key Privacy Highlights */}
-          <div className="pt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto text-left">
-            <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-xs flex items-start gap-2.5">
+          <div className="pt-2 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 max-w-2xl mx-auto text-left">
+            <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs flex items-start gap-2.5">
               <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <div>
                 <p className="text-xs font-semibold text-slate-800">100% Anonymous</p>
                 <p className="text-[11px] text-slate-500">Zero student identity or credentials recorded</p>
               </div>
             </div>
-            <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-xs flex items-start gap-2.5">
+            <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs flex items-start gap-2.5">
               <GraduationCap className="w-5 h-5 text-bce-cobalt shrink-0 mt-0.5" />
               <div>
                 <p className="text-xs font-semibold text-slate-800">Direct Impact</p>
                 <p className="text-[11px] text-slate-500">Helps improve teaching and syllabus delivery</p>
               </div>
             </div>
-            <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-xs flex items-start gap-2.5">
+            <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs flex items-start gap-2.5">
               <School className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               <div>
                 <p className="text-xs font-semibold text-slate-800">All Departments</p>
@@ -117,7 +118,7 @@ export default async function HomePage() {
       </section>
 
       {/* Discovery Flow Area */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-10">
+      <main className="flex-1 max-w-6xl mx-auto w-full px-3.5 sm:px-6 lg:px-8 py-6 sm:py-10">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">

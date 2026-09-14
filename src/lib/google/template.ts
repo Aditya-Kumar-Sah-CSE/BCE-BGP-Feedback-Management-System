@@ -167,7 +167,7 @@ export function generateSemesterFormDescription(meta: {
  * Builds the Google Forms API batchUpdate request body:
  * 1. Student Name (Short answer, required)
  * 2. University Registration Number (Short answer, required)
- * 3. 8 Standard BCE Rating Parameters (Radio 1-4, required)
+ * 3. 8 Standard BCE Rating Parameters (Radio 1-5, required)
  * 4. General Feedback (Paragraph text, optional)
  * 5. More Feedback Forms (Text item with public portal link)
  */

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json.schemastore.org/web-manifest-combined.json",
+  "name": "BCE Faculty Feedback Portal",
+  "short_name": "BCE Feedback",
+  "description": "Official Faculty Feedback & Evaluation Management System for Bhagalpur College of Engineering, Government of Bihar",
+  "id": "bce-feedback-portal",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0B192C",
+  "background_color": "#0B192C",
+  "lang": "en",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Submit Feedback",
+      "short_name": "Feedback",
+      "description": "Discover and submit faculty feedback",
+      "url": "/feedback",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Admin Console",
+      "short_name": "Admin",
+      "description": "Login to Faculty Feedback Admin Portal",
+      "url": "/admin/login",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "categories": [
+    "education",
+    "productivity"
+  ]
+}

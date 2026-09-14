@@ -200,7 +200,8 @@ export async function getFeedbackFormByIdAction(formId: string) {
  * Prepares and provisions feedback form (delegating to staged actions).
  */
 export async function createGoogleFeedbackFormAction(payload: CreateFormPayload) {
-  const prepRes = await validateAndPrepareFormDraftAction(payload);
+  const supabase = await getAdminDb();
+  const prepRes = await validateAndPrepareFormDraftAction(payload, supabase);
   if (!prepRes.success || !prepRes.draftFormId) {
     return { success: false, error: prepRes.error || 'Validation failed.' };
   }
@@ -210,6 +211,7 @@ export async function createGoogleFeedbackFormAction(payload: CreateFormPayload)
     title: prepRes.title || 'Feedback Form',
     description: prepRes.description || '',
     items: (prepRes as any).validatedItems,
+    client: supabase,
   });
 
   return provRes;
@@ -220,8 +222,8 @@ export async function createGoogleFeedbackFormAction(payload: CreateFormPayload)
  * Fast Local Preparation (<150ms).
  * Validates assignment & idempotency, and stores Supabase DRAFT record.
  */
-export async function validateAndPrepareFormDraftAction(payload: CreateFormPayload) {
-  const session = await getAdminSession();
+export async function validateAndPrepareFormDraftAction(payload: CreateFormPayload, customClient?: any) {
+  const session = await getAdminSession(customClient);
   if (!session.isAuthenticated || !session.isActive) {
     return { success: false, error: 'Unauthorized. Active admin session required.' };
   }
@@ -232,9 +234,9 @@ export async function validateAndPrepareFormDraftAction(payload: CreateFormPaylo
     return { success: false, error: issue ? issue.message : 'Invalid form creation parameters.' };
   }
 
-  const adminId = session.admin?.id || session.user?.id || null;
+  const adminId = session.admin?.id || null;
   const adminEmail = session.admin?.email || session.user?.email || '';
-  const supabase = await getAdminDb();
+  const supabase = customClient || (await getAdminDb());
 
   // -------------------------------------------------------------
   // A. Multi-Faculty SEMESTER_FEEDBACK Flow
@@ -306,7 +308,7 @@ export async function validateAndPrepareFormDraftAction(payload: CreateFormPaylo
     }
 
     for (const item of payload.items) {
-      const match = (allYearAssignments || []).find(a => {
+      const match = (allYearAssignments as any[] || []).find((a: any) => {
         const matchFac = a.faculty_id === item.facultyId;
         const matchSub = a.subject_id === item.subjectId;
         const matchBranch = !a.branch_id || a.branch_id === payload.branchId;
@@ -445,6 +447,8 @@ export async function validateAndPrepareFormDraftAction(payload: CreateFormPaylo
     .from('faculty_subject_assignments')
     .select('id')
     .eq('academic_year_id', payload.academicYearId)
+    .eq('branch_id', payload.branchId)
+    .eq('semester_id', payload.semesterId)
     .eq('faculty_id', payload.facultyId!)
     .eq('subject_id', payload.subjectId!)
     .eq('is_active', true)
@@ -453,9 +457,22 @@ export async function validateAndPrepareFormDraftAction(payload: CreateFormPaylo
   if (!assignment) {
     return {
       success: false,
-      error: `Invalid assignment: ${faculty.name} is not assigned to teach ${subject.name} (${subject.code}) in ${academicYear.name}. Please assign them in Academic Management first.`,
+      error: `Invalid assignment: ${faculty.name} is not assigned to teach ${subject.name} (${subject.code}) in ${branch.name} — ${semester.name} for ${academicYear.name}. Please assign them in Academic Management first.`,
     };
   }
+
+  // Build validatedItems containing exactly one faculty/subject evaluation item
+  const validatedItems: MultiFacultyGridItem[] = [
+    {
+      facultyId: faculty.id,
+      subjectId: subject.id,
+      assignmentId: assignment.id,
+      facultyName: faculty.name,
+      subjectName: subject.name,
+      subjectCode: subject.code,
+      gridTitle: `${subject.name}${subject.code ? ` (${subject.code})` : ''} — ${faculty.name}`,
+    },
+  ];
 
   // Idempotency check: Form already exists?
   const { data: existingForm } = await supabase
@@ -543,6 +560,7 @@ export async function validateAndPrepareFormDraftAction(payload: CreateFormPaylo
     draftFormId: draftRecord.id,
     title,
     description,
+    validatedItems,
     meta: metaInputs,
     formType: payload.formType,
   };
@@ -558,15 +576,16 @@ export async function provisionGoogleFormAndSheetAction(params: {
   title: string;
   description: string;
   items?: MultiFacultyGridItem[];
+  client?: any;
 }) {
-  const session = await getAdminSession();
+  const session = await getAdminSession(params.client);
   if (!session.isAuthenticated || !session.isActive) {
     return { success: false, error: 'Unauthorized. Active admin session required.' };
   }
 
-  const adminId = session.admin?.id || session.user?.id || null;
+  const adminId = session.admin?.id || null;
   const adminEmail = session.admin?.email || session.user?.email || '';
-  const supabase = await getAdminDb();
+  const supabase = params.client || (await getAdminDb());
 
   let googleFormResult;
   let googleSheetResult;
@@ -685,10 +704,14 @@ export async function provisionGoogleFormAndSheetAction(params: {
       ),
     ]);
 
-    revalidatePath('/admin/dashboard');
-    revalidatePath('/admin/dashboard/forms');
-    revalidatePath('/feedback');
-    revalidatePath('/');
+    try {
+      revalidatePath('/admin/dashboard');
+      revalidatePath('/admin/dashboard/forms');
+      revalidatePath('/feedback');
+      revalidatePath('/');
+    } catch {
+      // Safe fallback when called outside a static generation / request context
+    }
 
     return {
       success: true,

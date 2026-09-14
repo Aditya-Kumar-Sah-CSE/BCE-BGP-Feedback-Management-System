@@ -85,7 +85,7 @@ export function AllFeedbackFormsSection({ initialData }: Props) {
             placeholder="Search active forms..."
             value={search}
             onChange={e => handleSearchChange(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs text-slate-800 placeholder-slate-400 shadow-xs outline-none transition-all"
+            className="w-full pl-9 pr-4 py-2.5 sm:py-2 min-h-[44px] rounded-xl bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base sm:text-xs text-slate-800 placeholder-slate-400 shadow-xs outline-none transition-all"
           />
         </div>
       </div>
@@ -236,7 +236,7 @@ export function AllFeedbackFormsSection({ initialData }: Props) {
 
       {/* Pagination Bar */}
       {data.totalPages > 1 && (
-        <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200 shadow-xs text-xs text-slate-600">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-white rounded-2xl border border-slate-200 shadow-xs text-xs text-slate-600 text-center sm:text-left">
           <div>
             Showing Page <span className="font-bold text-slate-900">{currentPage}</span> of{' '}
             <span className="font-bold text-slate-900">{data.totalPages}</span> ({data.totalCount} active forms)
@@ -247,7 +247,7 @@ export function AllFeedbackFormsSection({ initialData }: Props) {
               type="button"
               onClick={() => handlePageChange(currentPage - 1)}
               disabled={currentPage <= 1 || isPending}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-30 transition-colors"
+              className="inline-flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-30 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Previous</span>
@@ -257,7 +257,7 @@ export function AllFeedbackFormsSection({ initialData }: Props) {
               type="button"
               onClick={() => handlePageChange(currentPage + 1)}
               disabled={currentPage >= data.totalPages || isPending}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-30 transition-colors"
+              className="inline-flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-30 transition-colors"
             >
               <span>Next</span>
               <ChevronRight className="w-4 h-4" />

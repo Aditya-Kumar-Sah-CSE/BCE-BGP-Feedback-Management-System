@@ -51,6 +51,7 @@ export function ResultsDashboardClient({
 }: Props) {
   const [report, setReport] = useState<AggregatedAnalyticsReport>(initialReport);
   const [isPending, startTransition] = useTransition();
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // Filter states
   const [academicYearId, setAcademicYearId] = useState<string>('ALL');
@@ -58,6 +59,14 @@ export function ResultsDashboardClient({
   const [semesterId, setSemesterId] = useState<string>('ALL');
   const [facultyId, setFacultyId] = useState<string>('ALL');
   const [subjectId, setSubjectId] = useState<string>('ALL');
+
+  const activeFiltersCount = [
+    academicYearId !== 'ALL',
+    branchId !== 'ALL',
+    semesterId !== 'ALL',
+    facultyId !== 'ALL',
+    subjectId !== 'ALL',
+  ].filter(Boolean).length;
 
   // Load analytics when filters change
   const handleFilterChange = (
@@ -170,12 +179,27 @@ export function ResultsDashboardClient({
 
         {/* Multi-tier Filter Bar */}
         <div className="pt-3 border-t border-slate-100">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-2">
-            <Filter className="w-3.5 h-3.5 text-bce-cobalt" />
-            <span>Filter Institutional Scope:</span>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+              <Filter className="w-3.5 h-3.5 text-bce-cobalt" />
+              <span>Filter Institutional Scope:</span>
+              {activeFiltersCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-bce-cobalt text-white">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}
+              className="md:hidden text-xs font-semibold text-bce-cobalt hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <span>{mobileFiltersOpen ? 'Collapse ▲' : 'Expand Filters ▼'}</span>
+            </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className={`${mobileFiltersOpen ? 'grid' : 'hidden md:grid'} grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3`}>
             {/* Academic Year */}
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
@@ -290,7 +314,7 @@ export function ResultsDashboardClient({
             <div className="flex items-end">
               <button
                 onClick={handleResetFilters}
-                className="w-full px-3 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                className="w-full px-3 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
               >
                 Reset Filters
               </button>
@@ -300,71 +324,71 @@ export function ResultsDashboardClient({
       </div>
 
       {/* KPI Metric Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Forms */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Active Forms</span>
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">Active Forms</span>
             <FileSpreadsheet className="w-4 h-4 text-bce-cobalt" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 mt-2">
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-1.5 sm:mt-2">
             {report.formsWithResponses}{' '}
-            <span className="text-xs font-medium text-slate-400">/ {report.totalForms}</span>
+            <span className="text-[11px] sm:text-xs font-medium text-slate-400">/ {report.totalForms}</span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">Forms with synchronized responses</p>
+          <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 sm:mt-1 truncate">Synchronized responses</p>
         </div>
 
         {/* Total Responses */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Total Responses</span>
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">Total Responses</span>
             <Users className="w-4 h-4 text-blue-600" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 mt-2">
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-1.5 sm:mt-2">
             {report.totalResponses}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {report.validResponses} valid student submissions
+          <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 sm:mt-1 truncate">
+            {report.validResponses} valid submissions
           </p>
         </div>
 
         {/* Overall Scope Score */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Scope Rating</span>
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">Scope Rating</span>
             <Award className="w-4 h-4 text-emerald-600" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 mt-2">
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-1.5 sm:mt-2">
             {report.hasData ? (
               <>
                 {report.averageOverallScore.toFixed(2)}{' '}
-                <span className="text-xs font-medium text-slate-400">/ 5.00</span>
+                <span className="text-[11px] sm:text-xs font-medium text-slate-400">/ 5.00</span>
               </>
             ) : (
-              <span className="text-lg text-slate-400 font-semibold">No Data</span>
+              <span className="text-sm sm:text-lg text-slate-400 font-semibold">No Data</span>
             )}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
+          <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 sm:mt-1 truncate">
             {report.hasData
-              ? `Composite Avg: ${report.compositeAverageScore.toFixed(2)}/5.00`
-              : 'Pending student responses'}
+              ? `Avg: ${report.compositeAverageScore.toFixed(2)}/5.00`
+              : 'Pending responses'}
           </p>
         </div>
 
         {/* Satisfaction Index */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Positive Rating</span>
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">Positive Rating</span>
             <CheckCircle2 className="w-4 h-4 text-amber-500" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 mt-2">
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-1.5 sm:mt-2">
             {report.hasData ? (
               `${(report.distribution.excellentPct + report.distribution.veryGoodPct + report.distribution.goodPct).toFixed(1)}%`
             ) : (
-              <span className="text-lg text-slate-400 font-semibold">0%</span>
+              <span className="text-sm sm:text-lg text-slate-400 font-semibold">0%</span>
             )}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">Excellent, Very Good &amp; Good ratings combined</p>
+          <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 sm:mt-1 truncate">Positive rating index</p>
         </div>
       </div>
 
@@ -390,7 +414,7 @@ export function ResultsDashboardClient({
               Rating Distribution by Parameter (%)
             </h3>
             <p className="text-xs text-slate-500">
-              Proportion of Very Good, Good, Satisfactory, and Unsatisfactory.
+              Proportion of Excellent, Very Good, Good, Satisfactory, and Unsatisfactory.
             </p>
           </div>
           <ParameterDistributionStackedChart
@@ -443,63 +467,141 @@ export function ResultsDashboardClient({
             <p className="text-xs text-slate-500">Adjust the filters above to view other sessions, branches, or faculty.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead>
-                <tr className="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
-                  <th className="px-4 py-3">Faculty Member</th>
-                  <th className="px-4 py-3">Subject & Code</th>
-                  <th className="px-4 py-3">Branch & Sem</th>
-                  <th className="px-4 py-3">Responses</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {matchingForms.map(form => {
-                  const compItem = report.facultyComparisons.find(c => c.formId === form.id);
-                  const respCount = compItem ? compItem.responseCount : form.response_count || 0;
-                  const score = compItem ? compItem.averageScore : null;
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+                    <th className="px-4 py-3">Faculty Member</th>
+                    <th className="px-4 py-3">Subject & Code</th>
+                    <th className="px-4 py-3">Branch & Sem</th>
+                    <th className="px-4 py-3">Responses</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {matchingForms.map(form => {
+                    const compItem = report.facultyComparisons.find(c => c.formId === form.id);
+                    const respCount = compItem ? compItem.responseCount : form.response_count || 0;
+                    const score = compItem ? compItem.averageScore : null;
 
-                  return (
-                    <tr key={form.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-4 py-3.5">
-                        <div className="font-bold text-slate-900">{form.faculty?.name}</div>
-                        <div className="text-[11px] text-slate-500">{form.faculty?.department}</div>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="font-semibold text-slate-800">{form.subject?.name}</div>
-                        <div className="font-mono text-[10px] text-slate-400">{form.subject?.code}</div>
-                      </td>
-                      <td className="px-4 py-3.5 text-slate-600">
-                        <div>{form.branch?.code || form.branch?.name}</div>
-                        <div className="text-[11px] text-slate-400">{form.semester?.name}</div>
-                      </td>
-                      <td className="px-4 py-3.5">
+                    return (
+                      <tr key={form.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-3.5">
+                          <div className="font-bold text-slate-900">{form.faculty?.name}</div>
+                          <div className="text-[11px] text-slate-500">{form.faculty?.department}</div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="font-semibold text-slate-800">{form.subject?.name}</div>
+                          <div className="font-mono text-[10px] text-slate-400">{form.subject?.code}</div>
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-600">
+                          <div>{form.branch?.code || form.branch?.name}</div>
+                          <div className="text-[11px] text-slate-400">{form.semester?.name}</div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className="font-bold text-slate-900">{respCount}</span>
+                          {score !== null && (
+                            <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                              {score.toFixed(2)}/5.00
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              form.status === 'PUBLISHED'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : form.status === 'CLOSED'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {form.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-right space-x-2">
+                          <Link
+                            href={`/admin/dashboard/results/${form.id}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-bce-navy text-amber-400 hover:bg-slate-800 rounded-lg text-xs font-semibold transition-colors"
+                          >
+                            <span>Analytics</span>
+                            <ChevronRight className="w-3 h-3" />
+                          </Link>
+                          <a
+                            href={`/api/admin/results/${form.id}/pdf`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            <FileDown className="w-3 h-3 text-slate-500" />
+                            <span>PDF</span>
+                          </a>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="md:hidden space-y-3">
+              {matchingForms.map(form => {
+                const compItem = report.facultyComparisons.find(c => c.formId === form.id);
+                const respCount = compItem ? compItem.responseCount : form.response_count || 0;
+                const score = compItem ? compItem.averageScore : null;
+
+                return (
+                  <div key={form.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-sm">{form.faculty?.name}</h4>
+                        <p className="text-[11px] text-slate-500">{form.faculty?.department}</p>
+                      </div>
+                      <span
+                        className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                          form.status === 'PUBLISHED'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : form.status === 'CLOSED'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {form.status}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs bg-white p-2.5 rounded-lg border border-slate-100">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-medium">Subject</span>
+                        <span className="font-semibold text-slate-800 text-[11px] line-clamp-1">{form.subject?.name}</span>
+                        <span className="font-mono text-[9px] text-slate-400">{form.subject?.code}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-medium">Cohort</span>
+                        <span className="font-semibold text-slate-700 text-[11px] block">{form.branch?.code || form.branch?.name}</span>
+                        <span className="text-[10px] text-slate-400">{form.semester?.name}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="text-slate-500 font-medium">Responses:</span>
                         <span className="font-bold text-slate-900">{respCount}</span>
                         {score !== null && (
-                          <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800">
                             {score.toFixed(2)}/5.00
                           </span>
                         )}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <span
-                          className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            form.status === 'PUBLISHED'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : form.status === 'CLOSED'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {form.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5 text-right space-x-2">
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
                         <Link
                           href={`/admin/dashboard/results/${form.id}`}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-bce-navy text-amber-400 hover:bg-slate-800 rounded-lg text-xs font-semibold transition-colors"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-bce-navy text-amber-400 hover:bg-slate-800 rounded-lg text-xs font-semibold transition-colors"
                         >
                           <span>Analytics</span>
                           <ChevronRight className="w-3 h-3" />
@@ -508,18 +610,18 @@ export function ResultsDashboardClient({
                           href={`/api/admin/results/${form.id}/pdf`}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium transition-colors"
                         >
-                          <FileDown className="w-3 h-3 text-slate-500" />
+                          <FileDown className="w-3 h-3 text-slate-600" />
                           <span>PDF</span>
                         </a>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </div>

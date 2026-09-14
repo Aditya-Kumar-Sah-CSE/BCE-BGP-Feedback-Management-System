@@ -2,7 +2,10 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import { OverviewTab, type DashboardCounts } from './tabs/OverviewTab';
+import { AdminMobileNav } from './AdminMobileNav';
 import Link from 'next/link';
 import {
   LayoutDashboard,
@@ -100,6 +103,18 @@ export function AdminDashboardTabs({
   counts,
 }: Props) {
   const [activeTab, setActiveTab] = useState<'overview' | 'admins' | 'academic' | 'forms' | 'audit'>('overview');
+  const router = useRouter();
+  const supabase = createClient();
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      router.push('/admin/login');
+      router.refresh();
+    } catch (err) {
+      console.error('Sign out error:', err);
+    }
+  };
 
   const pendingRequestsCount = adminRequests.filter((r) => r.status === 'PENDING').length;
 
@@ -117,9 +132,28 @@ export function AdminDashboardTabs({
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
+      {/* Mobile Navigation Bar with Drawer Trigger */}
+      <div className="md:hidden flex items-center justify-between bg-white px-3.5 py-2.5 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Tab:</span>
+          <span className="text-xs font-bold text-bce-navy bg-amber-100 text-amber-900 border border-amber-300/60 px-2.5 py-0.5 rounded-lg truncate">
+            {tabs.find((t) => t.id === activeTab)?.label}
+          </span>
+        </div>
+        <AdminMobileNav
+          adminName={currentUserEmail.split('@')[0]}
+          adminEmail={currentUserEmail}
+          isSuperAdmin={isSuperAdmin}
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          pendingRequestsCount={pendingRequestsCount}
+          onSignOut={handleSignOut}
+        />
+      </div>
+
       {/* Primary Navigation Tabs */}
-      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center gap-1.5">
+      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs overflow-x-auto no-scrollbar flex flex-nowrap md:flex-wrap items-center gap-1.5 max-w-full">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -127,13 +161,13 @@ export function AdminDashboardTabs({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`relative inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+              className={`relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 whitespace-nowrap cursor-pointer ${
                 isActive
                   ? 'bg-bce-navy text-amber-400 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="w-4 h-4 shrink-0" />
               <span>{tab.label}</span>
               {tab.badge !== undefined && (
                 <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-amber-500 text-slate-950">
@@ -146,9 +180,9 @@ export function AdminDashboardTabs({
 
         <Link
           href="/admin/dashboard/results"
-          className="relative inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-700 hover:text-slate-950 hover:bg-amber-50/80 border border-amber-200/70 transition-all ml-auto"
+          className="relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-700 hover:text-slate-950 hover:bg-amber-50/80 border border-amber-200/70 transition-all shrink-0 whitespace-nowrap md:ml-auto"
         >
-          <BarChart3 className="w-4 h-4 text-bce-cobalt" />
+          <BarChart3 className="w-4 h-4 text-bce-cobalt shrink-0" />
           <span>Results & Analytics Hub</span>
           <span className="text-[10px] font-extrabold uppercase bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-full shadow-2xs">
             Phase 4

@@ -42,7 +42,7 @@ export function PublicFeedbackCard({ form, isClosed }: boolean extends never ? a
       {/* Top Banner Accent */}
       <div className={`h-2.5 w-full ${closed ? 'bg-amber-500' : 'bg-gradient-to-r from-bce-navy via-bce-cobalt to-indigo-600'}`} />
 
-      <div className="p-6 sm:p-7 space-y-6">
+      <div className="p-4 sm:p-7 space-y-5 sm:space-y-6">
         {/* Status & Privacy Header */}
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
