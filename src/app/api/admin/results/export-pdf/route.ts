@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       .slice(0, 40);
     const filename = `BCE-Institutional-Feedback-${safeScopeName}.pdf`;
 
-    return new Response(pdfBuffer as unknown as BodyInit, {
+    return new Response(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
@@ -61,8 +61,13 @@ export async function GET(request: NextRequest) {
     console.error('[INSTITUTIONAL_PDF_GENERATION_ERROR]', {
       errorName: errorObj.name,
       message: errorObj.message,
-      stack: errorObj.stack,
+      cause: (errorObj as NodeJS.ErrnoException).code,
+      path: (errorObj as NodeJS.ErrnoException).path,
+      stack: errorObj.stack?.split('\n').slice(0, 8).join('\n'),
     });
-    return NextResponse.json({ error: 'Failed to generate institutional report PDF.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to generate institutional report PDF.', detail: errorObj.message },
+      { status: 500 }
+    );
   }
 }

@@ -87,8 +87,13 @@ export async function GET(
       formId,
       errorName: errorObj.name,
       message: errorObj.message,
-      stack: errorObj.stack,
+      cause: (errorObj as NodeJS.ErrnoException).code,
+      path: (errorObj as NodeJS.ErrnoException).path,
+      stack: errorObj.stack?.split('\n').slice(0, 8).join('\n'),
     });
-    return NextResponse.json({ error: 'Failed to generate report PDF.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to generate report PDF.', detail: errorObj.message },
+      { status: 500 }
+    );
   }
 }
