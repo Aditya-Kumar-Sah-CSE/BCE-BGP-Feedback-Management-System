@@ -108,7 +108,7 @@ async function main() {
 
   // 4. Verify Public Active Forms Action (Server pagination, lean columns, no select(*))
   console.log('--- 4. Testing Public Landing "All Feedback Forms" Action ---');
-  const publicForms = await getPublicActiveFormsAction({ page: 1, limit: 10 });
+  const publicForms = await getPublicActiveFormsAction({ page: 1, pageSize: 10 });
   console.log(`Total Published Forms: ${publicForms.totalCount}, Pages: ${publicForms.totalPages}`);
   console.log(`Forms retrieved on page 1: ${publicForms.forms.length}`);
   if (publicForms.forms.length > 0) {
@@ -119,7 +119,7 @@ async function main() {
       academicYear: first.academicYear,
       branch: first.branch,
       semester: first.semester,
-      facultyLabel: first.facultyLabel,
+      facultySubjectDisplay: first.facultySubjectDisplay,
       publishedAt: first.publishedAt,
     });
   }
@@ -141,14 +141,14 @@ async function main() {
         facultyName: 'Dr. Pushpendra Kumar Keshri',
         subjectName: 'Artificial Intelligence (PCC-CS701)',
         ratings: [
-          { parameter: 'Syllabus covered by teacher as per curriculum', ratingText: 'Excellent', score: 5 },
-          { parameter: 'Communication skills', ratingText: 'Very Good', score: 4 },
-          { parameter: 'Effectiveness of Teaching/Learning in terms of Interactive sessions', ratingText: 'Excellent', score: 5 },
-          { parameter: 'Accessibility of the teacher in and out of the class', ratingText: 'Very Good', score: 4 },
-          { parameter: 'Willingness to offer help and advice beyond classroom', ratingText: 'Good', score: 3 },
-          { parameter: 'Ability to teach/explain confidently and answer queries', ratingText: 'Excellent', score: 5 },
-          { parameter: 'Teacher shown fairness in the evaluation', ratingText: 'Very Good', score: 4 },
-          { parameter: 'Overall Rating', ratingText: 'Excellent', score: 5 },
+          { parameterId: 1, parameterTitle: 'Syllabus covered by teacher as per curriculum', rating: 'Excellent' },
+          { parameterId: 2, parameterTitle: 'Communication skills', rating: 'Very Good' },
+          { parameterId: 3, parameterTitle: 'Effectiveness of Teaching/Learning in terms of Interactive sessions', rating: 'Excellent' },
+          { parameterId: 4, parameterTitle: 'Accessibility of the teacher in and out of the class', rating: 'Very Good' },
+          { parameterId: 5, parameterTitle: 'Willingness to offer help and advice beyond classroom', rating: 'Good' },
+          { parameterId: 6, parameterTitle: 'Ability to teach/explain confidently and answer queries', rating: 'Excellent' },
+          { parameterId: 7, parameterTitle: 'Teacher shown fairness in the evaluation', rating: 'Very Good' },
+          { parameterId: 8, parameterTitle: 'Overall Rating', rating: 'Excellent' },
         ],
       },
     ],

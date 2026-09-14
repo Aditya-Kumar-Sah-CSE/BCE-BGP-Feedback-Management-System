@@ -443,7 +443,7 @@ export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEma
             <div className="space-y-2.5">
               <div className="flex items-center justify-between px-0.5">
                 <span className="text-xs font-bold text-slate-800">8 Faculty Evaluation Parameters</span>
-                <span className="text-[10px] text-slate-500 font-medium">4-Point Rating Scale (Required)</span>
+                <span className="text-[10px] text-slate-500 font-medium">5-Point Rating Scale (Required)</span>
               </div>
               {BCE_FEEDBACK_PARAMETERS.map(param => (
                 <div

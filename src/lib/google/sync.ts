@@ -1,3 +1,4 @@
+import type { forms_v1 } from 'googleapis';
 import { getGoogleServices } from './auth';
 import { appendResponsesToSheet, getExistingSheetResponseIds } from './sheets';
 import { BCE_FEEDBACK_PARAMETERS } from './template';
@@ -83,12 +84,12 @@ export async function syncFormResponsesToSheet(params: {
     });
 
     // 2. Fetch all submitted responses from Forms API (safely)
-    let allResponses: any[] = [];
+    let allResponses: forms_v1.Schema$FormResponse[] = [];
     try {
       const responsesRes = await forms.forms.responses.list({ formId: googleFormId });
-      allResponses = responsesRes.data.responses || [];
-    } catch (formsErr: any) {
-      console.warn('[Sync] Google Forms API responses list notice:', formsErr?.message || formsErr);
+      allResponses = (responsesRes.data.responses || []) as forms_v1.Schema$FormResponse[];
+    } catch (formsErr: unknown) {
+      console.warn('[Sync] Google Forms API responses list notice:', formsErr instanceof Error ? formsErr.message : formsErr);
     }
     const totalResponses = allResponses.length;
 
@@ -137,7 +138,8 @@ export async function syncFormResponsesToSheet(params: {
       const gridAnswerMap = new Map<string, string>(); // `${gridTitle.toLowerCase()}_${paramIndex}` -> answer value
 
       if (resp.answers) {
-        for (const [qId, answerObj] of Object.entries(resp.answers)) {
+        const answersRecord = resp.answers as Record<string, forms_v1.Schema$Answer>;
+        for (const [qId, answerObj] of Object.entries(answersRecord)) {
           const val = answerObj.textAnswers?.answers?.[0]?.value || '';
 
           // Single question match

@@ -84,7 +84,7 @@ export interface FormAnalyticsReport {
   totalResponses: number;
   validResponses: number;
   unansweredResponses: number;
-  averageOverallScore: number; // 0.00 to 4.00
+  averageOverallScore: number; // 0.00 to 5.00
   compositeAverageScore: number; // Mean across all 8 parameters
   parameters: ParameterMetrics[];
   distribution: OverallDistribution;

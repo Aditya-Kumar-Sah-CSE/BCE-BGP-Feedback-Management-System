@@ -410,9 +410,9 @@ async function runComprehensiveRealE2E() {
         facultyName: item.facultyName,
         subjectName: `${item.subjectName}${item.subjectCode ? ` (${item.subjectCode})` : ''}`,
         ratings: BCE_FEEDBACK_PARAMETERS.map((p, pIdx) => ({
-          parameter: p.title,
-          ratingText: ratings[pIdx] || 'Good',
-          score: normalizeRatingValue(ratings[pIdx]) === 'Excellent' ? 5 : 4,
+          parameterId: p.id,
+          parameterTitle: p.title,
+          rating: ratings[pIdx] || 'Good',
         })),
       };
     }),

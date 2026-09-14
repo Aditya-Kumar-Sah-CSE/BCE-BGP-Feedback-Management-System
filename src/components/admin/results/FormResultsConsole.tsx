@@ -76,8 +76,9 @@ export function FormResultsConsole({ initialReport }: Props) {
   const gradeInfo = (() => {
     if (!currentReport.hasData) return { label: 'NO DATA', color: 'text-slate-400', bg: 'bg-slate-100', border: 'border-slate-300' };
     const s = currentReport.compositeAverageScore || currentReport.averageOverallScore;
-    if (s >= 3.5) return { label: 'VERY GOOD (EXCELLENT)', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-300' };
-    if (s >= 2.75) return { label: 'GOOD (COMMENDABLE)', color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-300' };
+    if (s >= 4.5) return { label: 'EXCELLENT', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-300' };
+    if (s >= 3.75) return { label: 'VERY GOOD', color: 'text-indigo-700', bg: 'bg-indigo-50', border: 'border-indigo-300' };
+    if (s >= 3.0) return { label: 'GOOD', color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-300' };
     if (s >= 2.0) return { label: 'SATISFACTORY', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-300' };
     return { label: 'NEEDS ATTENTION', color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-300' };
   })();
@@ -329,7 +330,7 @@ export function FormResultsConsole({ initialReport }: Props) {
             {currentReport.hasData ? (
               <>
                 {currentReport.compositeAverageScore.toFixed(2)}{' '}
-                <span className="text-xs font-medium text-slate-400">/ 4.00</span>
+                <span className="text-xs font-medium text-slate-400">/ 5.00</span>
               </>
             ) : (
               <span className="text-lg text-slate-400 font-semibold">No Data</span>
@@ -355,7 +356,7 @@ export function FormResultsConsole({ initialReport }: Props) {
               {gradeInfo.label}
             </span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">Institutional 4-point rating scale</p>
+          <p className="text-[11px] text-slate-500 mt-1">Institutional 5-point rating scale</p>
         </div>
       </div>
 
@@ -392,7 +393,13 @@ export function FormResultsConsole({ initialReport }: Props) {
                 {report.facultyGrids.map((fg, idx) => {
                   const score = fg.report.compositeAverageScore;
                   const scoreColor =
-                    score >= 3.0 ? 'text-emerald-700 font-bold' : score >= 2.0 ? 'text-amber-700 font-bold' : 'text-red-700 font-bold';
+                    score >= 4.0
+                      ? 'text-indigo-700 font-bold'
+                      : score >= 3.0
+                      ? 'text-emerald-700 font-bold'
+                      : score >= 2.0
+                      ? 'text-amber-700 font-bold'
+                      : 'text-red-700 font-bold';
 
                   return (
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
@@ -404,15 +411,21 @@ export function FormResultsConsole({ initialReport }: Props) {
                         {fg.report.validResponses}
                       </td>
                       <td className={`py-3 px-3 text-center ${scoreColor}`}>
-                        {fg.report.hasData ? `${score.toFixed(2)} / 4.00` : 'No Data'}
+                        {fg.report.hasData ? `${score.toFixed(2)} / 5.00` : 'No Data'}
                       </td>
                       <td className="py-3 px-3">
                         <div className="w-36 bg-slate-100 rounded-full h-2 overflow-hidden">
                           <div
                             className={`h-2 rounded-full ${
-                              score >= 3.0 ? 'bg-emerald-500' : score >= 2.0 ? 'bg-amber-500' : 'bg-red-500'
+                              score >= 4.0
+                                ? 'bg-indigo-500'
+                                : score >= 3.0
+                                ? 'bg-emerald-500'
+                                : score >= 2.0
+                                ? 'bg-amber-500'
+                                : 'bg-red-500'
                             }`}
-                            style={{ width: `${fg.report.hasData ? (score / 4) * 100 : 0}%` }}
+                            style={{ width: `${fg.report.hasData ? (score / 5) * 100 : 0}%` }}
                           />
                         </div>
                       </td>
@@ -439,7 +452,7 @@ export function FormResultsConsole({ initialReport }: Props) {
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-3">
           <div className="border-b border-slate-100 pb-3">
             <h3 className="text-sm font-bold text-slate-900">
-              Evaluation Parameter Scores (1.00 — 4.00)
+              Evaluation Parameter Scores (1.00 — 5.00)
             </h3>
             <p className="text-xs text-slate-500">
               Weighted average rating calculated across valid student submissions.
@@ -501,7 +514,9 @@ export function FormResultsConsole({ initialReport }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {currentReport.parameters.map(p => {
               const scoreColor =
-                p.averageScore >= 3.0
+                p.averageScore >= 4.0
+                  ? 'text-indigo-700 bg-indigo-50 border-indigo-200'
+                  : p.averageScore >= 3.0
                   ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
                   : p.averageScore >= 2.0
                   ? 'text-amber-700 bg-amber-50 border-amber-200'
@@ -524,7 +539,7 @@ export function FormResultsConsole({ initialReport }: Props) {
                     <span
                       className={`px-2.5 py-1 rounded-lg text-xs font-bold border shrink-0 ${scoreColor}`}
                     >
-                      {p.validCount > 0 ? `${p.averageScore.toFixed(2)} / 4.00` : 'N/A'}
+                      {p.validCount > 0 ? `${p.averageScore.toFixed(2)} / 5.00` : 'N/A'}
                     </span>
                   </div>
 
@@ -533,29 +548,34 @@ export function FormResultsConsole({ initialReport }: Props) {
                     <div
                       className="bg-bce-cobalt h-2 rounded-full transition-all"
                       style={{
-                        width: `${p.validCount > 0 ? (p.averageScore / 4) * 100 : 0}%`,
+                        width: `${p.validCount > 0 ? (p.averageScore / 5) * 100 : 0}%`,
                       }}
                     />
                   </div>
 
-                  {/* Tiers Breakdown Grid */}
-                  <div className="grid grid-cols-4 gap-1.5 text-center pt-1 border-t border-slate-200/60 text-[10px]">
-                    <div className="p-1.5 bg-white rounded-lg border border-slate-100">
+                  {/* 5 Tiers Breakdown Grid */}
+                  <div className="grid grid-cols-5 gap-1 text-center pt-1 border-t border-slate-200/60 text-[10px]">
+                    <div className="p-1 bg-white rounded-lg border border-slate-100">
+                      <span className="text-indigo-700 font-bold block">Excellent</span>
+                      <span className="text-slate-800 font-semibold">{p.excellentCount}</span>
+                      <span className="text-slate-400 block text-[9px]">({p.excellentPct}%)</span>
+                    </div>
+                    <div className="p-1 bg-white rounded-lg border border-slate-100">
                       <span className="text-emerald-700 font-bold block">V. Good</span>
                       <span className="text-slate-800 font-semibold">{p.veryGoodCount}</span>
                       <span className="text-slate-400 block text-[9px]">({p.veryGoodPct}%)</span>
                     </div>
-                    <div className="p-1.5 bg-white rounded-lg border border-slate-100">
+                    <div className="p-1 bg-white rounded-lg border border-slate-100">
                       <span className="text-blue-700 font-bold block">Good</span>
                       <span className="text-slate-800 font-semibold">{p.goodCount}</span>
                       <span className="text-slate-400 block text-[9px]">({p.goodPct}%)</span>
                     </div>
-                    <div className="p-1.5 bg-white rounded-lg border border-slate-100">
+                    <div className="p-1 bg-white rounded-lg border border-slate-100">
                       <span className="text-amber-700 font-bold block">Satisfactory</span>
                       <span className="text-slate-800 font-semibold">{p.satisfactoryCount}</span>
                       <span className="text-slate-400 block text-[9px]">({p.satisfactoryPct}%)</span>
                     </div>
-                    <div className="p-1.5 bg-white rounded-lg border border-slate-100">
+                    <div className="p-1 bg-white rounded-lg border border-slate-100">
                       <span className="text-red-700 font-bold block">Unsat.</span>
                       <span className="text-slate-800 font-semibold">{p.unsatisfactoryCount}</span>
                       <span className="text-slate-400 block text-[9px]">({p.unsatisfactoryPct}%)</span>

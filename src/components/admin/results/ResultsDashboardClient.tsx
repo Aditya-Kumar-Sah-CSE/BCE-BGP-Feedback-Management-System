@@ -338,7 +338,7 @@ export function ResultsDashboardClient({
             {report.hasData ? (
               <>
                 {report.averageOverallScore.toFixed(2)}{' '}
-                <span className="text-xs font-medium text-slate-400">/ 4.00</span>
+                <span className="text-xs font-medium text-slate-400">/ 5.00</span>
               </>
             ) : (
               <span className="text-lg text-slate-400 font-semibold">No Data</span>
@@ -346,7 +346,7 @@ export function ResultsDashboardClient({
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
             {report.hasData
-              ? `Composite Avg: ${report.compositeAverageScore.toFixed(2)}/4.00`
+              ? `Composite Avg: ${report.compositeAverageScore.toFixed(2)}/5.00`
               : 'Pending student responses'}
           </p>
         </div>
@@ -359,12 +359,12 @@ export function ResultsDashboardClient({
           </div>
           <div className="text-2xl font-bold text-slate-900 mt-2">
             {report.hasData ? (
-              `${(report.distribution.veryGoodPct + report.distribution.goodPct).toFixed(1)}%`
+              `${(report.distribution.excellentPct + report.distribution.veryGoodPct + report.distribution.goodPct).toFixed(1)}%`
             ) : (
               <span className="text-lg text-slate-400 font-semibold">0%</span>
             )}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">Very Good + Good ratings combined</p>
+          <p className="text-[11px] text-slate-500 mt-1">Excellent, Very Good &amp; Good ratings combined</p>
         </div>
       </div>
 
@@ -374,7 +374,7 @@ export function ResultsDashboardClient({
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-3">
           <div className="border-b border-slate-100 pb-3">
             <h3 className="text-sm font-bold text-slate-900">
-              Parameter-wise Average Rating (1.00 — 4.00)
+              Parameter-wise Average Rating (1.00 — 5.00)
             </h3>
             <p className="text-xs text-slate-500">
               Objective weighted score across all 8 canonical BCE parameters.
@@ -479,7 +479,7 @@ export function ResultsDashboardClient({
                         <span className="font-bold text-slate-900">{respCount}</span>
                         {score !== null && (
                           <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                            {score.toFixed(2)}/4.00
+                            {score.toFixed(2)}/5.00
                           </span>
                         )}
                       </td>
