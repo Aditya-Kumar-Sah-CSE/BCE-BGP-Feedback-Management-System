@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { toggleFeedbackFormStatusAction } from '@/app/admin/actions';
+import { toggleFeedbackFormStatusAction, deleteFeedbackFormAction } from '@/app/admin/actions';
 import {
   FileSpreadsheet,
   Plus,
@@ -15,6 +15,8 @@ import {
   ArrowRight,
   Sparkles,
   Search,
+  Trash2,
+  Loader2,
 } from 'lucide-react';
 import type {
   FeedbackForm,
@@ -45,6 +47,7 @@ export function FeedbackFormsTab({
   const [formsList, setFormsList] = useState<FeedbackForm[]>(feedbackForms);
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Search, filter, and pagination states
   const [searchTerm, setSearchTerm] = useState('');
@@ -84,6 +87,33 @@ export function FeedbackFormsTab({
           prev.map((f) => (f.id === form.id ? { ...f, status: form.status } : f))
         );
         setMessage({ type: 'error', text: res.error || 'Failed to update status.' });
+      }
+    });
+  };
+
+  // Safe delete feedback form
+  const handleDeleteForm = (form: FeedbackForm) => {
+    const isConfirmed = window.confirm(
+      `Are you sure you want to delete this feedback form?\n\n"${form.title}"\n\nThis will remove it permanently from the system. (Google Drive files will remain intact).`
+    );
+    if (!isConfirmed) return;
+
+    setMessage(null);
+    setDeletingId(form.id);
+
+    const previousForms = [...formsList];
+    // Optimistic UI update
+    setFormsList((prev) => prev.filter((f) => f.id !== form.id));
+
+    startTransition(async () => {
+      const res = await deleteFeedbackFormAction(form.id);
+      setDeletingId(null);
+      if (res.success) {
+        setMessage({ type: 'success', text: `Form "${form.title}" deleted successfully.` });
+      } else {
+        // Rollback on failure
+        setFormsList(previousForms);
+        setMessage({ type: 'error', text: res.error || 'Failed to delete feedback form.' });
       }
     });
   };
@@ -265,10 +295,23 @@ export function FeedbackFormsTab({
                         )}
                       </td>
                       <td className="px-5 py-3.5">
-                        <div className="font-medium text-slate-800">{faculty?.name || 'Faculty'}</div>
-                        <div className="text-slate-500 text-[11px]">
-                          {subject?.name || 'Subject'} {subject?.code ? `(${subject.code})` : ''}
-                        </div>
+                        {form.form_type === 'SEMESTER_FEEDBACK' ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                              Multi-Faculty Grid
+                            </span>
+                            <div className="text-slate-500 text-[11px] mt-0.5">
+                              All Semester Assigned Courses
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="font-medium text-slate-800">{faculty?.name || 'Faculty'}</div>
+                            <div className="text-slate-500 text-[11px]">
+                              {subject?.name || 'Subject'} {subject?.code ? `(${subject.code})` : ''}
+                            </div>
+                          </div>
+                        )}
                       </td>
                       <td className="px-5 py-3.5 text-slate-500">
                         {branch?.code || 'Branch'} • {semester?.name || 'Sem'}
@@ -330,7 +373,7 @@ export function FeedbackFormsTab({
                         </div>
                       </td>
                       <td className="px-5 py-3.5 text-right">
-                        <div className="inline-flex items-center gap-2">
+                        <div className="inline-flex items-center gap-1.5">
                           <Link
                             href={`/admin/dashboard/forms/${form.id}`}
                             className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 hover:text-bce-cobalt bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1"
@@ -340,7 +383,7 @@ export function FeedbackFormsTab({
                           </Link>
                           <button
                             onClick={() => handleToggleStatus(form)}
-                            disabled={isPending}
+                            disabled={isPending || deletingId === form.id}
                             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
                               isPublished
                                 ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
@@ -348,6 +391,19 @@ export function FeedbackFormsTab({
                             }`}
                           >
                             {isPublished ? 'Unpublish' : 'Publish'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteForm(form)}
+                            disabled={isPending || deletingId === form.id}
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-rose-600 transition-all inline-flex items-center gap-1 disabled:opacity-50"
+                            title="Delete Form"
+                          >
+                            {deletingId === form.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3 h-3" />
+                            )}
+                            <span>Delete</span>
                           </button>
                         </div>
                       </td>

@@ -6,7 +6,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
  */
 export function createAdminClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://cblbvsvftltothhrzehw.supabase.co';
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!serviceKey) {
     return null;

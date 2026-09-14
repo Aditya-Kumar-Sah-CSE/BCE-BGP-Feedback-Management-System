@@ -96,6 +96,21 @@ export interface AdminRequest {
   updated_at?: string;
 }
 
+export interface FeedbackFormItem {
+  id: string;
+  form_id: string;
+  faculty_id: string;
+  subject_id: string;
+  assignment_id?: string | null;
+  grid_title: string;
+  order_index: number;
+  created_at: string;
+  // joined relations
+  faculty?: Faculty;
+  subject?: Subject;
+  assignment?: FacultySubjectAssignment;
+}
+
 export interface FeedbackForm {
   id: string;
   title: string;
@@ -103,9 +118,9 @@ export interface FeedbackForm {
   academic_year_id: string;
   branch_id: string;
   semester_id: string;
-  faculty_id: string;
-  subject_id: string;
-  form_type: string;
+  faculty_id?: string | null;
+  subject_id?: string | null;
+  form_type: 'FACULTY_FEEDBACK' | 'SEMESTER_FEEDBACK' | 'FACULTY_SPECIFIC' | 'BRANCH_SPECIFIC' | string;
   status: FeedbackFormStatus;
   slug?: string | null;
   google_form_id?: string | null;
@@ -129,6 +144,7 @@ export interface FeedbackForm {
   academic_year?: AcademicYear;
   branch?: Branch;
   semester?: Semester;
+  items?: FeedbackFormItem[];
 }
 
 export interface AuditLog {
@@ -142,4 +158,24 @@ export interface AuditLog {
   metadata?: Record<string, unknown>;
   created_at: string;
 }
+
+export type EmailDeliveryStatus = 'PENDING' | 'SENT' | 'FAILED' | 'EMAIL_NOT_CONFIGURED';
+
+export interface FeedbackResponseRecord {
+  id: string;
+  form_id: string;
+  google_response_id: string;
+  student_email: string;
+  student_name?: string | null;
+  registration_number?: string | null;
+  submitted_at?: string | null;
+  synced_at: string;
+  confirmation_email_sent_at?: string | null;
+  email_status: EmailDeliveryStatus | string;
+  created_at: string;
+  updated_at: string;
+  // joined relations
+  form?: FeedbackForm;
+}
+
 

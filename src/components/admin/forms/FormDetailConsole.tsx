@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   FeedbackForm,
   FeedbackFormStatus,
@@ -10,6 +11,7 @@ import {
 import {
   updateFormStatusAction,
   syncFormResponsesAction,
+  deleteFeedbackFormAction,
 } from '@/app/admin/forms/actions';
 import { BCE_FEEDBACK_PARAMETERS } from '@/lib/google/template';
 import {
@@ -29,6 +31,7 @@ import {
   GraduationCap,
   Activity,
   BarChart3,
+  Trash2,
 } from 'lucide-react';
 
 interface Props {
@@ -39,6 +42,7 @@ interface Props {
 
 
 export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEmail }: Props) {
+  const router = useRouter();
   const [form, setForm] = useState<FeedbackForm>(initialForm);
   const [isPending, startTransition] = useTransition();
   const [copiedUrl, setCopiedUrl] = useState(false);
@@ -82,6 +86,23 @@ export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEma
         });
       } else {
         setMessage({ type: 'error', text: res.error || 'Failed to sync responses.' });
+      }
+    });
+  };
+
+  const handleDeleteForm = () => {
+    const isConfirmed = window.confirm(
+      `Are you sure you want to delete this feedback form?\n\n"${form.title}"\n\nThis will permanently remove the form from the BCE portal. (Google Drive files remain intact).`
+    );
+    if (!isConfirmed) return;
+
+    setMessage(null);
+    startTransition(async () => {
+      const res = await deleteFeedbackFormAction(form.id);
+      if (res.success) {
+        router.push('/admin/dashboard/forms');
+      } else {
+        setMessage({ type: 'error', text: res.error || 'Failed to delete feedback form.' });
       }
     });
   };
@@ -291,6 +312,16 @@ export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEma
                 <span>Restore to Draft</span>
               </button>
             )}
+
+            <button
+              onClick={handleDeleteForm}
+              disabled={isPending}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-xs"
+              title="Delete this feedback form permanently"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Delete Form</span>
+            </button>
           </div>
         </div>
       </div>
@@ -469,42 +500,75 @@ export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEma
             </h4>
 
             <div className="space-y-2 text-xs text-slate-700">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-400">Faculty:</span>
-                <span className="font-bold text-slate-900">{form.faculty?.name || '—'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-400">Designation:</span>
-                <span>{form.faculty?.designation || '—'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-400">Department:</span>
-                <span>{form.faculty?.department || '—'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-400">Subject:</span>
-                <span className="font-semibold text-slate-900">{form.subject?.name || '—'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-400">Subject Code:</span>
-                <span className="font-mono text-slate-800">{form.subject?.code || '—'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-400">Branch:</span>
-                <span>{form.branch?.name || '—'} ({form.branch?.code})</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-400">Semester:</span>
-                <span>{form.semester?.name || '—'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-400">Academic Session:</span>
-                <span className="font-semibold">{form.academic_year?.name || '—'}</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-slate-400">Form Type:</span>
-                <span className="font-mono text-[11px] font-semibold">{form.form_type}</span>
-              </div>
+              {form.form_type === 'SEMESTER_FEEDBACK' ? (
+                <>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Scope:</span>
+                    <span className="font-bold text-purple-900 bg-purple-50 px-2 py-0.5 rounded">Multi-Faculty Semester</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Branch:</span>
+                    <span className="font-semibold text-slate-900">{form.branch?.name || '—'} ({form.branch?.code})</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Semester:</span>
+                    <span className="font-semibold text-slate-900">{form.semester?.name || '—'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Academic Session:</span>
+                    <span className="font-semibold text-slate-900">{form.academic_year?.name || '—'}</span>
+                  </div>
+                  <div className="py-1">
+                    <span className="text-slate-400 block mb-1">Evaluated Courses ({form.items?.length || 0}):</span>
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {(form.items || []).map((it, idx) => (
+                        <div key={idx} className="p-1.5 bg-slate-50 rounded text-[11px] flex justify-between">
+                          <span className="font-medium text-slate-800">{it.grid_title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Faculty:</span>
+                    <span className="font-bold text-slate-900">{form.faculty?.name || '—'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Designation:</span>
+                    <span>{form.faculty?.designation || '—'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Department:</span>
+                    <span>{form.faculty?.department || '—'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Subject:</span>
+                    <span className="font-semibold text-slate-900">{form.subject?.name || '—'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Subject Code:</span>
+                    <span className="font-mono text-slate-800">{form.subject?.code || '—'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Branch:</span>
+                    <span>{form.branch?.name || '—'} ({form.branch?.code})</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Semester:</span>
+                    <span>{form.semester?.name || '—'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Academic Session:</span>
+                    <span className="font-semibold">{form.academic_year?.name || '—'}</span>
+                  </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-slate-400">Form Type:</span>
+                    <span className="font-mono text-[11px] font-semibold">{form.form_type}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

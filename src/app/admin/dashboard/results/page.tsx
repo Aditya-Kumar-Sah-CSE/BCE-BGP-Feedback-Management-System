@@ -63,11 +63,13 @@ export default async function AdminResultsHubPage() {
     compositeAverageScore: 0,
     parameters: [],
     distribution: {
+      excellentCount: 0,
       veryGoodCount: 0,
       goodCount: 0,
       satisfactoryCount: 0,
       unsatisfactoryCount: 0,
       totalValidRatings: 0,
+      excellentPct: 0,
       veryGoodPct: 0,
       goodPct: 0,
       satisfactoryPct: 0,

@@ -43,6 +43,7 @@ export function calculateFormAnalytics(params: {
   let totalAllRatingsCount = 0;
 
   // Track global rating counts across all questions
+  let globalExcellent = 0;
   let globalVeryGood = 0;
   let globalGood = 0;
   let globalSatisfactory = 0;
@@ -51,6 +52,7 @@ export function calculateFormAnalytics(params: {
   // Compute metrics for each of the 8 canonical parameters
   const parameters: ParameterMetrics[] = BCE_FEEDBACK_PARAMETERS.map(param => {
     const pId = param.id;
+    let exCount = 0;
     let vgCount = 0;
     let gCount = 0;
     let sCount = 0;
@@ -58,30 +60,34 @@ export function calculateFormAnalytics(params: {
 
     for (const resp of responses) {
       const rating = resp.ratings[pId];
-      if (rating === 'Very Good') vgCount++;
+      if (rating === 'Excellent') exCount++;
+      else if (rating === 'Very Good') vgCount++;
       else if (rating === 'Good') gCount++;
       else if (rating === 'Satisfactory') sCount++;
       else if (rating === 'Unsatisfactory') uCount++;
     }
 
-    const validCount = vgCount + gCount + sCount + uCount;
+    const validCount = exCount + vgCount + gCount + sCount + uCount;
     const unansweredCount = totalResponses - validCount;
 
     // Accumulate global counts
+    globalExcellent += exCount;
     globalVeryGood += vgCount;
     globalGood += gCount;
     globalSatisfactory += sCount;
     globalUnsatisfactory += uCount;
 
+    const excellentPct = validCount > 0 ? Number(((exCount / validCount) * 100).toFixed(1)) : 0;
     const veryGoodPct = validCount > 0 ? Number(((vgCount / validCount) * 100).toFixed(1)) : 0;
     const goodPct = validCount > 0 ? Number(((gCount / validCount) * 100).toFixed(1)) : 0;
     const satisfactoryPct = validCount > 0 ? Number(((sCount / validCount) * 100).toFixed(1)) : 0;
     const unsatisfactoryPct = validCount > 0 ? Number(((uCount / validCount) * 100).toFixed(1)) : 0;
 
-    // Weighted average: (VG*4 + G*3 + S*2 + U*1) / validCount
+    // Weighted average: (EX*5 + VG*4 + G*3 + S*2 + U*1) / validCount
     let averageScore = 0;
     if (validCount > 0) {
       const scoreSum =
+        exCount * RATING_WEIGHTS['Excellent'] +
         vgCount * RATING_WEIGHTS['Very Good'] +
         gCount * RATING_WEIGHTS['Good'] +
         sCount * RATING_WEIGHTS['Satisfactory'] +
@@ -95,7 +101,7 @@ export function calculateFormAnalytics(params: {
     // Factual interpretation strictly derived from data
     const interpretation =
       validCount > 0
-        ? `${param.title} received an average score of ${averageScore.toFixed(2)} based on ${validCount} valid response${
+        ? `${param.title} received an average score of ${averageScore.toFixed(2)}/5.00 based on ${validCount} valid response${
             validCount > 1 ? 's' : ''
           }.`
         : `No valid response data recorded for ${param.title}.`;
@@ -104,12 +110,14 @@ export function calculateFormAnalytics(params: {
       parameterId: pId,
       title: param.title,
       description: param.description || '',
+      excellentCount: exCount,
       veryGoodCount: vgCount,
       goodCount: gCount,
       satisfactoryCount: sCount,
       unsatisfactoryCount: uCount,
       validCount,
       unansweredCount,
+      excellentPct,
       veryGoodPct,
       goodPct,
       satisfactoryPct,
@@ -121,14 +129,16 @@ export function calculateFormAnalytics(params: {
 
   // Overall distribution
   const totalValidRatings =
-    globalVeryGood + globalGood + globalSatisfactory + globalUnsatisfactory;
+    globalExcellent + globalVeryGood + globalGood + globalSatisfactory + globalUnsatisfactory;
 
   const distribution: OverallDistribution = {
+    excellentCount: globalExcellent,
     veryGoodCount: globalVeryGood,
     goodCount: globalGood,
     satisfactoryCount: globalSatisfactory,
     unsatisfactoryCount: globalUnsatisfactory,
     totalValidRatings,
+    excellentPct: totalValidRatings > 0 ? Number(((globalExcellent / totalValidRatings) * 100).toFixed(1)) : 0,
     veryGoodPct: totalValidRatings > 0 ? Number(((globalVeryGood / totalValidRatings) * 100).toFixed(1)) : 0,
     goodPct: totalValidRatings > 0 ? Number(((globalGood / totalValidRatings) * 100).toFixed(1)) : 0,
     satisfactoryPct: totalValidRatings > 0 ? Number(((globalSatisfactory / totalValidRatings) * 100).toFixed(1)) : 0,
@@ -189,11 +199,11 @@ export function aggregateAnalytics(
   // Sum up raw parameter metrics
   const paramAccumulators: Record<
     number,
-    { vg: number; g: number; s: number; u: number; unanswered: number }
+    { ex: number; vg: number; g: number; s: number; u: number; unanswered: number }
   > = {};
 
   for (let i = 1; i <= 8; i++) {
-    paramAccumulators[i] = { vg: 0, g: 0, s: 0, u: 0, unanswered: 0 };
+    paramAccumulators[i] = { ex: 0, vg: 0, g: 0, s: 0, u: 0, unanswered: 0 };
   }
 
   for (const report of formReports) {
@@ -202,6 +212,7 @@ export function aggregateAnalytics(
 
     for (const p of report.parameters) {
       if (paramAccumulators[p.parameterId]) {
+        paramAccumulators[p.parameterId].ex += p.excellentCount || 0;
         paramAccumulators[p.parameterId].vg += p.veryGoodCount;
         paramAccumulators[p.parameterId].g += p.goodCount;
         paramAccumulators[p.parameterId].s += p.satisfactoryCount;
@@ -213,6 +224,7 @@ export function aggregateAnalytics(
 
   let totalAllScores = 0;
   let totalAllRatings = 0;
+  let globalExcellent = 0;
   let globalVeryGood = 0;
   let globalGood = 0;
   let globalSatisfactory = 0;
@@ -220,14 +232,16 @@ export function aggregateAnalytics(
 
   const parameters: ParameterMetrics[] = BCE_FEEDBACK_PARAMETERS.map(param => {
     const pId = param.id;
-    const acc = paramAccumulators[pId] || { vg: 0, g: 0, s: 0, u: 0, unanswered: 0 };
-    const validCount = acc.vg + acc.g + acc.s + acc.u;
+    const acc = paramAccumulators[pId] || { ex: 0, vg: 0, g: 0, s: 0, u: 0, unanswered: 0 };
+    const validCount = acc.ex + acc.vg + acc.g + acc.s + acc.u;
 
+    globalExcellent += acc.ex;
     globalVeryGood += acc.vg;
     globalGood += acc.g;
     globalSatisfactory += acc.s;
     globalUnsatisfactory += acc.u;
 
+    const excellentPct = validCount > 0 ? Number(((acc.ex / validCount) * 100).toFixed(1)) : 0;
     const veryGoodPct = validCount > 0 ? Number(((acc.vg / validCount) * 100).toFixed(1)) : 0;
     const goodPct = validCount > 0 ? Number(((acc.g / validCount) * 100).toFixed(1)) : 0;
     const satisfactoryPct = validCount > 0 ? Number(((acc.s / validCount) * 100).toFixed(1)) : 0;
@@ -236,6 +250,7 @@ export function aggregateAnalytics(
     let averageScore = 0;
     if (validCount > 0) {
       const scoreSum =
+        acc.ex * RATING_WEIGHTS['Excellent'] +
         acc.vg * RATING_WEIGHTS['Very Good'] +
         acc.g * RATING_WEIGHTS['Good'] +
         acc.s * RATING_WEIGHTS['Satisfactory'] +
@@ -248,19 +263,21 @@ export function aggregateAnalytics(
 
     const interpretation =
       validCount > 0
-        ? `${param.title} achieved an institutional average of ${averageScore.toFixed(2)} across ${validCount} valid responses.`
+        ? `${param.title} achieved an institutional average of ${averageScore.toFixed(2)}/5.00 across ${validCount} valid responses.`
         : `No valid response data recorded for ${param.title}.`;
 
     return {
       parameterId: pId,
       title: param.title,
       description: param.description || '',
+      excellentCount: acc.ex,
       veryGoodCount: acc.vg,
       goodCount: acc.g,
       satisfactoryCount: acc.s,
       unsatisfactoryCount: acc.u,
       validCount,
       unansweredCount: acc.unanswered,
+      excellentPct,
       veryGoodPct,
       goodPct,
       satisfactoryPct,
@@ -271,14 +288,16 @@ export function aggregateAnalytics(
   });
 
   const totalValidRatings =
-    globalVeryGood + globalGood + globalSatisfactory + globalUnsatisfactory;
+    globalExcellent + globalVeryGood + globalGood + globalSatisfactory + globalUnsatisfactory;
 
   const distribution: OverallDistribution = {
+    excellentCount: globalExcellent,
     veryGoodCount: globalVeryGood,
     goodCount: globalGood,
     satisfactoryCount: globalSatisfactory,
     unsatisfactoryCount: globalUnsatisfactory,
     totalValidRatings,
+    excellentPct: totalValidRatings > 0 ? Number(((globalExcellent / totalValidRatings) * 100).toFixed(1)) : 0,
     veryGoodPct: totalValidRatings > 0 ? Number(((globalVeryGood / totalValidRatings) * 100).toFixed(1)) : 0,
     goodPct: totalValidRatings > 0 ? Number(((globalGood / totalValidRatings) * 100).toFixed(1)) : 0,
     satisfactoryPct: totalValidRatings > 0 ? Number(((globalSatisfactory / totalValidRatings) * 100).toFixed(1)) : 0,

@@ -30,6 +30,9 @@ export function normalizeRatingValue(val: string | number | undefined | null): R
   }
 
   // Exact / substring matching
+  if (str === 'excellent' || str.includes('excellent') || str === 'ex' || str === '5') {
+    return 'Excellent';
+  }
   if (str === 'very good' || str.includes('very good') || str === 'vg' || str === '4') {
     return 'Very Good';
   }
@@ -206,3 +209,158 @@ export function normalizeSheetRows(
 
   return results;
 }
+
+export interface DetectedGridInfo {
+  gridTitle: string;
+  facultyName: string;
+  subjectName: string;
+  subjectCode: string;
+  paramColIndices: Record<number, number>; // 1..8 -> colIndex
+}
+
+/**
+ * Detects multiple choice grids in sheet headers.
+ * Header format: `<Grid Title> [<Row Question Title>]`
+ */
+export function detectMultiGrids(headers: string[]): DetectedGridInfo[] {
+  const gridsMap = new Map<string, Record<number, number>>();
+
+  headers.forEach((header, colIdx) => {
+    const trimmed = header.trim();
+    // Matches: "Engineering Mechanics — Dr. Raj Anwit [1. Syllabus Coverage & Course Delivery]"
+    const bracketMatch = trimmed.match(/^(.*?)\s*\[(.*?)\]$/);
+    if (bracketMatch) {
+      const gridTitle = bracketMatch[1].trim();
+      const questionText = bracketMatch[2].trim().toLowerCase();
+
+      // Find which parameter (1..8) matches questionText
+      let pIdx = BCE_FEEDBACK_PARAMETERS.findIndex(
+        p => questionText.includes(p.title.toLowerCase()) || p.title.toLowerCase().includes(questionText)
+      );
+
+      if (pIdx === -1) {
+        // Fallback: check leading number e.g. "1." or "2:"
+        const numMatch = questionText.match(/^([1-8])[\.\:\s\-]/);
+        if (numMatch) {
+          pIdx = parseInt(numMatch[1], 10) - 1;
+        }
+      }
+
+      if (pIdx !== -1) {
+        const paramId = pIdx + 1;
+        if (!gridsMap.has(gridTitle)) {
+          gridsMap.set(gridTitle, {});
+        }
+        gridsMap.get(gridTitle)![paramId] = colIdx;
+      }
+    }
+  });
+
+  const result: DetectedGridInfo[] = [];
+
+  for (const [gridTitle, paramColIndices] of gridsMap.entries()) {
+    let subjectName = gridTitle;
+    let subjectCode = '';
+    let facultyName = '';
+
+    if (gridTitle.includes('—')) {
+      const parts = gridTitle.split('—').map(s => s.trim());
+      subjectName = parts[0] || '';
+      facultyName = parts[1] || '';
+    } else if (gridTitle.includes(' - ')) {
+      const parts = gridTitle.split(' - ').map(s => s.trim());
+      subjectName = parts[0] || '';
+      facultyName = parts[1] || '';
+    }
+
+    const codeMatch = subjectName.match(/^(.*?)\s*\((.*?)\)$/);
+    if (codeMatch) {
+      subjectName = codeMatch[1].trim();
+      subjectCode = codeMatch[2].trim();
+    }
+
+    result.push({
+      gridTitle,
+      facultyName,
+      subjectName,
+      subjectCode,
+      paramColIndices,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Normalizes responses for one specific faculty-subject grid within a multi-grid sheet.
+ */
+export function normalizeSheetRowsForSpecificGrid(
+  headers: string[],
+  rawRows: string[][],
+  paramColIndices: Record<number, number>
+): CanonicalResponseRow[] {
+  const mapping = detectColumnMapping(headers);
+  const results: CanonicalResponseRow[] = [];
+
+  rawRows.forEach((row, rowIdx) => {
+    if (!row || row.length === 0 || row.every(cell => !cell || !cell.trim())) {
+      return;
+    }
+
+    const timestamp =
+      mapping.timestampColIndex !== -1 && row[mapping.timestampColIndex]
+        ? row[mapping.timestampColIndex].trim()
+        : '';
+
+    const responseId =
+      mapping.responseIdColIndex !== -1 && row[mapping.responseIdColIndex]
+        ? row[mapping.responseIdColIndex].trim()
+        : `row-${rowIdx + 1}`;
+
+    const studentName =
+      mapping.studentNameColIndex !== -1 && row[mapping.studentNameColIndex]
+        ? row[mapping.studentNameColIndex].trim()
+        : undefined;
+
+    const registrationNumber =
+      mapping.regNoColIndex !== -1 && row[mapping.regNoColIndex]
+        ? row[mapping.regNoColIndex].trim()
+        : undefined;
+
+    const comments =
+      mapping.commentsColIndex !== -1 && row[mapping.commentsColIndex]
+        ? row[mapping.commentsColIndex].trim()
+        : undefined;
+
+    const ratings: Record<number, RatingOption | null> = {};
+    let validRatingsCount = 0;
+
+    for (let pId = 1; pId <= 8; pId++) {
+      const colIdx = paramColIndices[pId];
+      if (colIdx !== undefined && colIdx < row.length) {
+        const normalizedVal = normalizeRatingValue(row[colIdx]);
+        ratings[pId] = normalizedVal;
+        if (normalizedVal !== null) {
+          validRatingsCount++;
+        }
+      } else {
+        ratings[pId] = null;
+      }
+    }
+
+    const isValid = validRatingsCount > 0;
+
+    results.push({
+      timestamp,
+      responseId,
+      studentName,
+      registrationNumber,
+      comments,
+      ratings,
+      isValid,
+    });
+  });
+
+  return results;
+}
+

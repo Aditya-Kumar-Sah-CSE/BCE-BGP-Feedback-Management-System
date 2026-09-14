@@ -22,6 +22,7 @@ interface ParameterChartProps {
 }
 
 const RATING_COLORS = {
+  excellent: '#6366F1', // Indigo 500
   veryGood: '#10B981', // Emerald 500
   good: '#3B82F6', // Blue 500
   satisfactory: '#F59E0B', // Amber 500
@@ -29,7 +30,7 @@ const RATING_COLORS = {
 };
 
 /**
- * Parameter-wise Average Score Bar Chart (1.00 to 4.00)
+ * Parameter-wise Average Score Bar Chart (1.00 to 5.00)
  */
 export function ParameterScoreBarChart({ parameters, hasData }: ParameterChartProps) {
   if (!hasData || parameters.every(p => p.validCount === 0)) {
@@ -64,8 +65,8 @@ export function ParameterScoreBarChart({ parameters, hasData }: ParameterChartPr
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} horizontal={false} />
           <XAxis
             type="number"
-            domain={[0, 4]}
-            ticks={[0, 1, 2, 3, 4]}
+            domain={[0, 5]}
+            ticks={[0, 1, 2, 3, 4, 5]}
             stroke="#94A3B8"
             fontSize={12}
             tickFormatter={val => `${val}.0`}
@@ -87,7 +88,7 @@ export function ParameterScoreBarChart({ parameters, hasData }: ParameterChartPr
                     <p className="font-semibold text-white mb-1">{item.fullName}</p>
                     <p className="text-emerald-400">
                       Average Score:{' '}
-                      <span className="font-bold text-white">{item.score.toFixed(2)} / 4.00</span>
+                      <span className="font-bold text-white">{item.score.toFixed(2)} / 5.00</span>
                     </p>
                     <p className="text-slate-400 mt-1">Valid Responses: {item.validCount}</p>
                   </div>
@@ -99,7 +100,9 @@ export function ParameterScoreBarChart({ parameters, hasData }: ParameterChartPr
           <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={18}>
             {data.map((entry, index) => {
               const color =
-                entry.score >= 3.0
+                entry.score >= 4.0
+                  ? RATING_COLORS.excellent
+                  : entry.score >= 3.0
                   ? RATING_COLORS.veryGood
                   : entry.score >= 2.0
                   ? RATING_COLORS.satisfactory
@@ -137,6 +140,7 @@ export function ParameterDistributionStackedChart({
   const data = parameters.map(p => ({
     name: p.title.length > 16 ? `${p.title.slice(0, 14)}…` : p.title,
     fullName: `${p.parameterId}. ${p.title}`,
+    Excellent: p.excellentPct,
     'Very Good': p.veryGoodPct,
     Good: p.goodPct,
     Satisfactory: p.satisfactoryPct,
@@ -175,6 +179,9 @@ export function ParameterDistributionStackedChart({
                     <p className="font-semibold text-white border-b border-slate-800 pb-1">
                       {item?.fullName || label}
                     </p>
+                    <p className="text-indigo-400">
+                      Excellent: <span className="font-semibold">{item?.Excellent}%</span>
+                    </p>
                     <p className="text-emerald-400">
                       Very Good: <span className="font-semibold">{item?.['Very Good']}%</span>
                     </p>
@@ -200,6 +207,7 @@ export function ParameterDistributionStackedChart({
             verticalAlign="top"
             wrapperStyle={{ paddingBottom: '12px', fontSize: '12px' }}
           />
+          <Bar dataKey="Excellent" stackId="a" fill={RATING_COLORS.excellent} />
           <Bar dataKey="Very Good" stackId="a" fill={RATING_COLORS.veryGood} />
           <Bar dataKey="Good" stackId="a" fill={RATING_COLORS.good} />
           <Bar dataKey="Satisfactory" stackId="a" fill={RATING_COLORS.satisfactory} />
@@ -235,6 +243,7 @@ export function OverallDonutChart({
   }
 
   const pieData = [
+    { name: 'Excellent', value: distribution.excellentCount, pct: distribution.excellentPct, color: RATING_COLORS.excellent },
     { name: 'Very Good', value: distribution.veryGoodCount, pct: distribution.veryGoodPct, color: RATING_COLORS.veryGood },
     { name: 'Good', value: distribution.goodCount, pct: distribution.goodPct, color: RATING_COLORS.good },
     { name: 'Satisfactory', value: distribution.satisfactoryCount, pct: distribution.satisfactoryPct, color: RATING_COLORS.satisfactory },
@@ -325,7 +334,7 @@ export function FacultyComparisonBarChart({
         <BarChart data={data} margin={{ top: 20, right: 30, left: -10, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
           <XAxis dataKey="name" stroke="#94A3B8" fontSize={11} interval={0} />
-          <YAxis domain={[0, 4]} ticks={[0, 1, 2, 3, 4]} stroke="#94A3B8" fontSize={12} />
+          <YAxis domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} stroke="#94A3B8" fontSize={12} />
           <Tooltip
             content={({ active, payload }) => {
               if (active && payload && payload.length) {
@@ -335,7 +344,7 @@ export function FacultyComparisonBarChart({
                     <p className="font-semibold text-white">{item.fullName}</p>
                     <p className="text-slate-400">{item.subject}</p>
                     <p className="text-emerald-400">
-                      Average Rating: <span className="font-bold text-white">{item.score.toFixed(2)} / 4.00</span>
+                      Average Rating: <span className="font-bold text-white">{item.score.toFixed(2)} / 5.00</span>
                     </p>
                     <p className="text-slate-400">Valid Submissions: {item.responses}</p>
                   </div>
@@ -347,7 +356,9 @@ export function FacultyComparisonBarChart({
           <Bar dataKey="score" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={28}>
             {data.map((entry, index) => {
               const color =
-                entry.score >= 3.0
+                entry.score >= 4.0
+                  ? RATING_COLORS.excellent
+                  : entry.score >= 3.0
                   ? RATING_COLORS.veryGood
                   : entry.score >= 2.0
                   ? RATING_COLORS.satisfactory

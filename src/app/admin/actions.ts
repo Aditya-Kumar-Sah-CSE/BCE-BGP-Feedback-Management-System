@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAdminSession, SUPER_ADMIN_EMAIL } from '@/lib/auth/admin-auth';
 import { ACADEMIC_CACHE_TAG } from '@/lib/supabase/academic-cache';
+import { deleteFeedbackFormAction as deleteFormInternal } from './forms/actions';
 
 async function getAdminDb() {
   return createAdminClient() || await createClient();
@@ -954,6 +955,10 @@ export async function toggleFeedbackFormStatusAction(formId: string, status: str
   revalidatePath('/admin/dashboard');
   revalidatePath('/');
   return { success: true };
+}
+
+export async function deleteFeedbackFormAction(formId: string) {
+  return deleteFormInternal(formId);
 }
 
 // -------------------------------------------------------------

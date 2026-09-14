@@ -74,6 +74,21 @@ export default async function FeedbackFormDetailPage({
     }
   }
 
+  // Fetch form items if multi-faculty
+  const { data: formItems } = await supabase
+    .from('feedback_form_items')
+    .select(`
+      *,
+      faculty:faculties(*),
+      subject:subjects(*)
+    `)
+    .eq('form_id', id)
+    .order('order_index');
+
+  if (form) {
+    form.items = formItems || [];
+  }
+
   // Fetch audit logs for this form
   const { data: auditLogs } = await supabase
     .from('audit_logs')

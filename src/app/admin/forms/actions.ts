@@ -17,8 +17,11 @@ import { syncFormResponsesToSheet } from '@/lib/google/sync';
 import {
   generateFeedbackFormTitle,
   generateFeedbackFormDescription,
+  generateSemesterFormTitle,
+  generateSemesterFormDescription,
+  MultiFacultyGridItem,
 } from '@/lib/google/template';
-import { isValidUUID, createFormPayloadSchema, formStatusSchema } from '@/lib/validation';
+import { isValidUUID, createFormPayloadSchema, formStatusSchema, CreateFormPayload } from '@/lib/validation';
 
 // Helper: Record audit logs
 async function logAuditAction(
@@ -192,299 +195,24 @@ export async function getFeedbackFormByIdAction(formId: string) {
     auditLogs: logs || [],
   };
 }
-
-export interface CreateFormPayload {
-  academicYearId: string;
-  branchId: string;
-  semesterId: string;
-  facultyId: string;
-  subjectId: string;
-  formType: 'FACULTY_SPECIFIC' | 'BRANCH_SPECIFIC';
-}
-
 /**
  * 6-Step Admin Form Generation Flow
- * Generates Google Form + 8 BCE questions, creates Google Sheet,
- * links responses (native or application-managed), records Supabase metadata and audit logs.
+ * Prepares and provisions feedback form (delegating to staged actions).
  */
 export async function createGoogleFeedbackFormAction(payload: CreateFormPayload) {
-  // 1. Authorization check
-  const session = await getAdminSession();
-  if (!session.isAuthenticated || !session.isActive) {
-    return { success: false, error: 'Unauthorized. Active admin session required.' };
+  const prepRes = await validateAndPrepareFormDraftAction(payload);
+  if (!prepRes.success || !prepRes.draftFormId) {
+    return { success: false, error: prepRes.error || 'Validation failed.' };
   }
 
-  // 2. Validate input payload
-  const validation = createFormPayloadSchema.safeParse(payload);
-  if (!validation.success) {
-    const issue = validation.error.issues[0];
-    return { success: false, error: issue ? issue.message : 'Invalid form creation parameters.' };
-  }
+  const provRes = await provisionGoogleFormAndSheetAction({
+    draftFormId: prepRes.draftFormId,
+    title: prepRes.title || 'Feedback Form',
+    description: prepRes.description || '',
+    items: (prepRes as any).validatedItems,
+  });
 
-  const adminId = session.admin?.id || session.user?.id || null;
-  const adminEmail = session.admin?.email || session.user?.email || '';
-
-  const supabase = await getAdminDb();
-
-  // 2. Validate Academic Relationships
-  // Fetch academic year, branch, semester, faculty, subject
-  const [
-    { data: academicYear },
-    { data: branch },
-    { data: semester },
-    { data: faculty },
-    { data: subject },
-  ] = await Promise.all([
-    supabase.from('academic_years').select('*').eq('id', payload.academicYearId).single(),
-    supabase.from('branches').select('*').eq('id', payload.branchId).single(),
-    supabase.from('semesters').select('*').eq('id', payload.semesterId).single(),
-    supabase.from('faculties').select('*').eq('id', payload.facultyId).single(),
-    supabase.from('subjects').select('*').eq('id', payload.subjectId).single(),
-  ]);
-
-  if (!academicYear || !academicYear.is_active) {
-    return { success: false, error: 'Selected Academic Year is invalid or inactive.' };
-  }
-  if (!branch || !branch.is_active) {
-    return { success: false, error: 'Selected Branch is invalid or inactive.' };
-  }
-  if (!semester || !semester.is_active) {
-    return { success: false, error: 'Selected Semester is invalid or inactive.' };
-  }
-  if (!faculty || !faculty.is_active) {
-    return { success: false, error: 'Selected Faculty is invalid or inactive.' };
-  }
-  if (!subject || !subject.is_active) {
-    return { success: false, error: 'Selected Subject is invalid or inactive.' };
-  }
-
-  // Validate Faculty-Subject assignment exists in this session
-  const { data: assignment } = await supabase
-    .from('faculty_subject_assignments')
-    .select('id')
-    .eq('academic_year_id', payload.academicYearId)
-    .eq('faculty_id', payload.facultyId)
-    .eq('subject_id', payload.subjectId)
-    .eq('is_active', true)
-    .maybeSingle();
-
-  if (!assignment) {
-    return {
-      success: false,
-      error: `Invalid assignment: ${faculty.name} is not assigned to teach ${subject.name} (${subject.code}) in ${academicYear.name}. Please assign them in Academic Management first.`,
-    };
-  }
-
-  // Idempotency check: Check if an active/draft form already exists for this exact combination
-  const { data: existingForm } = await supabase
-    .from('feedback_forms')
-    .select('id, status, title')
-    .eq('academic_year_id', payload.academicYearId)
-    .eq('branch_id', payload.branchId)
-    .eq('semester_id', payload.semesterId)
-    .eq('faculty_id', payload.facultyId)
-    .eq('subject_id', payload.subjectId)
-    .in('status', ['DRAFT', 'PUBLISHED'])
-    .maybeSingle();
-
-  if (existingForm) {
-    return {
-      success: false,
-      error: `A feedback form already exists for this faculty and subject in this session (${existingForm.title}, Status: ${existingForm.status}). Please edit or archive the existing form instead of creating a duplicate.`,
-    };
-  }
-
-  // Check Google API configuration
-  if (!isGoogleConfigured()) {
-    return {
-      success: false,
-      error:
-        'Google API credentials are not configured on the server. Please set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN (or GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) in .env.local.',
-    };
-  }
-
-  // 3. Generate Form Definitions
-  const metaInputs = {
-    facultyName: faculty.name,
-    subjectName: `${subject.name} (${subject.code})`,
-    semesterName: semester.name,
-    academicYearName: academicYear.name,
-    branchName: branch.name,
-  };
-
-  const title = generateFeedbackFormTitle(metaInputs);
-  const description = generateFeedbackFormDescription(metaInputs);
-
-  // Log start
-  await logAuditAction(
-    supabase,
-    { adminId, email: adminEmail },
-    'FORM_CREATE_STARTED',
-    'feedback_forms',
-    'pending',
-    `Initiated form generation for ${title}`
-  );
-
-  let googleFormResult;
-  let googleSheetResult;
-
-  try {
-    // 4 & 5. Concurrently create Google Form (+ 8 Questions) and connected Google Sheet (+ Headers)
-    const [formResult, sheetResult] = await Promise.all([
-      createGoogleFeedbackForm({ title, description }),
-      createFeedbackSpreadsheet({ title }),
-    ]);
-    googleFormResult = formResult;
-    googleSheetResult = sheetResult;
-
-    await Promise.all([
-      logAuditAction(
-        supabase,
-        { adminId, email: adminEmail },
-        'FORM_CREATED',
-        'feedback_forms',
-        googleFormResult.formId,
-        `Created Google Form (${googleFormResult.formId}) with 8 standard BCE evaluation parameters`
-      ),
-      logAuditAction(
-        supabase,
-        { adminId, email: adminEmail },
-        'SHEET_CREATED',
-        'feedback_forms',
-        googleSheetResult.spreadsheetId,
-        `Created Google Sheet (${googleSheetResult.spreadsheetId}) with styled headers`
-      ),
-    ]);
-
-    // 6. Reliably connect Form responses to Sheet (Apps Script native or Application-Managed)
-    const linkingResult = await linkFormToSpreadsheet(
-      googleFormResult.formId,
-      googleSheetResult.spreadsheetId
-    );
-
-    await logAuditAction(
-      supabase,
-      { adminId, email: adminEmail },
-      'FORM_SHEET_LINKED',
-      'feedback_forms',
-      googleFormResult.formId,
-      `Form-to-Sheet response connection mode: ${linkingResult.destinationType}. ${linkingResult.message}`,
-      {
-        formId: googleFormResult.formId,
-        sheetId: googleSheetResult.spreadsheetId,
-        destinationType: linkingResult.destinationType,
-      }
-    );
-
-    // 7. Save metadata in Supabase
-    // Generate safe unique slug
-    const cleanSlug = `${faculty.name}-${subject.code}-${semester.name}-${academicYear.name}-${Date.now()}`
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
-
-    const insertPayload: Record<string, any> = {
-      title,
-      description,
-      academic_year_id: payload.academicYearId,
-      branch_id: payload.branchId,
-      semester_id: payload.semesterId,
-      faculty_id: payload.facultyId,
-      subject_id: payload.subjectId,
-      form_type: payload.formType,
-      status: 'DRAFT',
-      slug: cleanSlug,
-      google_form_id: googleFormResult.formId,
-      google_form_url: googleFormResult.responderUri,
-      google_form_edit_url: googleFormResult.editUri,
-      google_sheet_id: googleSheetResult.spreadsheetId,
-      google_sheet_url: googleSheetResult.spreadsheetUrl,
-      response_destination_type: linkingResult.destinationType,
-      response_count: 0,
-      created_by: adminId,
-    };
-
-    let savedForm: FeedbackForm | null = null;
-    const currentPayload = { ...insertPayload };
-    let lastInsertError: any = null;
-
-    const extractMissingCol = (msg: string): string | null => {
-      const m1 = msg.match(/Could not find the '([^']+)' column/i);
-      if (m1) return m1[1];
-      const m2 = msg.match(/column (?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+) does not exist/i);
-      if (m2) return m2[1];
-      const m3 = msg.match(/column "([^"]+)"/i);
-      if (m3) return m3[1];
-      return null;
-    };
-
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const { data: inserted, error: insertErr } = await supabase
-        .from('feedback_forms')
-        .insert(currentPayload)
-        .select()
-        .single();
-
-      if (!insertErr && inserted) {
-        savedForm = {
-          ...insertPayload,
-          ...inserted,
-        } as FeedbackForm;
-        break;
-      }
-
-      if (insertErr) {
-        lastInsertError = insertErr;
-        console.warn(`feedback_forms insert attempt ${attempt + 1} failed:`, insertErr.message);
-
-        const colToRemove = extractMissingCol(insertErr.message);
-
-        if (colToRemove && colToRemove in currentPayload) {
-          console.warn(`Stripping missing column '${colToRemove}' from insert payload and retrying...`);
-          delete currentPayload[colToRemove];
-          continue;
-        }
-
-        throw new Error(`Failed to save feedback form record to database: ${insertErr.message}`);
-      }
-    }
-
-    if (!savedForm) {
-      throw new Error(`Failed to save feedback form record to database: ${lastInsertError?.message || 'Database schema column mismatch'}`);
-    }
-
-    revalidatePath('/admin/dashboard/forms');
-    revalidatePath('/admin/dashboard');
-
-    return {
-      success: true,
-      form: savedForm,
-      destinationType: linkingResult.destinationType,
-      message: `Google Form successfully created in DRAFT state. Response destination: ${
-        linkingResult.destinationType === 'NATIVE_SHEET'
-          ? 'Native Google Form Destination (Google Apps Script)'
-          : 'Application-Managed Synchronization (Forms Responses API + Sheets API)'
-      }.`,
-    };
-  } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    console.error('Form creation failed:', err);
-
-    await logAuditAction(
-      supabase,
-      { adminId, email: adminEmail },
-      'FORM_CREATE_FAILED',
-      'feedback_forms',
-      googleFormResult?.formId || 'unknown',
-      `Form creation aborted: ${errMsg}`,
-      { error: errMsg }
-    );
-
-    return {
-      success: false,
-      error: `Google Form generation failed: ${errMsg}`,
-    };
-  }
+  return provRes;
 }
 
 /**
@@ -508,7 +236,180 @@ export async function validateAndPrepareFormDraftAction(payload: CreateFormPaylo
   const adminEmail = session.admin?.email || session.user?.email || '';
   const supabase = await getAdminDb();
 
-  // Validate Academic Relationships with minimal column selects
+  // -------------------------------------------------------------
+  // A. Multi-Faculty SEMESTER_FEEDBACK Flow
+  // -------------------------------------------------------------
+  if (payload.formType === 'SEMESTER_FEEDBACK') {
+    const [
+      { data: academicYear },
+      { data: branch },
+      { data: semester },
+    ] = await Promise.all([
+      supabase.from('academic_years').select('id, name, is_active').eq('id', payload.academicYearId).single(),
+      supabase.from('branches').select('id, name, code, is_active').eq('id', payload.branchId).single(),
+      supabase.from('semesters').select('id, name, is_active').eq('id', payload.semesterId).single(),
+    ]);
+
+    if (!academicYear || !academicYear.is_active) {
+      return { success: false, error: 'Selected Academic Year is invalid or inactive.' };
+    }
+    if (!branch || !branch.is_active) {
+      return { success: false, error: 'Selected Branch is invalid or inactive.' };
+    }
+    if (!semester || !semester.is_active) {
+      return { success: false, error: 'Selected Semester is invalid or inactive.' };
+    }
+
+    if (!payload.items || payload.items.length === 0) {
+      return { success: false, error: 'At least one subject and faculty must be selected for the semester feedback form.' };
+    }
+
+    // Idempotency: Duplicate semester form check
+    const { data: existingForm } = await supabase
+      .from('feedback_forms')
+      .select('id, status, title')
+      .eq('academic_year_id', payload.academicYearId)
+      .eq('branch_id', payload.branchId)
+      .eq('semester_id', payload.semesterId)
+      .eq('form_type', 'SEMESTER_FEEDBACK')
+      .in('status', ['DRAFT', 'PUBLISHED'])
+      .maybeSingle();
+
+    if (existingForm) {
+      return {
+        success: false,
+        error: `A semester feedback form already exists for ${branch.name} — ${semester.name} in this session (${existingForm.title}, Status: ${existingForm.status}). Please edit, publish, or archive the existing form instead of creating a duplicate.`,
+      };
+    }
+
+    // Server-side verification of all selected items against active assignments
+    const validatedItems: MultiFacultyGridItem[] = [];
+
+    const { data: allYearAssignments, error: assignErr } = await supabase
+      .from('faculty_subject_assignments')
+      .select(`
+        id,
+        academic_year_id,
+        branch_id,
+        semester_id,
+        faculty_id,
+        subject_id,
+        is_active,
+        faculty:faculties(id, name, is_active),
+        subject:subjects(id, name, code, is_active)
+      `)
+      .eq('academic_year_id', payload.academicYearId)
+      .eq('is_active', true);
+
+    if (assignErr) {
+      return { success: false, error: `Database error verifying assignments: ${assignErr.message}` };
+    }
+
+    for (const item of payload.items) {
+      const match = (allYearAssignments || []).find(a => {
+        const matchFac = a.faculty_id === item.facultyId;
+        const matchSub = a.subject_id === item.subjectId;
+        const matchBranch = !a.branch_id || a.branch_id === payload.branchId;
+        const matchSem = !a.semester_id || a.semester_id === payload.semesterId;
+        return matchFac && matchSub && matchBranch && matchSem;
+      });
+
+      if (!match || !match.faculty || !match.subject) {
+        return {
+          success: false,
+          error: `Invalid assignment: The selected faculty and subject combination (Faculty ID: ${item.facultyId}, Subject ID: ${item.subjectId}) does not have an active assignment in ${branch.name} — ${semester.name}.`,
+        };
+      }
+
+      const facultyName = (match.faculty as any).name || 'Faculty';
+      const subjectName = (match.subject as any).name || 'Subject';
+      const subjectCode = (match.subject as any).code || '';
+
+      validatedItems.push({
+        facultyId: item.facultyId,
+        subjectId: item.subjectId,
+        assignmentId: match.id,
+        facultyName,
+        subjectName,
+        subjectCode,
+        gridTitle: `${subjectName}${subjectCode ? ` (${subjectCode})` : ''} — ${facultyName}`,
+      });
+    }
+
+    if (!isGoogleConfigured()) {
+      return {
+        success: false,
+        error: 'Google API credentials are not configured on the server. Please set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN in .env.local.',
+      };
+    }
+
+    const title = generateSemesterFormTitle({
+      semesterName: semester.name,
+      branchName: branch.name,
+      academicYearName: academicYear.name,
+    });
+    const description = generateSemesterFormDescription({
+      semesterName: semester.name,
+      branchName: branch.name,
+      academicYearName: academicYear.name,
+      facultyCount: validatedItems.length,
+    });
+
+    const cleanSlug = `semester-feedback-${branch.code || branch.name}-${semester.name}-${academicYear.name}-${Date.now()}`
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+
+    const draftPayload = {
+      title,
+      description,
+      academic_year_id: payload.academicYearId,
+      branch_id: payload.branchId,
+      semester_id: payload.semesterId,
+      faculty_id: null,
+      subject_id: null,
+      form_type: 'SEMESTER_FEEDBACK',
+      status: 'DRAFT',
+      slug: cleanSlug,
+      response_count: 0,
+      created_by: adminId,
+    };
+
+    const { data: draftRecord, error: insertErr } = await supabase
+      .from('feedback_forms')
+      .insert(draftPayload)
+      .select()
+      .single();
+
+    if (insertErr || !draftRecord) {
+      return {
+        success: false,
+        error: `Failed to initialize draft feedback form record: ${insertErr?.message || 'Database error'}`,
+      };
+    }
+
+    await logAuditAction(
+      supabase,
+      { adminId, email: adminEmail },
+      'FORM_CREATE_STARTED',
+      'feedback_forms',
+      draftRecord.id,
+      `Initiated semester form generation for ${title} (${validatedItems.length} faculty/subject evaluations)`
+    );
+
+    return {
+      success: true,
+      draftFormId: draftRecord.id,
+      title,
+      description,
+      validatedItems,
+      formType: 'SEMESTER_FEEDBACK',
+    };
+  }
+
+  // -------------------------------------------------------------
+  // B. Single-Faculty FACULTY_FEEDBACK Flow (Preserving Legacy)
+  // -------------------------------------------------------------
   const [
     { data: academicYear },
     { data: branch },
@@ -519,8 +420,8 @@ export async function validateAndPrepareFormDraftAction(payload: CreateFormPaylo
     supabase.from('academic_years').select('id, name, is_active').eq('id', payload.academicYearId).single(),
     supabase.from('branches').select('id, name, code, is_active').eq('id', payload.branchId).single(),
     supabase.from('semesters').select('id, name, is_active').eq('id', payload.semesterId).single(),
-    supabase.from('faculties').select('id, name, is_active').eq('id', payload.facultyId).single(),
-    supabase.from('subjects').select('id, name, code, is_active').eq('id', payload.subjectId).single(),
+    supabase.from('faculties').select('id, name, is_active').eq('id', payload.facultyId!).single(),
+    supabase.from('subjects').select('id, name, code, is_active').eq('id', payload.subjectId!).single(),
   ]);
 
   if (!academicYear || !academicYear.is_active) {
@@ -544,8 +445,8 @@ export async function validateAndPrepareFormDraftAction(payload: CreateFormPaylo
     .from('faculty_subject_assignments')
     .select('id')
     .eq('academic_year_id', payload.academicYearId)
-    .eq('faculty_id', payload.facultyId)
-    .eq('subject_id', payload.subjectId)
+    .eq('faculty_id', payload.facultyId!)
+    .eq('subject_id', payload.subjectId!)
     .eq('is_active', true)
     .maybeSingle();
 
@@ -563,8 +464,8 @@ export async function validateAndPrepareFormDraftAction(payload: CreateFormPaylo
     .eq('academic_year_id', payload.academicYearId)
     .eq('branch_id', payload.branchId)
     .eq('semester_id', payload.semesterId)
-    .eq('faculty_id', payload.facultyId)
-    .eq('subject_id', payload.subjectId)
+    .eq('faculty_id', payload.facultyId!)
+    .eq('subject_id', payload.subjectId!)
     .in('status', ['DRAFT', 'PUBLISHED'])
     .maybeSingle();
 
@@ -643,6 +544,7 @@ export async function validateAndPrepareFormDraftAction(payload: CreateFormPaylo
     title,
     description,
     meta: metaInputs,
+    formType: payload.formType,
   };
 }
 
@@ -655,6 +557,7 @@ export async function provisionGoogleFormAndSheetAction(params: {
   draftFormId: string;
   title: string;
   description: string;
+  items?: MultiFacultyGridItem[];
 }) {
   const session = await getAdminSession();
   if (!session.isAuthenticated || !session.isActive) {
@@ -669,10 +572,17 @@ export async function provisionGoogleFormAndSheetAction(params: {
   let googleSheetResult;
 
   try {
-    // Concurrent creation of Google Form (+ 8 questions) and Google Sheet (+ styled headers)
+    // Concurrent creation of Google Form (+ Multiple Choice Grids if items provided) and Google Sheet
     const [formResult, sheetResult] = await Promise.all([
-      createGoogleFeedbackForm({ title: params.title, description: params.description }),
-      createFeedbackSpreadsheet({ title: params.title }),
+      createGoogleFeedbackForm({
+        title: params.title,
+        description: params.description,
+        items: params.items,
+      }),
+      createFeedbackSpreadsheet({
+        title: params.title,
+        items: params.items,
+      }),
     ]);
     googleFormResult = formResult;
     googleSheetResult = sheetResult;
@@ -682,6 +592,26 @@ export async function provisionGoogleFormAndSheetAction(params: {
       googleFormResult.formId,
       googleSheetResult.spreadsheetId
     );
+
+    // If multi-faculty items exist, save to feedback_form_items junction table
+    if (params.items && params.items.length > 0) {
+      const itemsToInsert = params.items.map((it, idx) => ({
+        form_id: params.draftFormId,
+        faculty_id: it.facultyId!,
+        subject_id: it.subjectId!,
+        assignment_id: it.assignmentId || null,
+        grid_title: it.gridTitle || `${it.subjectName} — ${it.facultyName}`,
+        order_index: idx,
+      }));
+
+      const { error: itemsErr } = await supabase
+        .from('feedback_form_items')
+        .insert(itemsToInsert);
+
+      if (itemsErr) {
+        console.warn('Failed to insert feedback_form_items:', itemsErr);
+      }
+    }
 
     // Update Supabase draft record with finalized Google details
     const { data: updatedForm, error: updateErr } = await supabase
@@ -730,7 +660,7 @@ export async function provisionGoogleFormAndSheetAction(params: {
         'FORM_CREATED',
         'feedback_forms',
         googleFormResult.formId,
-        `Created Google Form (${googleFormResult.formId}) with 8 standard BCE evaluation parameters`
+        `Created Google Form (${googleFormResult.formId}) with ${params.items?.length ? `${params.items.length} faculty evaluation grids` : '8 standard BCE evaluation parameters'}`
       ),
       logAuditAction(
         supabase,
@@ -754,6 +684,11 @@ export async function provisionGoogleFormAndSheetAction(params: {
         }
       ),
     ]);
+
+    revalidatePath('/admin/dashboard');
+    revalidatePath('/admin/dashboard/forms');
+    revalidatePath('/feedback');
+    revalidatePath('/');
 
     return {
       success: true,
@@ -956,6 +891,7 @@ export async function syncFormResponsesAction(formId: string) {
   const syncResult = await syncFormResponsesToSheet({
     googleFormId: resolvedFormId,
     googleSheetId: resolvedSheetId,
+    formId,
   });
 
   if (!syncResult.success) {
@@ -1002,3 +938,76 @@ export async function syncFormResponsesAction(formId: string) {
     totalResponses: syncResult.totalResponses,
   };
 }
+
+/**
+ * Delete a feedback form permanently from the database.
+ * Linked Google Drive resources remain safe in Drive.
+ */
+export async function deleteFeedbackFormAction(formId: string) {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized. Active admin session required.' };
+  }
+
+  if (!isValidUUID(formId)) {
+    return { success: false, error: 'Invalid feedback form identifier format.' };
+  }
+
+  const supabase = await getAdminDb();
+  const adminId = session.admin?.id || session.user?.id || null;
+  const adminEmail = session.admin?.email || session.user?.email || '';
+
+  // 1. Fetch form info for audit log
+  const { data: form, error: fetchErr } = await supabase
+    .from('feedback_forms')
+    .select('id, title, google_form_id, google_sheet_id, status')
+    .eq('id', formId)
+    .maybeSingle();
+
+  if (fetchErr) {
+    return { success: false, error: fetchErr.message || 'Failed to retrieve form details before deletion.' };
+  }
+
+  if (!form) {
+    return { success: false, error: 'Feedback form not found or already deleted.' };
+  }
+
+  // 2. Delete the feedback form
+  const { error: deleteErr } = await supabase
+    .from('feedback_forms')
+    .delete()
+    .eq('id', formId);
+
+  if (deleteErr) {
+    return { success: false, error: deleteErr.message || 'Failed to delete feedback form.' };
+  }
+
+  // 3. Write audit log
+  await logAuditAction(
+    supabase,
+    { adminId, email: adminEmail },
+    'DELETE_FEEDBACK_FORM',
+    'feedback_forms',
+    formId,
+    `Deleted feedback form "${form.title}" (Status: ${form.status})`,
+    {
+      deletedFormId: formId,
+      deletedFormTitle: form.title,
+      status: form.status,
+      googleFormId: form.google_form_id,
+      googleSheetId: form.google_sheet_id,
+    }
+  );
+
+  // 4. Revalidate cache
+  revalidatePath('/admin/dashboard');
+  revalidatePath('/admin/dashboard/forms');
+  revalidatePath('/feedback');
+  revalidatePath('/');
+
+  return {
+    success: true,
+    message: `Form "${form.title}" deleted successfully.`,
+  };
+}
+

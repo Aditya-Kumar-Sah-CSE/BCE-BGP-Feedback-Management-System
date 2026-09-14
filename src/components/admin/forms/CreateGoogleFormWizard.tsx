@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useMemo } from 'react';
+import { useState, useTransition, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import {
   AcademicYear,
@@ -13,12 +13,11 @@ import {
 } from '@/types/database';
 import { GoogleConfigStatus } from '@/lib/google/auth';
 import { createGoogleFeedbackFormAction } from '@/app/admin/forms/actions';
-import { BCE_FEEDBACK_PARAMETERS } from '@/lib/google/template';
+import { BCE_FEEDBACK_PARAMETERS, MultiFacultyGridItem } from '@/lib/google/template';
 import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
-  Check,
   AlertCircle,
   FileSpreadsheet,
   FileCode2,
@@ -26,6 +25,11 @@ import {
   Sparkles,
   Loader2,
   ShieldAlert,
+  Users,
+  User,
+  CheckSquare,
+  Square,
+  Info,
 } from 'lucide-react';
 
 interface Props {
@@ -58,9 +62,16 @@ export function CreateGoogleFormWizard({
   );
   const [semesterId, setSemesterId] = useState<string>(semesters[0]?.id || '');
   const [branchId, setBranchId] = useState<string>(branches[0]?.id || '');
+
+  // Scope: SEMESTER_FEEDBACK (Default multi-faculty grid) or FACULTY_FEEDBACK (legacy single-faculty)
+  const [scope, setScope] = useState<'SEMESTER_FEEDBACK' | 'FACULTY_FEEDBACK'>('SEMESTER_FEEDBACK');
+
+  // Selected assignment IDs for multi-faculty semester form
+  const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<string[]>([]);
+
+  // Single-faculty mode selections
   const [facultyId, setFacultyId] = useState<string>('');
   const [subjectId, setSubjectId] = useState<string>('');
-  const [formType, setFormType] = useState<'FACULTY_SPECIFIC' | 'BRANCH_SPECIFIC'>('FACULTY_SPECIFIC');
 
   // Creation progress & result state
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -92,27 +103,85 @@ export function CreateGoogleFormWizard({
     [subjects, subjectId]
   );
 
-  // Filter faculties who have assignments in this session & branch/sem
+  // Filter real faculty-subject assignments for selected Academic Year, Branch & Semester
   const relevantAssignments = useMemo(() => {
     return assignments.filter(a => {
-      const matchYear = a.academic_year_id === academicYearId;
-      const matchBranch = !a.branch_id || a.branch_id === branchId;
-      const matchSem = !a.semester_id || a.semester_id === semesterId;
-      return matchYear && matchBranch && matchSem && a.is_active;
-    });
-  }, [assignments, academicYearId, branchId, semesterId]);
+      if (!a.is_active) return false;
+      if (a.academic_year_id !== academicYearId) return false;
 
-  // Faculties available for assignment in this selection
+      const sub = subjects.find(s => s.id === a.subject_id);
+
+      // Match branch
+      const matchBranch =
+        (a.branch_id && a.branch_id === branchId) ||
+        (sub?.branch_id && sub.branch_id === branchId) ||
+        (!a.branch_id && !sub?.branch_id);
+
+      // Match semester
+      const matchSem =
+        (a.semester_id && a.semester_id === semesterId) ||
+        (sub?.semester_id && sub.semester_id === semesterId) ||
+        (!a.semester_id && !sub?.semester_id);
+
+      return matchBranch && matchSem;
+    });
+  }, [assignments, academicYearId, branchId, semesterId, subjects]);
+
+  // Sync selected assignments default to all relevant assignments when selection changes
+  useEffect(() => {
+    if (relevantAssignments.length > 0) {
+      setSelectedAssignmentIds(relevantAssignments.map(a => a.id));
+    } else {
+      setSelectedAssignmentIds([]);
+    }
+  }, [relevantAssignments]);
+
+  // Multi-faculty normalized items list for preview and submission
+  const normalizedItems: MultiFacultyGridItem[] = useMemo(() => {
+    if (scope === 'SEMESTER_FEEDBACK') {
+      const items: MultiFacultyGridItem[] = [];
+      for (const id of selectedAssignmentIds) {
+        const asg = relevantAssignments.find(a => a.id === id);
+        if (!asg) continue;
+        const fac = faculties.find(f => f.id === asg.faculty_id);
+        const sub = subjects.find(s => s.id === asg.subject_id);
+        if (!fac || !sub) continue;
+        items.push({
+          facultyId: fac.id,
+          subjectId: sub.id,
+          assignmentId: asg.id,
+          facultyName: fac.name,
+          subjectName: sub.name,
+          subjectCode: sub.code,
+          gridTitle: `${sub.name}${sub.code ? ` (${sub.code})` : ''} — ${fac.name}`,
+        });
+      }
+      return items;
+    } else {
+      if (!selectedFaculty || !selectedSubject) return [];
+      return [
+        {
+          facultyId: selectedFaculty.id,
+          subjectId: selectedSubject.id,
+          facultyName: selectedFaculty.name,
+          subjectName: selectedSubject.name,
+          subjectCode: selectedSubject.code,
+          gridTitle: `${selectedSubject.name}${selectedSubject.code ? ` (${selectedSubject.code})` : ''} — ${selectedFaculty.name}`,
+        },
+      ];
+    }
+  }, [scope, selectedAssignmentIds, relevantAssignments, faculties, subjects, selectedFaculty, selectedSubject]);
+
+  // Faculties available for single-faculty mode
   const availableFaculties = useMemo(() => {
     if (relevantAssignments.length === 0) {
-      // If no assignments specifically match branch/sem, fallback to all active faculties
       return faculties.filter(f => f.is_active);
     }
     const facultyIds = new Set(relevantAssignments.map(a => a.faculty_id));
     return faculties.filter(f => f.is_active && facultyIds.has(f.id));
   }, [faculties, relevantAssignments]);
 
-  // Subjects assigned to the selected faculty
+  // Subjects available for the selected single faculty
   const availableSubjects = useMemo(() => {
     if (!facultyId) return [];
     const facultyAssignments = relevantAssignments.filter(a => a.faculty_id === facultyId);
@@ -120,7 +189,6 @@ export function CreateGoogleFormWizard({
       const subjectIds = new Set(facultyAssignments.map(a => a.subject_id));
       return subjects.filter(s => s.is_active && subjectIds.has(s.id));
     }
-    // Fallback: subjects matching semester/branch
     return subjects.filter(s => {
       const matchSem = !s.semester_id || s.semester_id === semesterId;
       const matchBranch = !s.branch_id || s.branch_id === branchId;
@@ -130,22 +198,34 @@ export function CreateGoogleFormWizard({
 
   // Computed Form Title Preview
   const computedTitle = useMemo(() => {
-    const fac = selectedFaculty?.name || '[Faculty Name]';
-    const sub = selectedSubject?.name
-      ? `${selectedSubject.name}${selectedSubject.code ? ` (${selectedSubject.code})` : ''}`
-      : '[Subject Name]';
     const sem = selectedSem?.name || '[Semester]';
-    const yr = selectedYear?.name || '[Academic Year]';
-    return `Faculty Feedback — ${fac} — ${sub} — ${sem} — ${yr}`;
-  }, [selectedFaculty, selectedSubject, selectedSem, selectedYear]);
+    const br = selectedBranch?.name || '[Branch]';
+    const yr = selectedYear?.name || '[Academic Session]';
+
+    if (scope === 'SEMESTER_FEEDBACK') {
+      return `Semester Feedback — ${br} — ${sem} — ${yr}`;
+    } else {
+      const fac = selectedFaculty?.name || '[Faculty Name]';
+      const sub = selectedSubject?.name
+        ? `${selectedSubject.name}${selectedSubject.code ? ` (${selectedSubject.code})` : ''}`
+        : '[Subject Name]';
+      return `Faculty Feedback — ${fac} — ${sub} — ${sem} — ${yr}`;
+    }
+  }, [scope, selectedBranch, selectedSem, selectedYear, selectedFaculty, selectedSubject]);
 
   // Validation before progressing
   const canGoToNext = () => {
     if (currentStep === 1) return Boolean(academicYearId);
     if (currentStep === 2) return Boolean(semesterId);
     if (currentStep === 3) return Boolean(branchId);
-    if (currentStep === 4) return Boolean(facultyId);
-    if (currentStep === 5) return Boolean(subjectId);
+    if (currentStep === 4) {
+      if (scope === 'SEMESTER_FEEDBACK') {
+        return normalizedItems.length > 0;
+      } else {
+        return Boolean(facultyId && subjectId);
+      }
+    }
+    if (currentStep === 5) return true;
     if (currentStep === 6) return true;
     return false;
   };
@@ -164,6 +244,22 @@ export function CreateGoogleFormWizard({
     }
   };
 
+  const toggleAssignmentSelection = (assignmentId: string) => {
+    setSelectedAssignmentIds(prev =>
+      prev.includes(assignmentId)
+        ? prev.filter(id => id !== assignmentId)
+        : [...prev, assignmentId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedAssignmentIds(relevantAssignments.map(a => a.id));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedAssignmentIds([]);
+  };
+
   // Trigger form generation with real-time staged progress
   const handleGenerateForm = async () => {
     if (!googleStatus.isConfigured) {
@@ -173,23 +269,43 @@ export function CreateGoogleFormWizard({
       return;
     }
 
+    if (scope === 'SEMESTER_FEEDBACK' && normalizedItems.length === 0) {
+      setErrorMsg('Please select at least one faculty-subject assignment for this semester.');
+      return;
+    }
+
+    if (scope === 'FACULTY_FEEDBACK' && (!facultyId || !subjectId)) {
+      setErrorMsg('Please select both faculty and subject.');
+      return;
+    }
+
     setErrorMsg(null);
     setIsGenerating(true);
     setActiveStepNumber(1);
     setCreationStepMsg('Validating academic assignment & session configuration...');
 
+    const payload = {
+      academicYearId,
+      branchId,
+      semesterId,
+      formType: scope,
+      facultyId: scope === 'FACULTY_FEEDBACK' ? facultyId : undefined,
+      subjectId: scope === 'FACULTY_FEEDBACK' ? subjectId : undefined,
+      items:
+        scope === 'SEMESTER_FEEDBACK'
+          ? normalizedItems.map(it => ({
+              facultyId: it.facultyId!,
+              subjectId: it.subjectId!,
+              assignmentId: it.assignmentId,
+            }))
+          : undefined,
+    };
+
     try {
       const response = await fetch('/api/admin/forms/stream-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          academicYearId,
-          branchId,
-          semesterId,
-          facultyId,
-          subjectId,
-          formType,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok || !response.body) {
@@ -243,15 +359,7 @@ export function CreateGoogleFormWizard({
       setCreationStepMsg('Creating Google Form & Sheet concurrently (fallback mode)...');
 
       startTransition(async () => {
-        const result = await createGoogleFeedbackFormAction({
-          academicYearId,
-          branchId,
-          semesterId,
-          facultyId,
-          subjectId,
-          formType,
-        });
-
+        const result: any = await createGoogleFeedbackFormAction(payload as any);
         setIsGenerating(false);
         if (!result.success) {
           setErrorMsg(result.error || 'Failed to generate Google Form.');
@@ -267,9 +375,9 @@ export function CreateGoogleFormWizard({
     { num: 1, label: 'Academic Year' },
     { num: 2, label: 'Semester' },
     { num: 3, label: 'Branch' },
-    { num: 4, label: 'Faculty' },
-    { num: 5, label: 'Subject' },
-    { num: 6, label: 'Form Type' },
+    { num: 4, label: 'Scope' },
+    { num: 5, label: 'Destination' },
+    { num: 6, label: 'Preview' },
   ];
 
   return (
@@ -290,7 +398,7 @@ export function CreateGoogleFormWizard({
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1 ml-9">
-            Step-by-step wizard to create an official BCE Google Feedback Form connected to a response Google Sheet.
+            Generate Multi-Faculty Semester Grids or Individual Faculty Forms linked to Google Sheets.
           </p>
         </div>
 
@@ -355,8 +463,10 @@ export function CreateGoogleFormWizard({
                 </span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px]">Evaluation Parameters:</span>
-                <span className="font-semibold text-slate-800">8 BCE Questions Populated</span>
+                <span className="text-slate-400 block text-[11px]">Evaluation Grids:</span>
+                <span className="font-semibold text-slate-800">
+                  {normalizedItems.length} Faculty-Subject Grid{normalizedItems.length > 1 ? 's' : ''} (8 BCE Parameters)
+                </span>
               </div>
             </div>
           </div>
@@ -414,7 +524,7 @@ export function CreateGoogleFormWizard({
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Dedicated Real-Time Staged Progress Stepper */}
+          {/* Real-Time Staged Progress Stepper */}
           {isGenerating && (
             <div className="bg-white p-6 rounded-2xl border-2 border-bce-cobalt/40 shadow-lg space-y-4 animate-in fade-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -435,9 +545,9 @@ export function CreateGoogleFormWizard({
 
               <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 pt-1">
                 {[
-                  { num: 1, title: 'Validation', desc: 'Verify assignment & session' },
+                  { num: 1, title: 'Validation', desc: 'Verify assignments & session' },
                   { num: 2, title: 'Draft Record', desc: 'Initialize draft in Supabase' },
-                  { num: 3, title: 'Google Form', desc: 'Populate 8 BCE parameters' },
+                  { num: 3, title: 'Google Form', desc: 'Populate BCE Multiple Choice Grids' },
                   { num: 4, title: 'Google Sheet', desc: 'Configure formatted headers' },
                   { num: 5, title: 'Finalizing', desc: 'Link response destination' },
                 ].map((s) => {
@@ -448,515 +558,674 @@ export function CreateGoogleFormWizard({
                     <div
                       key={s.num}
                       className={`p-3 rounded-xl border text-center transition-all ${
-                        isCurrent
-                          ? 'bg-bce-navy text-white border-bce-cobalt shadow-sm'
-                          : isDone
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                        isDone
+                          ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                          : isCurrent
+                          ? 'bg-blue-50 border-bce-cobalt text-bce-cobalt ring-2 ring-bce-cobalt/20'
                           : 'bg-slate-50 border-slate-200 text-slate-400'
                       }`}
                     >
-                      <div className="flex justify-center mb-1.5">
-                        <div
-                          className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] ${
-                            isDone
-                              ? 'bg-emerald-500 text-white'
-                              : isCurrent
-                              ? 'bg-amber-400 text-slate-950 shadow-2xs'
-                              : 'bg-slate-200 text-slate-500'
-                          }`}
-                        >
-                          {isDone ? <Check className="w-3.5 h-3.5" /> : isCurrent ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : s.num}
-                        </div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider">
+                        {isDone ? '✓ Completed' : `Stage ${s.num}`}
                       </div>
-                      <div className="font-bold text-xs">{s.title}</div>
-                      <div className={`text-[10px] mt-0.5 ${isCurrent ? 'text-slate-300' : isDone ? 'text-emerald-700' : 'text-slate-400'}`}>
-                        {s.desc}
-                      </div>
+                      <div className="text-xs font-bold mt-0.5 truncate">{s.title}</div>
+                      <div className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">{s.desc}</div>
                     </div>
                   );
                 })}
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-2.5 text-xs text-slate-700">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 flex items-center gap-2">
                 <Loader2 className="w-4 h-4 text-bce-cobalt animate-spin shrink-0" />
-                <span className="font-medium">{creationStepMsg || 'Processing Google Cloud requests...'}</span>
+                <span className="font-semibold">{creationStepMsg}</span>
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main Wizard Form (2 Cols) */}
+          {/* 6-Step Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            {/* Left 2 Columns: Step Process */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Step Stepper Header */}
+              {/* Stepper Navigation Bar */}
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                <div className="grid grid-cols-6 gap-2">
-                {steps.map(s => {
-                  const isCompleted = s.num < currentStep;
-                  const isCurrent = s.num === currentStep;
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {steps.map(s => {
+                    const isCurrent = currentStep === s.num;
+                    const isCompleted = currentStep > s.num;
 
-                  return (
-                    <div
-                      key={s.num}
-                      className={`text-center p-2 rounded-xl border transition-all ${
-                        isCurrent
-                          ? 'bg-bce-navy text-white border-bce-cobalt shadow-xs'
-                          : isCompleted
-                          ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
-                          : 'bg-slate-50 text-slate-400 border-slate-200'
-                      }`}
-                    >
-                      <div className="text-[10px] font-bold uppercase tracking-wider">
-                        Step {s.num}
+                    return (
+                      <div
+                        key={s.num}
+                        className={`text-center p-2 rounded-xl border transition-all ${
+                          isCurrent
+                            ? 'bg-bce-navy text-white border-bce-cobalt shadow-xs'
+                            : isCompleted
+                            ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                            : 'bg-slate-50 text-slate-400 border-slate-200'
+                        }`}
+                      >
+                        <div className="text-[10px] font-bold uppercase tracking-wider">
+                          Step {s.num}
+                        </div>
+                        <div className="text-xs font-semibold truncate mt-0.5">
+                          {s.label}
+                        </div>
                       </div>
-                      <div className="text-xs font-semibold truncate mt-0.5">
-                        {s.label}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
 
-            {/* Step Body */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
-              {/* Step 1: Academic Year */}
-              {currentStep === 1 && (
-                <div className="space-y-4">
-                  <div className="border-b border-slate-100 pb-3">
-                    <h3 className="text-base font-bold text-slate-900">Step 1: Select Academic Session</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Choose the active academic year for this feedback evaluation.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {academicYears.map(y => (
-                      <button
-                        key={y.id}
-                        type="button"
-                        onClick={() => setAcademicYearId(y.id)}
-                        className={`p-4 rounded-2xl border text-left transition-all ${
-                          academicYearId === y.id
-                            ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
-                            : 'bg-white border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-sm text-slate-900">{y.name}</span>
-                          {y.is_active && (
-                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full">
-                              Active
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[11px] text-slate-400 mt-1 block">
-                          Academic Calendar Session
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Step 2: Semester */}
-              {currentStep === 2 && (
-                <div className="space-y-4">
-                  <div className="border-b border-slate-100 pb-3">
-                    <h3 className="text-base font-bold text-slate-900">Step 2: Select Semester</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Select the semester level for the student cohort submitting feedback.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {semesters.map(s => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => setSemesterId(s.id)}
-                        className={`p-4 rounded-2xl border text-center transition-all ${
-                          semesterId === s.id
-                            ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
-                            : 'bg-white border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="font-bold text-base text-slate-900">{s.name}</div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">
-                          Year {s.year_number} • Sem {s.semester_number}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Step 3: Branch */}
-              {currentStep === 3 && (
-                <div className="space-y-4">
-                  <div className="border-b border-slate-100 pb-3">
-                    <h3 className="text-base font-bold text-slate-900">Step 3: Select Branch / Discipline</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Choose the engineering department for this evaluation.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {branches.map(b => (
-                      <button
-                        key={b.id}
-                        type="button"
-                        onClick={() => setBranchId(b.id)}
-                        className={`p-4 rounded-2xl border text-left transition-all ${
-                          branchId === b.id
-                            ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
-                            : 'bg-white border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-sm text-slate-900">{b.name}</span>
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded-md">
-                            {b.code}
-                          </span>
-                        </div>
-                        <span className="text-[11px] text-slate-400 mt-1 block">
-                          Department of {b.name}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Step 4: Faculty */}
-              {currentStep === 4 && (
-                <div className="space-y-4">
-                  <div className="border-b border-slate-100 pb-3">
-                    <h3 className="text-base font-bold text-slate-900">Step 4: Select Faculty Member</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Choose the teacher being evaluated. Shows faculty assigned to {selectedBranch?.name}, {selectedSem?.name}.
-                    </p>
-                  </div>
-
-                  {availableFaculties.length === 0 ? (
-                    <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                      <AlertCircle className="w-6 h-6 text-amber-500 mx-auto" />
-                      <p className="text-xs font-bold text-slate-800">No Assigned Faculties Found</p>
-                      <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
-                        There are no faculty assigned to {selectedBranch?.name} in {selectedSem?.name} for session {selectedYear?.name}.
-                        Please visit Academic Structure to assign faculty members.
+              {/* Step Body */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+                {/* Step 1: Academic Year */}
+                {currentStep === 1 && (
+                  <div className="space-y-4">
+                    <div className="border-b border-slate-100 pb-3">
+                      <h3 className="text-base font-bold text-slate-900">Step 1: Select Academic Session</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Choose the active academic year for this feedback evaluation.
                       </p>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
-                      {availableFaculties.map(f => (
-                        <button
-                          key={f.id}
-                          type="button"
-                          onClick={() => {
-                            setFacultyId(f.id);
-                            setSubjectId(''); // Reset subject when faculty changes
-                          }}
-                          className={`p-3.5 rounded-2xl border text-left transition-all ${
-                            facultyId === f.id
-                              ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
-                              : 'bg-white border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <div className="font-bold text-xs text-slate-900">{f.name}</div>
-                          <div className="text-[11px] text-slate-500">
-                            {f.designation} • {f.department}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
 
-              {/* Step 5: Subject */}
-              {currentStep === 5 && (
-                <div className="space-y-4">
-                  <div className="border-b border-slate-100 pb-3">
-                    <h3 className="text-base font-bold text-slate-900">Step 5: Select Subject</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Choose the subject taught by {selectedFaculty?.name} in {selectedSem?.name}.
-                    </p>
-                  </div>
-
-                  {availableSubjects.length === 0 ? (
-                    <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                      <AlertCircle className="w-6 h-6 text-amber-500 mx-auto" />
-                      <p className="text-xs font-bold text-slate-800">No Assigned Subjects</p>
-                      <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
-                        No subject assignments found for {selectedFaculty?.name} in this session.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
-                      {availableSubjects.map(s => (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {academicYears.map(y => (
                         <button
-                          key={s.id}
+                          key={y.id}
                           type="button"
-                          onClick={() => setSubjectId(s.id)}
-                          className={`p-3.5 rounded-2xl border text-left transition-all ${
-                            subjectId === s.id
+                          onClick={() => setAcademicYearId(y.id)}
+                          className={`p-4 rounded-2xl border text-left transition-all ${
+                            academicYearId === y.id
                               ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
                               : 'bg-white border-slate-200 hover:border-slate-300'
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="font-bold text-xs text-slate-900">{s.name}</span>
-                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded-md">
-                              {s.code}
-                            </span>
+                            <span className="font-bold text-sm text-slate-900">{y.name}</span>
+                            {y.is_active && (
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full">
+                                Active
+                              </span>
+                            )}
                           </div>
-                          <span className="text-[11px] text-slate-400 mt-1 block">Course Curriculum Subject</span>
+                          <span className="text-[11px] text-slate-400 mt-1 block">
+                            Academic Calendar Session
+                          </span>
                         </button>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Step 2: Semester */}
+                {currentStep === 2 && (
+                  <div className="space-y-4">
+                    <div className="border-b border-slate-100 pb-3">
+                      <h3 className="text-base font-bold text-slate-900">Step 2: Select Semester</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Select the semester level for the student cohort submitting feedback.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {semesters.map(s => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => setSemesterId(s.id)}
+                          className={`p-4 rounded-2xl border text-center transition-all ${
+                            semesterId === s.id
+                              ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
+                              : 'bg-white border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="font-bold text-base text-slate-900">{s.name}</div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            Year {s.year_number} • Sem {s.semester_number}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 3: Branch */}
+                {currentStep === 3 && (
+                  <div className="space-y-4">
+                    <div className="border-b border-slate-100 pb-3">
+                      <h3 className="text-base font-bold text-slate-900">Step 3: Select Branch / Discipline</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Choose the engineering department for this evaluation.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {branches.map(b => (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => setBranchId(b.id)}
+                          className={`p-4 rounded-2xl border text-left transition-all ${
+                            branchId === b.id
+                              ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
+                              : 'bg-white border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-sm text-slate-900">{b.name}</span>
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded-md">
+                              {b.code}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-400 mt-1 block">
+                            Department of {b.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 4: Scope */}
+                {currentStep === 4 && (
+                  <div className="space-y-5">
+                    <div className="border-b border-slate-100 pb-3">
+                      <h3 className="text-base font-bold text-slate-900">Step 4: Form Scope & Subjects</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Choose whether to generate an all-in-one semester form or a single-faculty evaluation.
+                      </p>
+                    </div>
+
+                    {/* Scope Selector Tabs */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setScope('SEMESTER_FEEDBACK')}
+                        className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3 ${
+                          scope === 'SEMESTER_FEEDBACK'
+                            ? 'bg-blue-50/90 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <Users className={`w-5 h-5 shrink-0 mt-0.5 ${scope === 'SEMESTER_FEEDBACK' ? 'text-bce-cobalt' : 'text-slate-400'}`} />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs text-slate-900">Multi-Faculty Semester Form</span>
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-bold rounded-full">
+                              Recommended
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            A single Google Form with Multiple Choice Grids for all subjects & teachers of {selectedBranch?.code}, {selectedSem?.name}.
+                          </p>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setScope('FACULTY_FEEDBACK')}
+                        className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3 ${
+                          scope === 'FACULTY_FEEDBACK'
+                            ? 'bg-blue-50/90 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <User className={`w-5 h-5 shrink-0 mt-0.5 ${scope === 'FACULTY_FEEDBACK' ? 'text-bce-cobalt' : 'text-slate-400'}`} />
+                        <div>
+                          <div className="font-bold text-xs text-slate-900">Single Faculty Form</div>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            Individual evaluation form for a specific teacher and assigned subject.
+                          </p>
+                        </div>
+                      </button>
+                    </div>
+
+                    {/* Mode A: SEMESTER_FEEDBACK Checkbox Selection */}
+                    {scope === 'SEMESTER_FEEDBACK' && (
+                      <div className="space-y-3 pt-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-900">
+                              Assigned Subjects & Faculty for {selectedBranch?.name} ({selectedSem?.name})
+                            </h4>
+                            <p className="text-[11px] text-slate-500">
+                              {relevantAssignments.length} course assignment{relevantAssignments.length !== 1 ? 's' : ''} found in database.
+                            </p>
+                          </div>
+
+                          {relevantAssignments.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={handleSelectAll}
+                                className="text-[11px] text-bce-cobalt hover:underline font-semibold"
+                              >
+                                Select All
+                              </button>
+                              <span className="text-slate-300">•</span>
+                              <button
+                                type="button"
+                                onClick={handleDeselectAll}
+                                className="text-[11px] text-slate-500 hover:underline font-semibold"
+                              >
+                                Deselect All
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {relevantAssignments.length === 0 ? (
+                          <div className="p-6 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                            <AlertCircle className="w-6 h-6 text-amber-500 mx-auto" />
+                            <p className="text-xs font-bold text-slate-800">No Academic Assignments Found</p>
+                            <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                              There are currently no active faculty-subject assignments for {selectedBranch?.name} in {selectedSem?.name} ({selectedYear?.name}).
+                              Please assign teachers to subjects in Academic Structure before generating a semester feedback form.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                            {relevantAssignments.map(asg => {
+                              const fac = faculties.find(f => f.id === asg.faculty_id);
+                              const sub = subjects.find(s => s.id === asg.subject_id);
+                              const isChecked = selectedAssignmentIds.includes(asg.id);
+
+                              return (
+                                <div
+                                  key={asg.id}
+                                  onClick={() => toggleAssignmentSelection(asg.id)}
+                                  className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+                                    isChecked
+                                      ? 'bg-blue-50/70 border-bce-cobalt/80 shadow-2xs'
+                                      : 'bg-white border-slate-200 hover:border-slate-300 opacity-60'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <button
+                                      type="button"
+                                      aria-label={isChecked ? 'Deselect subject' : 'Select subject'}
+                                      className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                                        isChecked ? 'text-bce-cobalt' : 'text-slate-400'
+                                      }`}
+                                    >
+                                      {isChecked ? (
+                                        <CheckSquare className="w-5 h-5 fill-bce-cobalt text-white" />
+                                      ) : (
+                                        <Square className="w-5 h-5" />
+                                      )}
+                                    </button>
+
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-bold text-xs text-slate-900">
+                                          {sub?.name || 'Unknown Subject'}
+                                        </span>
+                                        {sub?.code && (
+                                          <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded">
+                                            {sub.code}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[11px] text-slate-600 mt-0.5 flex items-center gap-1.5">
+                                        <span className="font-semibold text-slate-800">{fac?.name || 'Unknown Faculty'}</span>
+                                        <span className="text-slate-400">•</span>
+                                        <span className="text-slate-500">{fac?.designation || fac?.department}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right shrink-0">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                      MC Grid
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Mode B: FACULTY_FEEDBACK Single Faculty Selection */}
+                    {scope === 'FACULTY_FEEDBACK' && (
+                      <div className="space-y-4 pt-2">
+                        {/* Select Faculty */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Select Faculty Member
+                          </label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                            {availableFaculties.map(f => (
+                              <button
+                                key={f.id}
+                                type="button"
+                                onClick={() => {
+                                  setFacultyId(f.id);
+                                  setSubjectId('');
+                                }}
+                                className={`p-3 rounded-xl border text-left transition-all ${
+                                  facultyId === f.id
+                                    ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
+                                    : 'bg-white border-slate-200 hover:border-slate-300'
+                                }`}
+                              >
+                                <div className="font-bold text-xs text-slate-900">{f.name}</div>
+                                <div className="text-[11px] text-slate-500">{f.designation} • {f.department}</div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Select Subject */}
+                        {facultyId && (
+                          <div className="pt-2 border-t border-slate-100">
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                              Select Assigned Subject for {selectedFaculty?.name}
+                            </label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                              {availableSubjects.map(s => (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => setSubjectId(s.id)}
+                                  className={`p-3 rounded-xl border text-left transition-all ${
+                                    subjectId === s.id
+                                      ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
+                                      : 'bg-white border-slate-200 hover:border-slate-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-xs text-slate-900">{s.name}</span>
+                                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded">
+                                      {s.code}
+                                    </span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Step 5: Destination */}
+                {currentStep === 5 && (
+                  <div className="space-y-4">
+                    <div className="border-b border-slate-100 pb-3">
+                      <h3 className="text-base font-bold text-slate-900">Step 5: Response Destination & Google Sheet</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Configure where student evaluations will be collected and synced.
+                      </p>
+                    </div>
+
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                          <FileSpreadsheet className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-900">Connected Google Spreadsheet</h4>
+                          <p className="text-[11px] text-slate-500">
+                            A dedicated Google Spreadsheet will be generated with dynamic header columns for each faculty evaluation.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-xl border border-slate-200 text-xs space-y-1.5 font-mono">
+                        <div className="text-[11px] text-slate-400 uppercase font-sans font-bold">Target Sheet Title</div>
+                        <div className="text-slate-900 font-bold break-all">
+                          [Responses] {computedTitle}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 text-xs text-slate-600">
+                        <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                          <span className="text-slate-400 block text-[10px] font-bold uppercase">Sync Method</span>
+                          <span className="font-semibold text-slate-800">
+                            {googleStatus.hasAppsScript ? '⚡ Native Google Forms Linking' : '🔄 Automated Multi-Grid Response Engine'}
+                          </span>
+                        </div>
+                        <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                          <span className="text-slate-400 block text-[10px] font-bold uppercase">Evaluated Grids</span>
+                          <span className="font-semibold text-slate-800">
+                            {normalizedItems.length} Grid{normalizedItems.length > 1 ? 's' : ''} ({normalizedItems.length * 8} rating parameters)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl flex items-start gap-2.5 text-xs text-blue-900">
+                      <Info className="w-4 h-4 text-bce-cobalt shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">Automated Synchronization:</span> Submissions on this Google Form will record timestamps, verified email, student registration number, and ratings for each teacher into Supabase analytics.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 6: Preview */}
+                {currentStep === 6 && (
+                  <div className="space-y-4">
+                    <div className="border-b border-slate-100 pb-3">
+                      <h3 className="text-base font-bold text-slate-900">Step 6: Review & Finalize Generation</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Confirm details before creating the live Google Form and connected Google Sheet.
+                      </p>
+                    </div>
+
+                    {/* Summary of what will be generated */}
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5 text-xs">
+                      <div className="font-bold text-slate-800">Generation Pipeline Checklist:</div>
+                      <ul className="space-y-1.5 text-slate-600">
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Google Form created via Google Forms API v1 ({computedTitle})</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Verified email collection enabled</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Student Identification fields (Student Name & Registration Number) added once</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>
+                            {normalizedItems.length} Multiple Choice Grid{normalizedItems.length > 1 ? 's' : ''} populated (8 BCE parameters × 4 rating choices)
+                          </span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>General Comments / Suggestions feedback section added</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Connected Google Sheet initialized with dynamic header columns</span>
+                        </li>
+                      </ul>
+                    </div>
+
+                    {/* Items to be generated */}
+                    <div className="space-y-2">
+                      <span className="text-xs font-bold text-slate-700 block">
+                        Included Teacher Evaluations ({normalizedItems.length}):
+                      </span>
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {normalizedItems.map((it, idx) => (
+                          <div key={idx} className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-900">{it.gridTitle}</span>
+                            <span className="text-[10px] text-slate-500 font-semibold">8 Parameters</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Alert */}
+                {errorMsg && (
+                  <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    <span>{errorMsg}</span>
+                  </div>
+                )}
+
+                {/* Pending Progress indicator */}
+                {isPending && (
+                  <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-950 text-xs flex items-center gap-3">
+                    <Loader2 className="w-4 h-4 text-bce-cobalt animate-spin shrink-0" />
+                    <span className="font-semibold">{creationStepMsg || 'Generating Google Form...'}</span>
+                  </div>
+                )}
+
+                {/* Navigation Controls */}
+                <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={handleBack}
+                    disabled={currentStep === 1 || isPending || isGenerating}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent"
+                  >
+                    ← Back
+                  </button>
+
+                  {currentStep < 6 ? (
+                    <button
+                      type="button"
+                      onClick={handleNext}
+                      disabled={!canGoToNext() || isPending || isGenerating}
+                      className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-bce-cobalt hover:bg-bce-navy disabled:opacity-40 transition-colors shadow-xs"
+                    >
+                      <span>Next Step</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleGenerateForm}
+                      disabled={!canGoToNext() || isPending || isGenerating || !googleStatus.isConfigured}
+                      className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-bce-cobalt to-indigo-600 hover:from-bce-navy hover:to-indigo-700 disabled:opacity-40 transition-all shadow-md ${
+                        isPending || isGenerating ? 'btn-request-active opacity-80 cursor-wait' : ''
+                      }`}
+                    >
+                      {isPending || isGenerating ? (
+                        <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-4 h-4 text-amber-300" />
+                      )}
+                      <span>{isGenerating || isPending ? 'Generating Form on Google...' : 'Generate Google Feedback Form'}</span>
+                    </button>
                   )}
                 </div>
-              )}
-
-              {/* Step 6: Form Type & Confirmation */}
-              {currentStep === 6 && (
-                <div className="space-y-4">
-                  <div className="border-b border-slate-100 pb-3">
-                    <h3 className="text-base font-bold text-slate-900">Step 6: Form Type & Confirmation</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Confirm form classification and review generation details.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setFormType('FACULTY_SPECIFIC')}
-                      className={`p-4 rounded-2xl border text-left transition-all ${
-                        formType === 'FACULTY_SPECIFIC'
-                          ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
-                          : 'bg-white border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="font-bold text-xs text-slate-900">Faculty-Specific Feedback</div>
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        Evaluates an individual faculty member for an assigned subject. Uses standard 8 BCE evaluation parameters.
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setFormType('BRANCH_SPECIFIC')}
-                      className={`p-4 rounded-2xl border text-left transition-all ${
-                        formType === 'BRANCH_SPECIFIC'
-                          ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
-                          : 'bg-white border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="font-bold text-xs text-slate-900">Branch-Specific Feedback</div>
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        Discipline-focused evaluation scoped to branch courses and laboratory practicals.
-                      </p>
-                    </button>
-                  </div>
-
-                  {/* Summary of what will be generated */}
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
-                    <div className="font-bold text-slate-800">Generation Pipeline Checklist:</div>
-                    <ul className="space-y-1 text-slate-600">
-                      <li className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>Google Form container created via Google Forms API v1</span>
-                      </li>
-                      <li className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>Student Identification fields (Student Name & Registration Number) added (Required)</span>
-                      </li>
-                      <li className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>All 8 standard BCE faculty rating parameters added with 4 rating choices</span>
-                      </li>
-                      <li className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>Optional Comments / Suggestions text feedback field added</span>
-                      </li>
-                      <li className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>Dedicated response Google Sheet initialized with 13 styled headers</span>
-                      </li>
-                      <li className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>Response destination connected ({googleStatus.hasAppsScript ? 'Native Apps Script' : 'App-Managed Sync'})</span>
-                      </li>
-                      <li className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>Metadata recorded in Supabase and audit logged in DRAFT state</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              )}
-
-              {/* Error Alert */}
-              {errorMsg && (
-                <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                  <span>{errorMsg}</span>
-                </div>
-              )}
-
-              {/* Pending Progress indicator */}
-              {isPending && (
-                <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-950 text-xs flex items-center gap-3">
-                  <Loader2 className="w-4 h-4 text-bce-cobalt animate-spin shrink-0" />
-                  <span className="font-semibold">{creationStepMsg || 'Generating Google Form...'}</span>
-                </div>
-              )}
-
-              {/* Navigation Controls */}
-              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={handleBack}
-                  disabled={currentStep === 1 || isPending || isGenerating}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent"
-                >
-                  ← Back
-                </button>
-
-                {currentStep < 6 ? (
-                  <button
-                    type="button"
-                    onClick={handleNext}
-                    disabled={!canGoToNext() || isPending || isGenerating}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-bce-cobalt hover:bg-bce-navy disabled:opacity-40 transition-colors shadow-xs"
-                  >
-                    <span>Next Step</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleGenerateForm}
-                    disabled={!canGoToNext() || isPending || isGenerating || !googleStatus.isConfigured}
-                    className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-bce-cobalt to-indigo-600 hover:from-bce-navy hover:to-indigo-700 disabled:opacity-40 transition-all shadow-md ${
-                      isPending || isGenerating ? 'btn-request-active opacity-80 cursor-wait' : ''
-                    }`}
-                  >
-                    {isPending || isGenerating ? (
-                      <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-4 h-4 text-amber-300" />
-                    )}
-                    <span>{isGenerating || isPending ? 'Generating Form on Google...' : 'Generate Google Feedback Form'}</span>
-                  </button>
-                )}
               </div>
             </div>
-          </div>
 
-          {/* Right Column: Interactive Live Preview Card */}
-          <div className="space-y-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-bce-cobalt" />
-                  Live Form Preview
-                </h4>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">
-                  Preview Only
-                </span>
-              </div>
+            {/* Right Column: Live Form Preview Card */}
+            <div className="space-y-4">
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-bce-cobalt" />
+                    Live Form Preview
+                  </h4>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">
+                    Preview Only
+                  </span>
+                </div>
 
-              {/* Title & Metadata Card */}
-              <div className="space-y-2">
-                <span className="text-[10px] font-bold uppercase text-slate-400">Generated Title</span>
-                <p className="font-bold text-xs text-slate-900 leading-snug bg-slate-50 p-2.5 rounded-xl border border-slate-200 font-mono">
-                  {computedTitle}
-                </p>
-              </div>
+                {/* Title & Metadata Card */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase text-slate-400">Generated Title</span>
+                  <p className="font-bold text-xs text-slate-900 leading-snug bg-slate-50 p-2.5 rounded-xl border border-slate-200 font-mono break-words">
+                    {computedTitle}
+                  </p>
+                </div>
 
-              <div className="space-y-1 text-xs text-slate-600">
-                <div className="flex justify-between py-1 border-b border-slate-100">
-                  <span className="text-slate-400">Session:</span>
-                  <span className="font-semibold text-slate-800">{selectedYear?.name || '—'}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-slate-100">
-                  <span className="text-slate-400">Semester:</span>
-                  <span className="font-semibold text-slate-800">{selectedSem?.name || '—'}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-slate-100">
-                  <span className="text-slate-400">Branch:</span>
-                  <span className="font-semibold text-slate-800">{selectedBranch?.code || '—'}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-slate-100">
-                  <span className="text-slate-400">Faculty:</span>
-                  <span className="font-semibold text-slate-800">{selectedFaculty?.name || '—'}</span>
-                </div>
-                <div className="flex justify-between py-1">
-                  <span className="text-slate-400">Subject:</span>
-                  <span className="font-semibold text-slate-800">{selectedSubject?.name || '—'}</span>
-                </div>
-              </div>
-
-              {/* Form Questions Preview */}
-              <div className="space-y-3 pt-2 border-t border-slate-100">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">
-                  Form Question Structure (11 Total Fields)
-                </span>
-
-                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                  {/* Identification Fields */}
-                  <div className="p-2.5 bg-blue-50/60 rounded-xl border border-blue-100 text-[11px] space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-blue-950">Student Identification</span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-100 text-blue-800 font-semibold">Required *</span>
-                    </div>
-                    <div className="text-[10px] text-blue-800 space-y-0.5">
-                      <div>• <span className="font-semibold">Student Name</span> (Short Answer)</div>
-                      <div>• <span className="font-semibold">University Registration Number</span> (Short Answer)</div>
-                    </div>
+                <div className="space-y-1 text-xs text-slate-600">
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Session:</span>
+                    <span className="font-semibold text-slate-800">{selectedYear?.name || '—'}</span>
                   </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Semester:</span>
+                    <span className="font-semibold text-slate-800">{selectedSem?.name || '—'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Branch:</span>
+                    <span className="font-semibold text-slate-800">{selectedBranch?.name || '—'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Scope:</span>
+                    <span className="font-semibold text-slate-800">
+                      {scope === 'SEMESTER_FEEDBACK' ? 'Multi-Faculty Semester' : 'Single Faculty'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-slate-400">Teachers Evaluated:</span>
+                    <span className="font-semibold text-slate-800">{normalizedItems.length} Teacher{normalizedItems.length !== 1 ? 's' : ''}</span>
+                  </div>
+                </div>
 
-                  {/* 8 Evaluation Parameters */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase px-1">
-                      <span>8 Faculty Rating Parameters</span>
-                      <span className="text-[9px] text-slate-400">Required *</span>
+                {/* Live Preview of Questions & Grids */}
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                    Form Question Structure
+                  </span>
+
+                  <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                    {/* Student Identification */}
+                    <div className="p-2.5 bg-blue-50/60 rounded-xl border border-blue-100 text-[11px] space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-blue-950">Student Identification</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-100 text-blue-800 font-semibold">Required *</span>
+                      </div>
+                      <div className="text-[10px] text-blue-800 space-y-0.5">
+                        <div>• <span className="font-semibold">Student Name</span> (Short Answer)</div>
+                        <div>• <span className="font-semibold">University Registration Number</span> (Short Answer)</div>
+                        <div>• <span className="font-semibold">Email</span> (Verified Collection)</div>
+                      </div>
                     </div>
-                    {BCE_FEEDBACK_PARAMETERS.map(p => (
-                      <div key={p.id} className="p-2 bg-slate-50 rounded-lg border border-slate-100 text-[11px]">
-                        <div className="font-bold text-slate-800">
-                          {p.id}. {p.title}
+
+                    {/* Grids */}
+                    {normalizedItems.map((item, idx) => (
+                      <div key={idx} className="p-2.5 bg-purple-50/60 rounded-xl border border-purple-200 text-[11px] space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-purple-950 truncate max-w-[200px]" title={item.gridTitle}>
+                            {item.gridTitle}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-100 text-purple-800 font-semibold shrink-0">
+                            Grid (8 Rows × 4 Cols)
+                          </span>
                         </div>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {p.options.map(opt => (
-                            <span
-                              key={opt}
-                              className="px-1.5 py-0.5 rounded text-[9px] bg-white border border-slate-200 text-slate-600"
-                            >
-                              {opt}
-                            </span>
+                        <div className="text-[10px] text-purple-900/80">
+                          {BCE_FEEDBACK_PARAMETERS.map(p => (
+                            <div key={p.id} className="truncate">• {p.id}. {p.title}</div>
                           ))}
+                        </div>
+                        <div className="flex items-center gap-1 text-[9px] text-purple-700 pt-0.5">
+                          <span className="font-semibold">Columns:</span> Very Good | Good | Satisfactory | Unsatisfactory
                         </div>
                       </div>
                     ))}
-                  </div>
 
-                  {/* Optional Remarks Field */}
-                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] space-y-0.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-800">Comments / Suggestions</span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] bg-slate-200 text-slate-600 font-medium">Optional</span>
+                    {/* General Remarks */}
+                    <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-800">General Feedback</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-slate-200 text-slate-600 font-medium">Optional</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">Constructive feedback / suggestions for improvement</p>
                     </div>
-                    <p className="text-[10px] text-slate-500">Constructive feedback / suggestions for improvement</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
       )}
     </div>
   );

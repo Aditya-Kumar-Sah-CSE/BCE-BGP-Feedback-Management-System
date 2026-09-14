@@ -11,6 +11,7 @@ export interface FeedbackParameter {
 }
 
 export const BCE_RATING_OPTIONS = [
+  'Excellent',
   'Very Good',
   'Good',
   'Satisfactory',
@@ -20,7 +21,7 @@ export const BCE_RATING_OPTIONS = [
 export const BCE_FEEDBACK_PARAMETERS: FeedbackParameter[] = [
   {
     id: 1,
-    title: 'Syllabus covered',
+    title: 'Syllabus covered by teacher as per curriculum',
     description: 'Coverage of prescribed course syllabus within the semester',
     options: [...BCE_RATING_OPTIONS],
   },
@@ -32,31 +33,31 @@ export const BCE_FEEDBACK_PARAMETERS: FeedbackParameter[] = [
   },
   {
     id: 3,
-    title: 'Teaching-learning effectiveness',
+    title: 'Effectiveness of Teaching/Learning in terms of: Interactive classroom/Laboratory sessions',
     description: 'Pacing of lectures, conceptual depth, and student engagement',
     options: [...BCE_RATING_OPTIONS],
   },
   {
     id: 4,
-    title: 'Accessibility of teacher',
+    title: 'Accessibility of the teacher in and out of the class',
     description: 'Availability outside scheduled classroom hours for guidance',
     options: [...BCE_RATING_OPTIONS],
   },
   {
     id: 5,
-    title: 'Willingness to offer help',
+    title: 'Willingness to offer help and advice to students beyond the classroom and multidisciplinary areas',
     description: 'Proactiveness in resolving student doubts and offering academic assistance',
     options: [...BCE_RATING_OPTIONS],
   },
   {
     id: 6,
-    title: 'Ability to teach/explain',
+    title: 'Ability of teacher to teach/explain confidently and answer queries in the class',
     description: 'Use of relevant examples, illustrations, and problem-solving techniques',
     options: [...BCE_RATING_OPTIONS],
   },
   {
     id: 7,
-    title: 'Fairness in evaluation',
+    title: 'Teacher shown fairness in the evaluation',
     description: 'Impartiality and transparency in assessments, assignments, and grading',
     options: [...BCE_RATING_OPTIONS],
   },
@@ -127,16 +128,39 @@ export interface FormMetadataInputs {
   branchName: string;
 }
 
-/**
- * Generates standardized form title:
- * Faculty Feedback — <Faculty Name> — <Subject> — <Semester> — <Academic Year>
- */
+export interface MultiFacultyGridItem {
+  facultyId?: string;
+  subjectId?: string;
+  assignmentId?: string | null;
+  subjectName: string;
+  facultyName: string;
+  subjectCode?: string;
+  gridTitle?: string;
+}
+
 export function generateFeedbackFormTitle(meta: FormMetadataInputs): string {
   return `Faculty Feedback — ${meta.facultyName} — ${meta.subjectName} — ${meta.semesterName} — ${meta.academicYearName}`;
 }
 
 export function generateFeedbackFormDescription(meta: FormMetadataInputs): string {
-  return `Official Student Feedback Form for ${meta.facultyName} teaching ${meta.subjectName} (${meta.branchName}, ${meta.semesterName}, ${meta.academicYearName}).\n\nDepartment of Science & Technology, Government of Bihar.\nBhagalpur College of Engineering (BCE Bhagalpur).\n\nNOTE: Please provide your student details accurately. Feedback responses are collected for academic feedback analysis and record purposes.\n\nPlease rate all 8 parameters objectively. Constructive comments and suggestions are welcome.`;
+  return `Official Student Feedback Form for ${meta.facultyName} teaching ${meta.subjectName} (${meta.semesterName}, ${meta.branchName}, Session ${meta.academicYearName}).\n\nDepartment of Science & Technology, Government of Bihar.\nBhagalpur College of Engineering (BCE Bhagalpur).\n\nNOTE: Please provide your student details accurately. This feedback is collected to improve instructional delivery, lab engagement, and course learning outcomes.\n\nPlease rate objectively on all 8 parameters. Honest feedback is appreciated.`;
+}
+
+export function generateSemesterFormTitle(meta: {
+  semesterName: string;
+  branchName: string;
+  academicYearName?: string;
+}): string {
+  return `Feedback Form — ${meta.semesterName} Students — ${meta.branchName}${meta.academicYearName ? ` — ${meta.academicYearName}` : ''}`;
+}
+
+export function generateSemesterFormDescription(meta: {
+  semesterName: string;
+  branchName: string;
+  academicYearName?: string;
+  facultyCount?: number;
+}): string {
+  return `Official Student Feedback Form for ${meta.semesterName} (${meta.branchName}${meta.academicYearName ? `, ${meta.academicYearName}` : ''}).\n\nDepartment of Science & Technology, Government of Bihar.\nBhagalpur College of Engineering (BCE Bhagalpur).\n\nNOTE: Please provide your student details accurately. This feedback form contains evaluations for all subjects and faculty members teaching this semester.\n\nPlease rate each teacher across all 8 parameters objectively. Constructive comments and suggestions are welcome.`;
 }
 
 /**
@@ -255,3 +279,130 @@ export function buildCreateQuestionsBatchUpdateRequest() {
 
   return requests;
 }
+
+/**
+ * Builds the Google Forms API batchUpdate request body for Multi-Faculty SEMESTER_FEEDBACK forms:
+ * 1. Student Name (Short answer, required)
+ * 2. University Registration Number (Short answer, required)
+ * 3. Multiple Choice Grid (questionGroupItem) for EACH selected faculty/subject
+ * 4. General Feedback (Paragraph text, optional)
+ * 5. More Feedback Forms (Text item with public portal link)
+ */
+export function buildMultiFacultyGridBatchUpdateRequest(items: MultiFacultyGridItem[]) {
+  const requests: any[] = [];
+  let currentIndex = 0;
+
+  // 1. Student Name
+  requests.push({
+    createItem: {
+      item: {
+        title: 'Student Name',
+        description: 'Enter your full name as per college records.',
+        questionItem: {
+          question: {
+            required: true,
+            textQuestion: {
+              paragraph: false,
+            },
+          },
+        },
+      },
+      location: {
+        index: currentIndex++,
+      },
+    },
+  });
+
+  // 2. University Registration Number
+  requests.push({
+    createItem: {
+      item: {
+        title: 'University Registration Number',
+        description: 'Enter your university registration number.',
+        questionItem: {
+          question: {
+            required: true,
+            textQuestion: {
+              paragraph: false,
+            },
+          },
+        },
+      },
+      location: {
+        index: currentIndex++,
+      },
+    },
+  });
+
+  // 3. One Multiple Choice Grid (questionGroupItem) per Faculty-Subject
+  items.forEach(item => {
+    const gridTitle =
+      item.gridTitle ||
+      `${item.subjectName}${item.subjectCode ? ` (${item.subjectCode})` : ''} — ${item.facultyName}`;
+
+    requests.push({
+      createItem: {
+        item: {
+          title: gridTitle,
+          description: `Teacher: ${item.facultyName} | Subject: ${item.subjectName}${item.subjectCode ? ` (${item.subjectCode})` : ''}`,
+          questionGroupItem: {
+            grid: {
+              columns: {
+                type: 'RADIO' as const,
+                options: BCE_RATING_OPTIONS.map(opt => ({ value: opt })),
+              },
+              shuffleQuestions: false,
+            },
+            questions: BCE_FEEDBACK_PARAMETERS.map(param => ({
+              rowQuestion: {
+                title: param.title,
+              },
+              required: true,
+            })),
+          },
+        },
+        location: {
+          index: currentIndex++,
+        },
+      },
+    });
+  });
+
+  // 4. General Feedback (Optional)
+  requests.push({
+    createItem: {
+      item: {
+        title: 'General Feedback',
+        description: 'Share any additional comments, suggestions, or overall feedback regarding this semester.',
+        questionItem: {
+          question: {
+            required: false,
+            textQuestion: {
+              paragraph: true,
+            },
+          },
+        },
+      },
+      location: {
+        index: currentIndex++,
+      },
+    },
+  });
+
+  // 5. More Feedback Forms (Informational Text Item)
+  requests.push({
+    createItem: {
+      item: {
+        title: 'More Feedback Forms',
+        description: `Need to access more academic feedback forms?\nVisit:\n${PUBLIC_FEEDBACK_PORTAL_URL}`,
+        textItem: {},
+      },
+      location: {
+        index: currentIndex++,
+      },
+    },
+  });
+
+  return requests;
+}
+

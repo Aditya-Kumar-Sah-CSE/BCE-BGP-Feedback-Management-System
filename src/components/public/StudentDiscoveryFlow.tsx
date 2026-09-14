@@ -12,6 +12,7 @@ import {
   getPublicFacultiesForSelectionAction,
   getPublicSubjectsForFacultyAction,
   getPublicFeedbackFormAction,
+  getPublicSemesterFeedbackFormAction,
   PublicFormSummary,
 } from '@/app/feedback/actions';
 import { PublicFeedbackCard } from '@/components/public/PublicFeedbackCard';
@@ -26,6 +27,8 @@ import {
   Sparkles,
   RotateCcw,
   Info,
+  ExternalLink,
+  Users,
 } from 'lucide-react';
 
 
@@ -66,7 +69,15 @@ export function StudentDiscoveryFlow({
   const [loadingForm, setLoadingForm] = useState<boolean>(false);
   const [, startTransition] = useTransition();
 
-  // 1. Fetch faculties when Year + Branch + Semester change
+  // Semester form state
+  const [semesterFormResult, setSemesterFormResult] = useState<{
+    form: PublicFormSummary | null;
+    status: 'PUBLISHED' | 'CLOSED' | 'NONE';
+    itemsCount?: number;
+    message: string;
+  } | null>(null);
+
+  // 1. Fetch faculties & semester form when Year + Branch + Semester change
   useEffect(() => {
     if (!selectedYearId || !selectedBranchId || !selectedSemesterId) {
       setFaculties([]);
@@ -74,6 +85,7 @@ export function StudentDiscoveryFlow({
       setSubjects([]);
       setSelectedSubjectId('');
       setMatchedForm(null);
+      setSemesterFormResult(null);
       return;
     }
 
@@ -83,6 +95,18 @@ export function StudentDiscoveryFlow({
     setSubjects([]);
     setSelectedSubjectId('');
     setMatchedForm(null);
+    setSemesterFormResult(null);
+
+    // Fetch semester form if available
+    getPublicSemesterFeedbackFormAction(selectedYearId, selectedBranchId, selectedSemesterId).then(res => {
+      if (isMounted) {
+        if (res.success && res.form && res.status === 'PUBLISHED') {
+          setSemesterFormResult(res);
+        } else {
+          setSemesterFormResult(null);
+        }
+      }
+    });
 
     startTransition(async () => {
       try {
@@ -336,8 +360,48 @@ export function StudentDiscoveryFlow({
           </div>
         </div>
 
+        {/* Prominent Banner for Official Semester Feedback Form */}
+        {semesterFormResult && semesterFormResult.status === 'PUBLISHED' && semesterFormResult.form && (
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-bce-navy via-slate-900 to-indigo-950 text-white shadow-md border border-indigo-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-slate-950 uppercase tracking-wider">
+                  Official All-in-One Form
+                </span>
+                {semesterFormResult.itemsCount ? (
+                  <span className="text-blue-200 text-xs font-semibold flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5" />
+                    {semesterFormResult.itemsCount} Teachers Evaluated
+                  </span>
+                ) : null}
+              </div>
+              <h3 className="text-base font-bold text-white">
+                Official Semester Feedback Form Available — Includes All Subjects & Teachers
+              </h3>
+              <p className="text-xs text-slate-300 max-w-xl">
+                Students of {selectedBranch?.name} ({selectedSemester?.name}) can rate all course faculty in a single Google Form with standard Multiple Choice Grids.
+              </p>
+            </div>
+
+            {semesterFormResult.form.google_form_url && (
+              <a
+                href={semesterFormResult.form.google_form_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs rounded-xl transition-all shadow-md shrink-0 active:scale-95"
+              >
+                <span>Start Feedback</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+          </div>
+        )}
+
         {/* Tier 2: Faculty & Subject Cascading Filters */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+          <div className="sm:col-span-2 text-xs font-semibold text-slate-500">
+            Or select an individual faculty member and subject below:
+          </div>
           {/* Step 4: Faculty Selector */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center justify-between">

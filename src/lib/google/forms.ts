@@ -1,5 +1,9 @@
 import { getGoogleServices } from './auth';
-import { buildCreateQuestionsBatchUpdateRequest } from './template';
+import {
+  buildCreateQuestionsBatchUpdateRequest,
+  buildMultiFacultyGridBatchUpdateRequest,
+  MultiFacultyGridItem,
+} from './template';
 
 export interface CreateFormResult {
   formId: string;
@@ -8,11 +12,14 @@ export interface CreateFormResult {
 }
 
 /**
- * Creates a Google Form and populates it with the standard 8 BCE evaluation questions.
+ * Creates a Google Form and populates it with either:
+ * - Multi-faculty Multiple Choice Grids (SEMESTER_FEEDBACK) if items are provided, or
+ * - The standard 8 BCE evaluation questions (FACULTY_FEEDBACK)
  */
 export async function createGoogleFeedbackForm(params: {
   title: string;
   description: string;
+  items?: MultiFacultyGridItem[];
 }): Promise<CreateFormResult> {
   const { forms } = getGoogleServices();
 
@@ -33,8 +40,12 @@ export async function createGoogleFeedbackForm(params: {
     throw new Error('Google Forms API did not return valid formId or responderUri');
   }
 
-  // 2. Batch update: Add Form Description, Email Collection Settings, and all Template Items
-  const questionRequests = buildCreateQuestionsBatchUpdateRequest();
+  // 2. Batch update: Add Form Description, Email Collection Settings, and Template Items
+  const questionRequests =
+    params.items && params.items.length > 0
+      ? buildMultiFacultyGridBatchUpdateRequest(params.items)
+      : buildCreateQuestionsBatchUpdateRequest();
+
 
   const updateInfoRequest = {
     updateFormInfo: {

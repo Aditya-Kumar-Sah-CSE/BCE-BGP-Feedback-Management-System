@@ -22,6 +22,9 @@ import {
   AlertCircle,
   FileCode2,
   Info,
+  Layers,
+  User,
+  GraduationCap,
 } from 'lucide-react';
 
 interface Props {
@@ -31,6 +34,7 @@ interface Props {
 export function FormResultsConsole({ initialReport }: Props) {
   const router = useRouter();
   const [report, setReport] = useState<FormAnalyticsReport>(initialReport);
+  const [selectedGridIndex, setSelectedGridIndex] = useState<number>(-1); // -1 = All Subjects Combined
   const [isSyncing, startSync] = useTransition();
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -57,14 +61,32 @@ export function FormResultsConsole({ initialReport }: Props) {
     });
   };
 
+  // Determine active displayed report
+  const isSemester = Boolean(report.isSemesterForm && report.facultyGrids && report.facultyGrids.length > 0);
+  const currentReport: FormAnalyticsReport =
+    selectedGridIndex >= 0 && report.facultyGrids?.[selectedGridIndex]
+      ? report.facultyGrids[selectedGridIndex].report
+      : report;
+
+  const activeFacultyGrid =
+    selectedGridIndex >= 0 && report.facultyGrids?.[selectedGridIndex]
+      ? report.facultyGrids[selectedGridIndex]
+      : null;
+
   const gradeInfo = (() => {
-    if (!report.hasData) return { label: 'NO DATA', color: 'text-slate-400', bg: 'bg-slate-100', border: 'border-slate-300' };
-    const s = report.averageOverallScore;
+    if (!currentReport.hasData) return { label: 'NO DATA', color: 'text-slate-400', bg: 'bg-slate-100', border: 'border-slate-300' };
+    const s = currentReport.compositeAverageScore || currentReport.averageOverallScore;
     if (s >= 3.5) return { label: 'VERY GOOD (EXCELLENT)', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-300' };
     if (s >= 2.75) return { label: 'GOOD (COMMENDABLE)', color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-300' };
     if (s >= 2.0) return { label: 'SATISFACTORY', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-300' };
     return { label: 'NEEDS ATTENTION', color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-300' };
   })();
+
+  // PDF download links
+  const semesterOverviewPdfUrl = `/api/admin/results/${report.formId}/pdf?scope=SEMESTER`;
+  const facultyPdfUrl = activeFacultyGrid
+    ? `/api/admin/results/${report.formId}/pdf?faculty=${encodeURIComponent(activeFacultyGrid.facultyName)}`
+    : `/api/admin/results/${report.formId}/pdf`;
 
   return (
     <div className="space-y-6">
@@ -81,11 +103,23 @@ export function FormResultsConsole({ initialReport }: Props) {
                 <ArrowLeft className="w-5 h-5" />
               </Link>
               <div>
-                <h1 className="text-xl font-bold text-slate-900">
-                  {report.facultyName}
-                </h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-bold text-slate-900">
+                    {isSemester
+                      ? selectedGridIndex === -1
+                        ? `Semester Feedback — ${report.branch} (${report.semester})`
+                        : `${activeFacultyGrid?.facultyName} — ${activeFacultyGrid?.subjectName}`
+                      : report.facultyName}
+                  </h1>
+                  {isSemester && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                      Multi-Faculty Semester Form
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-600 font-medium">
-                  {report.subjectName} ({report.subjectCode}) • {report.branch} • {report.semester} • {report.academicYear}
+                  {report.branch} • {report.semester} • {report.academicYear}
+                  {isSemester && report.facultyGrids ? ` • ${report.facultyGrids.length} Teachers Evaluated` : ''}
                 </p>
               </div>
             </div>
@@ -103,15 +137,48 @@ export function FormResultsConsole({ initialReport }: Props) {
               <span>{isSyncing ? 'Syncing...' : 'Sync Responses'}</span>
             </button>
 
-            <a
-              href={`/api/admin/results/${report.formId}/pdf`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-bce-navy hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+            <Link
+              href={`/admin/dashboard/results/${report.formId}/responses`}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold transition-all border border-indigo-200 shadow-xs"
             >
-              <FileDown className="w-3.5 h-3.5 text-amber-400" />
-              <span>Download Faculty Report (PDF)</span>
-            </a>
+              <Users className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Student Responses</span>
+            </Link>
+
+            {isSemester ? (
+              <div className="flex items-center gap-2">
+                <a
+                  href={semesterOverviewPdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-bce-navy hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                >
+                  <FileDown className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Download Semester PDF</span>
+                </a>
+                {activeFacultyGrid && (
+                  <a
+                    href={facultyPdfUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all border border-slate-300"
+                  >
+                    <FileDown className="w-3.5 h-3.5 text-bce-cobalt" />
+                    <span>Faculty PDF</span>
+                  </a>
+                )}
+              </div>
+            ) : (
+              <a
+                href={facultyPdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-bce-navy hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+              >
+                <FileDown className="w-3.5 h-3.5 text-amber-400" />
+                <span>Download Faculty Report (PDF)</span>
+              </a>
+            )}
           </div>
         </div>
 
@@ -170,16 +237,66 @@ export function FormResultsConsole({ initialReport }: Props) {
         </div>
       </div>
 
+      {/* Scope Selector Tabs for Semester Forms */}
+      {isSemester && report.facultyGrids && (
+        <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs space-y-2">
+          <div className="flex items-center justify-between px-2 pt-1 pb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-bce-cobalt" />
+              Analytics View Scope
+            </span>
+            <span className="text-[11px] text-slate-400 font-medium">
+              {report.facultyGrids.length} Evaluated Faculty-Subject Grids
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedGridIndex(-1)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                selectedGridIndex === -1
+                  ? 'bg-bce-navy text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span>All Subjects Combined (Semester Benchmark)</span>
+            </button>
+
+            {report.facultyGrids.map((fg, idx) => {
+              const isSelected = selectedGridIndex === idx;
+              return (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedGridIndex(idx)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-bce-cobalt text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>{fg.facultyName}</span>
+                  <span className="text-[10px] opacity-75 font-normal">({fg.subjectCode || fg.subjectName})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* KPI Metric Summary Blocks */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Responses */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Total Submissions</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider">
+              {isSemester && selectedGridIndex === -1 ? 'Total Students' : 'Total Submissions'}
+            </span>
             <Users className="w-4 h-4 text-blue-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 mt-2">
-            {report.totalResponses}
+            {currentReport.totalResponses}
           </div>
           <p className="text-[11px] text-slate-500 mt-1">Recorded in Google Sheet</p>
         </div>
@@ -187,27 +304,31 @@ export function FormResultsConsole({ initialReport }: Props) {
         {/* Valid Responses */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Valid Responses</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider">
+              {isSemester && selectedGridIndex === -1 ? 'Evaluated Items' : 'Valid Evaluations'}
+            </span>
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 mt-2">
-            {report.validResponses}
+            {currentReport.validResponses}
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            {report.unansweredResponses} incomplete/unanswered
+            {currentReport.unansweredResponses} incomplete/unanswered
           </p>
         </div>
 
         {/* Overall Average Score */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Overall Rating</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider">
+              {isSemester && selectedGridIndex === -1 ? 'Semester Benchmark' : 'Average Rating'}
+            </span>
             <Award className="w-4 h-4 text-amber-500" />
           </div>
           <div className="text-2xl font-bold text-slate-900 mt-2">
-            {report.hasData ? (
+            {currentReport.hasData ? (
               <>
-                {report.averageOverallScore.toFixed(2)}{' '}
+                {currentReport.compositeAverageScore.toFixed(2)}{' '}
                 <span className="text-xs font-medium text-slate-400">/ 4.00</span>
               </>
             ) : (
@@ -215,8 +336,8 @@ export function FormResultsConsole({ initialReport }: Props) {
             )}
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            {report.hasData
-              ? `Composite Avg: ${report.compositeAverageScore.toFixed(2)}/4.00`
+            {currentReport.hasData
+              ? `Weighted score across 8 parameters`
               : 'Requires student responses'}
           </p>
         </div>
@@ -238,6 +359,80 @@ export function FormResultsConsole({ initialReport }: Props) {
         </div>
       </div>
 
+      {/* Comparative Matrix Section for Semester Forms (When All Subjects Combined is Selected) */}
+      {isSemester && selectedGridIndex === -1 && report.facultyGrids && report.facultyGrids.length > 0 && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">
+                Semester Faculty Comparative Performance Matrix
+              </h3>
+              <p className="text-xs text-slate-500">
+                Comparative ranking and parameter evaluation scores for all course faculty.
+              </p>
+            </div>
+            <span className="text-xs text-slate-400 font-medium">
+              {report.facultyGrids.length} Faculty Members
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase text-[10px]">
+                  <th className="py-2.5 px-3">Faculty Member</th>
+                  <th className="py-2.5 px-3">Subject</th>
+                  <th className="py-2.5 px-3 text-center">Submissions</th>
+                  <th className="py-2.5 px-3 text-center">Average Rating</th>
+                  <th className="py-2.5 px-3">Performance Benchmark</th>
+                  <th className="py-2.5 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {report.facultyGrids.map((fg, idx) => {
+                  const score = fg.report.compositeAverageScore;
+                  const scoreColor =
+                    score >= 3.0 ? 'text-emerald-700 font-bold' : score >= 2.0 ? 'text-amber-700 font-bold' : 'text-red-700 font-bold';
+
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-3 px-3 font-bold text-slate-900">{fg.facultyName}</td>
+                      <td className="py-3 px-3 text-slate-600">
+                        {fg.subjectName} {fg.subjectCode && `(${fg.subjectCode})`}
+                      </td>
+                      <td className="py-3 px-3 text-center font-semibold text-slate-700">
+                        {fg.report.validResponses}
+                      </td>
+                      <td className={`py-3 px-3 text-center ${scoreColor}`}>
+                        {fg.report.hasData ? `${score.toFixed(2)} / 4.00` : 'No Data'}
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="w-36 bg-slate-100 rounded-full h-2 overflow-hidden">
+                          <div
+                            className={`h-2 rounded-full ${
+                              score >= 3.0 ? 'bg-emerald-500' : score >= 2.0 ? 'bg-amber-500' : 'bg-red-500'
+                            }`}
+                            style={{ width: `${fg.report.hasData ? (score / 4) * 100 : 0}%` }}
+                          />
+                        </div>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <button
+                          onClick={() => setSelectedGridIndex(idx)}
+                          className="px-2.5 py-1 text-[11px] font-bold text-bce-cobalt bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                        >
+                          View Details →
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Visual Analytics Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Parameter-wise Average */}
@@ -247,10 +442,10 @@ export function FormResultsConsole({ initialReport }: Props) {
               Evaluation Parameter Scores (1.00 — 4.00)
             </h3>
             <p className="text-xs text-slate-500">
-              Weighted average rating calculated across all valid student submissions.
+              Weighted average rating calculated across valid student submissions.
             </p>
           </div>
-          <ParameterScoreBarChart parameters={report.parameters} hasData={report.hasData} />
+          <ParameterScoreBarChart parameters={currentReport.parameters} hasData={currentReport.hasData} />
         </div>
 
         {/* Parameter Distribution Stacked Bar */}
@@ -264,8 +459,8 @@ export function FormResultsConsole({ initialReport }: Props) {
             </p>
           </div>
           <ParameterDistributionStackedChart
-            parameters={report.parameters}
-            hasData={report.hasData}
+            parameters={currentReport.parameters}
+            hasData={currentReport.hasData}
           />
         </div>
 
@@ -277,7 +472,7 @@ export function FormResultsConsole({ initialReport }: Props) {
               Institutional breakdown of all valid submitted evaluation items.
             </p>
           </div>
-          <OverallDonutChart distribution={report.distribution} hasData={report.hasData} />
+          <OverallDonutChart distribution={currentReport.distribution} hasData={currentReport.hasData} />
         </div>
       </div>
 
@@ -295,7 +490,7 @@ export function FormResultsConsole({ initialReport }: Props) {
           <span className="text-xs text-slate-400 font-medium">8 Parameters Configured</span>
         </div>
 
-        {!report.hasData ? (
+        {!currentReport.hasData ? (
           <div className="py-10 text-center text-slate-400 space-y-2">
             <p className="text-sm font-semibold">No feedback responses are available yet.</p>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
@@ -304,7 +499,7 @@ export function FormResultsConsole({ initialReport }: Props) {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {report.parameters.map(p => {
+            {currentReport.parameters.map(p => {
               const scoreColor =
                 p.averageScore >= 3.0
                   ? 'text-emerald-700 bg-emerald-50 border-emerald-200'

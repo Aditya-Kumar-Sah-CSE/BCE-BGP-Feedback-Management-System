@@ -1,5 +1,5 @@
 import { getGoogleServices } from './auth';
-import { BCE_FEEDBACK_PARAMETERS } from './template';
+import { BCE_FEEDBACK_PARAMETERS, MultiFacultyGridItem } from './template';
 
 export interface CreateSheetResult {
   spreadsheetId: string;
@@ -30,11 +30,35 @@ export const FEEDBACK_SHEET_HEADERS = [
   'General Feedback',
 ];
 
+export function buildMultiFacultySheetHeaders(items: MultiFacultyGridItem[]): string[] {
+  const headers = [
+    'Timestamp',
+    'Response ID',
+    'Email',
+    'Student Name',
+    'University Registration Number',
+  ];
+
+  items.forEach(item => {
+    const gridTitle =
+      item.gridTitle ||
+      `${item.subjectName}${item.subjectCode ? ` (${item.subjectCode})` : ''} — ${item.facultyName}`;
+
+    BCE_FEEDBACK_PARAMETERS.forEach(p => {
+      headers.push(`${gridTitle} [${p.title}]`);
+    });
+  });
+
+  headers.push('General Feedback');
+  return headers;
+}
+
 /**
  * Creates a new Google Spreadsheet for feedback responses and styles the header row
  */
 export async function createFeedbackSpreadsheet(params: {
   title: string;
+  items?: MultiFacultyGridItem[];
 }): Promise<CreateSheetResult> {
   const { sheets } = getGoogleServices();
 
@@ -67,7 +91,12 @@ export async function createFeedbackSpreadsheet(params: {
     throw new Error('Google Sheets API failed to create spreadsheet');
   }
 
-  const lastColLetter = getColumnLetter(FEEDBACK_SHEET_HEADERS.length);
+  const targetHeaders =
+    params.items && params.items.length > 0
+      ? buildMultiFacultySheetHeaders(params.items)
+      : FEEDBACK_SHEET_HEADERS;
+
+  const lastColLetter = getColumnLetter(targetHeaders.length);
 
   // 2. Initialize Header Row
   await sheets.spreadsheets.values.update({
@@ -75,7 +104,7 @@ export async function createFeedbackSpreadsheet(params: {
     range: `'Form Responses'!A1:${lastColLetter}1`,
     valueInputOption: 'USER_ENTERED',
     requestBody: {
-      values: [FEEDBACK_SHEET_HEADERS],
+      values: [targetHeaders],
     },
   });
 
@@ -92,7 +121,7 @@ export async function createFeedbackSpreadsheet(params: {
                 startRowIndex: 0,
                 endRowIndex: 1,
                 startColumnIndex: 0,
-                endColumnIndex: FEEDBACK_SHEET_HEADERS.length,
+                endColumnIndex: targetHeaders.length,
               },
               cell: {
                 userEnteredFormat: {
@@ -195,5 +224,46 @@ export async function getExistingSheetResponseIds(spreadsheetId: string): Promis
     return new Set(rows.map(r => String(r[0])));
   } catch {
     return new Set();
+  }
+}
+
+/**
+ * Fetches a single response row by responseId from the authoritative Google Sheet
+ */
+export async function fetchSingleResponseFromSheet(
+  spreadsheetId: string,
+  responseId: string
+): Promise<{ headers: string[]; row: string[] } | null> {
+  try {
+    const { sheets } = getGoogleServices();
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: "'Form Responses'!A1:ZZ",
+    });
+
+    const rows = res.data.values || [];
+    if (rows.length < 2) return null;
+
+    const headers = (rows[0] || []).map(h => String(h || '').trim());
+    const respIdIdx = headers.findIndex(
+      h => h.toLowerCase().includes('response id') || (h.toLowerCase() === 'id' && !h.toLowerCase().includes('student'))
+    );
+
+    if (respIdIdx === -1) return null;
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (String(row[respIdIdx] || '').trim() === responseId.trim()) {
+        return {
+          headers,
+          row: row.map(cell => String(cell || '').trim()),
+        };
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.error(`[Sheets] Failed to fetch single response ${responseId}:`, err);
+    return null;
   }
 }

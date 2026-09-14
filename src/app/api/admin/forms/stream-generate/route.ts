@@ -3,8 +3,8 @@ import { getAdminSession } from '@/lib/auth/admin-auth';
 import {
   validateAndPrepareFormDraftAction,
   provisionGoogleFormAndSheetAction,
-  CreateFormPayload,
 } from '@/app/admin/forms/actions';
+import { CreateFormPayload } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
         draftFormId: prepRes.draftFormId,
         title: prepRes.title || 'Faculty Feedback Form',
         description: prepRes.description || '',
+        items: (prepRes as any).validatedItems,
       });
 
       if (!provRes.success || !provRes.form) {

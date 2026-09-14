@@ -18,17 +18,36 @@ export const requestAccessSchema = z.object({
   department: z.string().trim().max(100).optional(),
 });
 
+export const semesterFormItemSchema = z.object({
+  facultyId: z.string().uuid('Faculty ID must be a valid UUID'),
+  subjectId: z.string().uuid('Subject ID must be a valid UUID'),
+  assignmentId: z.string().uuid('Assignment ID must be a valid UUID').optional().nullable(),
+});
+
+export type SemesterFormItemInput = z.infer<typeof semesterFormItemSchema>;
+
 /**
- * Form Creation Schema
+ * Form Creation Schema supporting both SEMESTER_FEEDBACK (multi-faculty) and legacy single-faculty forms
  */
 export const createFormPayloadSchema = z.object({
   academicYearId: z.string().uuid('Academic Year ID must be a valid UUID'),
   branchId: z.string().uuid('Branch ID must be a valid UUID'),
   semesterId: z.string().uuid('Semester ID must be a valid UUID'),
-  facultyId: z.string().uuid('Faculty ID must be a valid UUID'),
-  subjectId: z.string().uuid('Subject ID must be a valid UUID'),
-  formType: z.enum(['FACULTY_SPECIFIC', 'BRANCH_SPECIFIC']),
+  formType: z.enum(['SEMESTER_FEEDBACK', 'FACULTY_FEEDBACK', 'FACULTY_SPECIFIC', 'BRANCH_SPECIFIC']),
+  facultyId: z.string().uuid('Faculty ID must be a valid UUID').optional().nullable(),
+  subjectId: z.string().uuid('Subject ID must be a valid UUID').optional().nullable(),
+  items: z.array(semesterFormItemSchema).optional(),
+}).refine(data => {
+  if (data.formType === 'SEMESTER_FEEDBACK') {
+    return Array.isArray(data.items) && data.items.length > 0;
+  }
+  return Boolean(data.facultyId && data.subjectId);
+}, {
+  message: 'For SEMESTER_FEEDBACK, at least one faculty-subject item is required. For single-faculty forms, facultyId and subjectId are required.',
 });
+
+export type CreateFormPayload = z.infer<typeof createFormPayloadSchema>;
+
 
 /**
  * Feedback Form Lifecycle Status Schema

@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { StudentDiscoveryFlow } from '@/components/public/StudentDiscoveryFlow';
+import { AllFeedbackFormsSection } from '@/components/public/AllFeedbackFormsSection';
+import { getPublicActiveFormsAction } from '@/app/feedback/actions';
 import { School, ArrowLeft, ShieldCheck, GraduationCap } from 'lucide-react';
 
 import type { AcademicYear, Branch, Semester } from '@/types/database';
@@ -10,15 +12,17 @@ export const dynamic = 'force-dynamic';
 export default async function FeedbackPortalPage() {
   const supabase = await createClient();
 
-  // Fetch active academic masters
+  // Fetch active academic masters and initial active forms
   const [
     { data: academicYears },
     { data: branches },
     { data: semesters },
+    initialActiveForms,
   ] = await Promise.all([
     supabase.from('academic_years').select('*').eq('is_active', true).order('name', { ascending: false }),
     supabase.from('branches').select('*').eq('is_active', true).order('name', { ascending: true }),
     supabase.from('semesters').select('*').eq('is_active', true).order('semester_number', { ascending: true }),
+    getPublicActiveFormsAction({ page: 1, pageSize: 12 }),
   ]);
 
   return (
@@ -80,6 +84,9 @@ export default async function FeedbackPortalPage() {
           branches={(branches as Branch[]) || []}
           semesters={(semesters as Semester[]) || []}
         />
+
+        {/* All Currently Active Feedback Forms Section */}
+        <AllFeedbackFormsSection initialData={initialActiveForms} />
       </main>
 
       {/* Footer */}

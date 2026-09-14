@@ -3,9 +3,10 @@
  * Bhagalpur College of Engineering (Govt. of Bihar)
  */
 
-export type RatingOption = 'Very Good' | 'Good' | 'Satisfactory' | 'Unsatisfactory';
+export type RatingOption = 'Excellent' | 'Very Good' | 'Good' | 'Satisfactory' | 'Unsatisfactory';
 
 export const RATING_WEIGHTS: Record<RatingOption, number> = {
+  'Excellent': 5,
   'Very Good': 4,
   'Good': 3,
   'Satisfactory': 2,
@@ -26,30 +27,44 @@ export interface ParameterMetrics {
   parameterId: number;
   title: string;
   description: string;
+  excellentCount: number;
   veryGoodCount: number;
   goodCount: number;
   satisfactoryCount: number;
   unsatisfactoryCount: number;
   validCount: number;
   unansweredCount: number;
+  excellentPct: number;
   veryGoodPct: number;
   goodPct: number;
   satisfactoryPct: number;
   unsatisfactoryPct: number;
-  averageScore: number; // 1.00 to 4.00 (or 0 if 0 valid responses)
+  averageScore: number; // 1.00 to 5.00 (or 0 if 0 valid responses)
   interpretation: string;
 }
 
 export interface OverallDistribution {
+  excellentCount: number;
   veryGoodCount: number;
   goodCount: number;
   satisfactoryCount: number;
   unsatisfactoryCount: number;
   totalValidRatings: number;
+  excellentPct: number;
   veryGoodPct: number;
   goodPct: number;
   satisfactoryPct: number;
   unsatisfactoryPct: number;
+}
+
+export interface FacultyGridAnalyticsItem {
+  gridTitle: string;
+  facultyId?: string;
+  subjectId?: string;
+  facultyName: string;
+  subjectName: string;
+  subjectCode: string;
+  report: FormAnalyticsReport;
 }
 
 export interface FormAnalyticsReport {
@@ -75,6 +90,8 @@ export interface FormAnalyticsReport {
   distribution: OverallDistribution;
   hasData: boolean;
   generatedAt: string;
+  isSemesterForm?: boolean;
+  facultyGrids?: FacultyGridAnalyticsItem[];
 }
 
 export interface FacultyComparisonItem {

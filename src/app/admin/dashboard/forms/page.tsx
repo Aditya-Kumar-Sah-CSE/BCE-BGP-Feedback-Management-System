@@ -21,6 +21,7 @@ import {
 
 import { FeedbackForm, FeedbackFormStatus, AcademicYear, Branch, Semester } from '@/types/database';
 import { FormsFilterClient } from '@/components/admin/forms/FormsFilterClient';
+import { DeleteFormButton } from '@/components/admin/forms/DeleteFormButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -440,6 +441,7 @@ export default async function FeedbackFormsPage({
                             <Eye className="w-3.5 h-3.5" />
                             <span>Manage</span>
                           </Link>
+                          <DeleteFormButton formId={form.id} formTitle={form.title} />
                         </div>
                       </td>
                     </tr>

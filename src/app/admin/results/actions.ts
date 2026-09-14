@@ -8,9 +8,17 @@ async function getAdminDb() {
   return createAdminClient() || await createClient();
 }
 import { fetchRawSheetResponses } from '@/lib/analytics/sheets-reader';
-import { normalizeSheetRows } from '@/lib/analytics/normalizer';
+import {
+  normalizeSheetRows,
+  detectMultiGrids,
+  normalizeSheetRowsForSpecificGrid,
+} from '@/lib/analytics/normalizer';
 import { calculateFormAnalytics, aggregateAnalytics } from '@/lib/analytics/engine';
-import type { FormAnalyticsReport, AggregatedAnalyticsReport } from '@/lib/analytics/types';
+import type {
+  FormAnalyticsReport,
+  AggregatedAnalyticsReport,
+  FacultyGridAnalyticsItem,
+} from '@/lib/analytics/types';
 import { syncFormResponsesToSheet } from '@/lib/google/sync';
 import { isGoogleConfigured } from '@/lib/google/auth';
 import { isValidUUID } from '@/lib/validation';
@@ -56,12 +64,67 @@ export async function getFormAnalyticsAction(formId: string): Promise<{
 
   // 3. Fetch Real Response Data from Google Sheet
   let canonicalRows: ReturnType<typeof normalizeSheetRows> = [];
+  const isSemester = form.form_type === 'SEMESTER_FEEDBACK';
+  let facultyGrids: FacultyGridAnalyticsItem[] = [];
+  let sheetStudentRowCount = 0;
 
   if (form.google_sheet_id && isGoogleConfigured()) {
     try {
       const sheetData = await fetchRawSheetResponses(form.google_sheet_id);
+      sheetStudentRowCount = sheetData.totalRowCount;
+
       if (sheetData.rows.length > 0) {
-        canonicalRows = normalizeSheetRows(sheetData.headers, sheetData.rows);
+        if (isSemester) {
+          const detectedGrids = detectMultiGrids(sheetData.headers);
+
+          if (detectedGrids.length > 0) {
+            facultyGrids = detectedGrids.map(grid => {
+              const gridRows = normalizeSheetRowsForSpecificGrid(
+                sheetData.headers,
+                sheetData.rows,
+                grid.paramColIndices
+              );
+
+              const gridReport = calculateFormAnalytics({
+                formId: form.id,
+                title: `${grid.subjectName} — ${grid.facultyName}`,
+                academicYear: form.academic_year?.name || 'Academic Session',
+                branch: form.branch?.name || 'Branch',
+                semester: form.semester?.name || 'Semester',
+                facultyName: grid.facultyName || 'Faculty Member',
+                subjectName: grid.subjectName || 'Subject',
+                subjectCode: grid.subjectCode || '',
+                formType: 'SEMESTER_FEEDBACK',
+                status: form.status,
+                lastSyncedAt: form.last_synced_at,
+                googleSheetUrl: form.google_sheet_url,
+                googleFormUrl: form.google_form_url,
+                responses: gridRows,
+              });
+
+              return {
+                gridTitle: grid.gridTitle,
+                facultyName: grid.facultyName,
+                subjectName: grid.subjectName,
+                subjectCode: grid.subjectCode,
+                report: gridReport,
+              };
+            });
+
+            // Combined: Each student's grid evaluation becomes a logical evaluation record
+            canonicalRows = detectedGrids.flatMap(grid =>
+              normalizeSheetRowsForSpecificGrid(
+                sheetData.headers,
+                sheetData.rows,
+                grid.paramColIndices
+              )
+            );
+          } else {
+            canonicalRows = normalizeSheetRows(sheetData.headers, sheetData.rows);
+          }
+        } else {
+          canonicalRows = normalizeSheetRows(sheetData.headers, sheetData.rows);
+        }
 
         // Update database response_count if changed
         if (form.response_count !== sheetData.totalRowCount) {
@@ -86,8 +149,8 @@ export async function getFormAnalyticsAction(formId: string): Promise<{
     academicYear: form.academic_year?.name || 'Academic Session',
     branch: form.branch?.name || 'Branch',
     semester: form.semester?.name || 'Semester',
-    facultyName: form.faculty?.name || 'Faculty Member',
-    subjectName: form.subject?.name || 'Subject',
+    facultyName: isSemester ? 'All Assigned Faculty' : form.faculty?.name || 'Faculty Member',
+    subjectName: isSemester ? 'All Semester Subjects' : form.subject?.name || 'Subject',
     subjectCode: form.subject?.code || '',
     formType: form.form_type || 'FACULTY_SPECIFIC',
     status: form.status,
@@ -96,6 +159,14 @@ export async function getFormAnalyticsAction(formId: string): Promise<{
     googleFormUrl: form.google_form_url,
     responses: canonicalRows,
   });
+
+  if (isSemester) {
+    report.isSemesterForm = true;
+    report.facultyGrids = facultyGrids;
+    if (sheetStudentRowCount > 0) {
+      report.totalResponses = sheetStudentRowCount;
+    }
+  }
 
   return { success: true, report };
 }
@@ -311,6 +382,7 @@ export async function syncSingleFormResponsesAction(formId: string) {
   const syncRes = await syncFormResponsesToSheet({
     googleFormId: resolvedFormId,
     googleSheetId: resolvedSheetId,
+    formId,
   });
 
   if (!syncRes.success) {

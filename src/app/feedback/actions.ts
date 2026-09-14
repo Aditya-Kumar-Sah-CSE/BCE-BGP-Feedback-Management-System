@@ -355,3 +355,227 @@ export async function getPublicFeedbackFormByIdAction(formId: string): Promise<{
     };
   }
 }
+
+/**
+ * Fetch active semester feedback form for selected Year + Branch + Semester.
+ */
+export async function getPublicSemesterFeedbackFormAction(
+  yearId: string,
+  branchId: string,
+  semesterId: string
+): Promise<{
+  success: boolean;
+  form: PublicFormSummary | null;
+  status: 'PUBLISHED' | 'CLOSED' | 'NONE';
+  itemsCount?: number;
+  message: string;
+}> {
+  try {
+    if (!isValidUUID(yearId) || !isValidUUID(branchId) || !isValidUUID(semesterId)) {
+      return { success: false, form: null, status: 'NONE', message: 'Invalid academic parameters.' };
+    }
+
+    const supabase = await createClient();
+
+    const { data: form, error } = await supabase
+      .from('feedback_forms')
+      .select(`
+        id,
+        title,
+        description,
+        form_type,
+        status,
+        google_form_url,
+        published_at,
+        closed_at,
+        academic_year:academic_years(id, name),
+        branch:branches(id, name, code),
+        semester:semesters(id, name, semester_number)
+      `)
+      .eq('academic_year_id', yearId)
+      .eq('branch_id', branchId)
+      .eq('semester_id', semesterId)
+      .eq('form_type', 'SEMESTER_FEEDBACK')
+      .in('status', ['PUBLISHED', 'CLOSED'])
+      .order('created_at', { ascending: false })
+      .maybeSingle();
+
+    if (error || !form) {
+      return {
+        success: true,
+        form: null,
+        status: 'NONE',
+        message: 'No semester feedback form available.',
+      };
+    }
+
+    const { count } = await supabase
+      .from('feedback_form_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('form_id', form.id);
+
+    return {
+      success: true,
+      form: form as unknown as PublicFormSummary,
+      status: form.status as 'PUBLISHED' | 'CLOSED',
+      itemsCount: count || 0,
+      message:
+        form.status === 'PUBLISHED'
+          ? 'Official Semester Feedback Form Available — Includes All Subjects & Teachers'
+          : 'Semester feedback form is closed.',
+    };
+  } catch (err) {
+    console.error('getPublicSemesterFeedbackFormAction error:', err);
+    return { success: false, form: null, status: 'NONE', message: 'Error checking semester feedback form.' };
+  }
+}
+
+export interface PublicActiveFormCard {
+  id: string;
+  title: string;
+  formType: 'SEMESTER_FEEDBACK' | 'FACULTY_FEEDBACK';
+  status: string;
+  googleFormUrl: string | null;
+  publishedAt: string | null;
+  academicYear: string;
+  branch: string;
+  branchCode: string;
+  semester: string;
+  facultySubjectDisplay: string;
+  itemsCount?: number;
+}
+
+export interface PublicActiveFormsResult {
+  success: boolean;
+  forms: PublicActiveFormCard[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  error?: string;
+}
+
+/**
+ * Fetch all currently PUBLISHED / ACTIVE feedback forms with server-side pagination.
+ * Sorts newest published first.
+ * Safe public projection: Zero credentials, private sheets, response records, or PII exposed.
+ */
+export async function getPublicActiveFormsAction(params?: {
+  page?: number;
+  pageSize?: number;
+  branchId?: string;
+  search?: string;
+}): Promise<PublicActiveFormsResult> {
+  try {
+    const page = Math.max(1, params?.page || 1);
+    const pageSize = Math.min(50, Math.max(6, params?.pageSize || 12));
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const supabase = await createClient();
+
+    let query = supabase
+      .from('feedback_forms')
+      .select(
+        `
+        id,
+        title,
+        form_type,
+        status,
+        google_form_url,
+        published_at,
+        created_at,
+        branch:branches(id, name, code),
+        semester:semesters(id, name, semester_number),
+        academic_year:academic_years(id, name),
+        faculty:faculties(id, name),
+        subject:subjects(id, name, code),
+        items:feedback_form_items(id)
+      `,
+        { count: 'exact' }
+      )
+      .eq('status', 'PUBLISHED')
+      .order('published_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false });
+
+    if (params?.branchId && isValidUUID(params.branchId)) {
+      query = query.eq('branch_id', params.branchId);
+    }
+
+    if (params?.search && params.search.trim()) {
+      const term = params.search.trim();
+      query = query.or(`title.ilike.%${term}%`);
+    }
+
+    query = query.range(from, to);
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      console.error('getPublicActiveFormsAction error:', error);
+      return {
+        success: false,
+        forms: [],
+        totalCount: 0,
+        page,
+        pageSize,
+        totalPages: 0,
+        error: 'Failed to load feedback forms.',
+      };
+    }
+
+    const totalCount = count || 0;
+    const totalPages = Math.ceil(totalCount / pageSize);
+
+    const forms: PublicActiveFormCard[] = (data || []).map((f: any) => {
+      const isSemester = f.form_type === 'SEMESTER_FEEDBACK';
+      const itemsCount = f.items ? f.items.length : 0;
+
+      let facultySubjectDisplay = 'All Faculty';
+      if (isSemester) {
+        facultySubjectDisplay = itemsCount > 0 ? `All Faculty (${itemsCount} Teachers Evaluated)` : 'All Faculty (Semester Cohort)';
+      } else {
+        const facName = f.faculty?.name || 'Faculty Member';
+        const subName = f.subject?.name ? `${f.subject.name}${f.subject.code ? ` (${f.subject.code})` : ''}` : 'Subject';
+        facultySubjectDisplay = `${facName} — ${subName}`;
+      }
+
+      return {
+        id: f.id,
+        title: f.title,
+        formType: f.form_type,
+        status: f.status,
+        googleFormUrl: f.google_form_url || null,
+        publishedAt: f.published_at || f.created_at,
+        academicYear: f.academic_year?.name || 'Academic Session',
+        branch: f.branch?.name || 'Department',
+        branchCode: f.branch?.code || 'BCE',
+        semester: f.semester?.name || 'Semester',
+        facultySubjectDisplay,
+        itemsCount,
+      };
+    });
+
+    return {
+      success: true,
+      forms,
+      totalCount,
+      page,
+      pageSize,
+      totalPages,
+    };
+  } catch (err: unknown) {
+    console.error('getPublicActiveFormsAction exception:', err);
+    return {
+      success: false,
+      forms: [],
+      totalCount: 0,
+      page: 1,
+      pageSize: 12,
+      totalPages: 0,
+      error: 'Unexpected error loading forms.',
+    };
+  }
+}
+
+
