@@ -15,6 +15,39 @@ import {
 } from './types';
 
 /**
+ * Shared helper to count unique student submissions deduplicating by authoritative Google Forms response ID.
+ * One Google Forms submission represents ONE student response, regardless of how many faculty grids exist.
+ */
+export function countUniqueStudentResponses(responses: CanonicalResponseRow[]): number {
+  if (!responses || responses.length === 0) return 0;
+  const uniqueIds = new Set<string>();
+
+  for (const r of responses) {
+    // 1. Authoritative responseId if present and not generic fallback
+    if (r.responseId && !r.responseId.startsWith('row-')) {
+      uniqueIds.add(r.responseId.trim());
+      continue;
+    }
+
+    // 2. Stable identifier from registrationNumber or studentName + timestamp if available
+    const regOrName = (r.registrationNumber || r.studentName || '').trim().toLowerCase();
+    const ts = (r.timestamp || '').trim();
+    if (regOrName && ts) {
+      uniqueIds.add(`${ts}_${regOrName}`);
+      continue;
+    }
+
+    // 3. Fallback to responseId (which for multi-grids contains row-${rowIdx + 1}, identical for all grids in the same row)
+    const fallback = (r.responseId || r.timestamp || '').trim();
+    if (fallback) {
+      uniqueIds.add(fallback);
+    }
+  }
+
+  return uniqueIds.size;
+}
+
+/**
  * Computes analytics for a single feedback form from normalized canonical responses.
  */
 export function calculateFormAnalytics(params: {
@@ -34,10 +67,21 @@ export function calculateFormAnalytics(params: {
   responses: CanonicalResponseRow[];
 }): FormAnalyticsReport {
   const { responses } = params;
-  const totalResponses = responses.length;
-  const validResponses = responses.filter(r => r.isValid).length;
-  const unansweredResponses = totalResponses - validResponses;
-  const hasData = validResponses > 0;
+  const isSemester = params.formType === 'SEMESTER_FEEDBACK';
+
+  const isValidRow = (r: CanonicalResponseRow) =>
+    r.isValid ?? Object.values(r.ratings || {}).some(v => v !== null && v !== undefined);
+
+  // Authoritative student count: COUNT(DISTINCT response_id)
+  const totalStudents = countUniqueStudentResponses(responses);
+  const validStudents = countUniqueStudentResponses(responses.filter(isValidRow));
+  const evaluatedItems = responses.filter(isValidRow).length;
+  
+  // For semester forms: totalResponses = unique students, validResponses = evaluated items
+  const totalResponses = totalStudents;
+  const validResponses = evaluatedItems;
+  const unansweredResponses = Math.max(0, totalStudents - validStudents);
+  const hasData = evaluatedItems > 0;
 
   let totalAllScores = 0;
   let totalAllRatingsCount = 0;
@@ -68,7 +112,7 @@ export function calculateFormAnalytics(params: {
     }
 
     const validCount = exCount + vgCount + gCount + sCount + uCount;
-    const unansweredCount = totalResponses - validCount;
+    const unansweredCount = responses.length - validCount;
 
     // Accumulate global counts
     globalExcellent += exCount;
@@ -145,14 +189,19 @@ export function calculateFormAnalytics(params: {
     unsatisfactoryPct: totalValidRatings > 0 ? Number(((globalUnsatisfactory / totalValidRatings) * 100).toFixed(1)) : 0,
   };
 
-  // Composite average across all parameters
+  // Composite average across all parameters: strictly SUM(weights) / COUNT(ratings)
   const compositeAverageScore =
     totalAllRatingsCount > 0 ? Number((totalAllScores / totalAllRatingsCount).toFixed(2)) : 0;
 
-  // Parameter 8 is "Overall Rating" in BCE standard form
+  // Percentage on 5-point scale: (average / 5.0) * 100
+  const percentage =
+    totalAllRatingsCount > 0 ? Number(((compositeAverageScore / 5) * 100).toFixed(2)) : 0;
+
+  // Parameter 8 is "Overall Rating" in BCE single-faculty form; for semester form, use composite benchmark
   const param8 = parameters.find(p => p.parameterId === 8);
-  const averageOverallScore =
-    param8 && param8.validCount > 0 ? param8.averageScore : compositeAverageScore;
+  const averageOverallScore = isSemester
+    ? compositeAverageScore
+    : (param8 && param8.validCount > 0 ? param8.averageScore : compositeAverageScore);
 
   return {
     formId: params.formId,
@@ -169,6 +218,9 @@ export function calculateFormAnalytics(params: {
     googleSheetUrl: params.googleSheetUrl,
     googleFormUrl: params.googleFormUrl,
     totalResponses,
+    totalStudents,
+    evaluatedItems,
+    percentage,
     validResponses,
     unansweredResponses,
     averageOverallScore,
@@ -311,6 +363,16 @@ export function aggregateAnalytics(
   const averageOverallScore =
     param8 && param8.validCount > 0 ? param8.averageScore : compositeAverageScore;
 
+  let totalStudents = 0;
+  let evaluatedItems = 0;
+  for (const report of formReports) {
+    totalStudents += report.totalStudents ?? report.totalResponses;
+    evaluatedItems += report.evaluatedItems ?? report.validResponses;
+  }
+
+  const percentage =
+    totalAllRatings > 0 ? Number(((compositeAverageScore / 5) * 100).toFixed(2)) : 0;
+
   // Build faculty comparison array for forms with responses
   const facultyComparisons: FacultyComparisonItem[] = formsWithData
     .map(f => ({
@@ -320,8 +382,8 @@ export function aggregateAnalytics(
       subjectCode: f.subjectCode,
       branch: f.branch,
       semester: f.semester,
-      responseCount: f.validResponses,
-      averageScore: f.averageOverallScore,
+      responseCount: f.totalStudents ?? f.totalResponses,
+      averageScore: f.compositeAverageScore || f.averageOverallScore,
     }))
     .sort((a, b) => b.averageScore - a.averageScore);
 
@@ -331,6 +393,9 @@ export function aggregateAnalytics(
     totalForms,
     formsWithResponses,
     totalResponses,
+    totalStudents,
+    evaluatedItems,
+    percentage,
     validResponses,
     averageOverallScore,
     compositeAverageScore,

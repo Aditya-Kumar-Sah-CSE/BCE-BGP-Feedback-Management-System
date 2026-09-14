@@ -297,9 +297,15 @@ export function FormResultsConsole({ initialReport }: Props) {
             <Users className="w-4 h-4 text-blue-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 mt-2">
-            {currentReport.totalResponses}
+            {isSemester && selectedGridIndex === -1
+              ? (currentReport.totalStudents ?? currentReport.totalResponses)
+              : currentReport.totalResponses}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">Recorded in Google Sheet</p>
+          <p className="text-[11px] text-slate-500 mt-1">
+            {isSemester && selectedGridIndex === -1
+              ? 'Unique student submission(s)'
+              : 'Recorded in Google Sheet'}
+          </p>
         </div>
 
         {/* Valid Responses */}
@@ -311,10 +317,14 @@ export function FormResultsConsole({ initialReport }: Props) {
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 mt-2">
-            {currentReport.validResponses}
+            {isSemester && selectedGridIndex === -1
+              ? (currentReport.evaluatedItems ?? currentReport.validResponses)
+              : currentReport.validResponses}
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            {currentReport.unansweredResponses} incomplete/unanswered
+            {isSemester && selectedGridIndex === -1
+              ? `${report.facultyGrids?.length || 0} faculty-subject grid(s) evaluated`
+              : `${currentReport.unansweredResponses} incomplete/unanswered`}
           </p>
         </div>
 

@@ -13,7 +13,11 @@ import {
   detectMultiGrids,
   normalizeSheetRowsForSpecificGrid,
 } from '@/lib/analytics/normalizer';
-import { calculateFormAnalytics, aggregateAnalytics } from '@/lib/analytics/engine';
+import {
+  calculateFormAnalytics,
+  aggregateAnalytics,
+  countUniqueStudentResponses,
+} from '@/lib/analytics/engine';
 import type {
   FormAnalyticsReport,
   AggregatedAnalyticsReport,
@@ -27,13 +31,16 @@ import { isValidUUID } from '@/lib/validation';
  * Fetches real-time analytics for a specific feedback form.
  * Directly sources responses from the connected Google Sheet and normalizes them.
  */
-export async function getFormAnalyticsAction(formId: string): Promise<{
+export async function getFormAnalyticsAction(
+  formId: string,
+  options?: { client?: any }
+): Promise<{
   success: boolean;
   error?: string;
   report?: FormAnalyticsReport;
 }> {
   // 1. Admin Authentication Check
-  const session = await getAdminSession();
+  const session = await getAdminSession(options?.client);
   if (!session.isAuthenticated || !session.isActive) {
     return { success: false, error: 'Unauthorized. Active admin credentials required.' };
   }
@@ -66,12 +73,10 @@ export async function getFormAnalyticsAction(formId: string): Promise<{
   let canonicalRows: ReturnType<typeof normalizeSheetRows> = [];
   const isSemester = form.form_type === 'SEMESTER_FEEDBACK';
   let facultyGrids: FacultyGridAnalyticsItem[] = [];
-  let sheetStudentRowCount = 0;
 
   if (form.google_sheet_id && isGoogleConfigured()) {
     try {
       const sheetData = await fetchRawSheetResponses(form.google_sheet_id);
-      sheetStudentRowCount = sheetData.totalRowCount;
 
       if (sheetData.rows.length > 0) {
         if (isSemester) {
@@ -126,12 +131,15 @@ export async function getFormAnalyticsAction(formId: string): Promise<{
           canonicalRows = normalizeSheetRows(sheetData.headers, sheetData.rows);
         }
 
+        // Authoritative unique student response count (1 Google response ID = 1 student response)
+        const uniqueStudentCount = countUniqueStudentResponses(canonicalRows);
+
         // Update database response_count if changed
-        if (form.response_count !== sheetData.totalRowCount) {
+        if (form.response_count !== uniqueStudentCount && uniqueStudentCount > 0) {
           await supabase
             .from('feedback_forms')
             .update({
-              response_count: sheetData.totalRowCount,
+              response_count: uniqueStudentCount,
               updated_at: new Date().toISOString(),
             })
             .eq('id', formId);
@@ -163,8 +171,10 @@ export async function getFormAnalyticsAction(formId: string): Promise<{
   if (isSemester) {
     report.isSemesterForm = true;
     report.facultyGrids = facultyGrids;
-    if (sheetStudentRowCount > 0) {
-      report.totalResponses = sheetStudentRowCount;
+    const uniqueStudents = countUniqueStudentResponses(canonicalRows);
+    if (uniqueStudents > 0) {
+      report.totalResponses = uniqueStudents;
+      report.totalStudents = uniqueStudents;
     }
   }
 
@@ -253,12 +263,60 @@ export async function getOverallAnalyticsAction(filters?: ScopeFilters): Promise
 
   for (const form of allForms) {
     let canonicalRows: ReturnType<typeof normalizeSheetRows> = [];
+    const isSemesterForm = form.form_type === 'SEMESTER_FEEDBACK';
+    let facultyGrids: FacultyGridAnalyticsItem[] = [];
 
     if (form.google_sheet_id && isGoogleConfigured()) {
       try {
         const sheetData = await fetchRawSheetResponses(form.google_sheet_id);
         if (sheetData.rows.length > 0) {
-          canonicalRows = normalizeSheetRows(sheetData.headers, sheetData.rows);
+          if (isSemesterForm) {
+            const detectedGrids = detectMultiGrids(sheetData.headers);
+            if (detectedGrids.length > 0) {
+              facultyGrids = detectedGrids.map(grid => {
+                const gridRows = normalizeSheetRowsForSpecificGrid(
+                  sheetData.headers,
+                  sheetData.rows,
+                  grid.paramColIndices
+                );
+                const gridReport = calculateFormAnalytics({
+                  formId: form.id,
+                  title: `${grid.subjectName} — ${grid.facultyName}`,
+                  academicYear: form.academic_year?.name || 'Academic Session',
+                  branch: form.branch?.name || 'Branch',
+                  semester: form.semester?.name || 'Semester',
+                  facultyName: grid.facultyName || 'Faculty Member',
+                  subjectName: grid.subjectName || 'Subject',
+                  subjectCode: grid.subjectCode || '',
+                  formType: 'SEMESTER_FEEDBACK',
+                  status: form.status,
+                  lastSyncedAt: form.last_synced_at,
+                  googleSheetUrl: form.google_sheet_url,
+                  googleFormUrl: form.google_form_url,
+                  responses: gridRows,
+                });
+                return {
+                  gridTitle: grid.gridTitle,
+                  facultyName: grid.facultyName,
+                  subjectName: grid.subjectName,
+                  subjectCode: grid.subjectCode,
+                  report: gridReport,
+                };
+              });
+
+              canonicalRows = detectedGrids.flatMap(grid =>
+                normalizeSheetRowsForSpecificGrid(
+                  sheetData.headers,
+                  sheetData.rows,
+                  grid.paramColIndices
+                )
+              );
+            } else {
+              canonicalRows = normalizeSheetRows(sheetData.headers, sheetData.rows);
+            }
+          } else {
+            canonicalRows = normalizeSheetRows(sheetData.headers, sheetData.rows);
+          }
         }
       } catch (err) {
         console.warn(`Error reading sheet for form ${form.id}:`, err);
@@ -271,8 +329,8 @@ export async function getOverallAnalyticsAction(filters?: ScopeFilters): Promise
       academicYear: form.academic_year?.name || 'Academic Session',
       branch: form.branch?.name || 'Branch',
       semester: form.semester?.name || 'Semester',
-      facultyName: form.faculty?.name || 'Faculty Member',
-      subjectName: form.subject?.name || 'Subject',
+      facultyName: isSemesterForm ? 'All Assigned Faculty' : form.faculty?.name || 'Faculty Member',
+      subjectName: isSemesterForm ? 'All Semester Subjects' : form.subject?.name || 'Subject',
       subjectCode: form.subject?.code || '',
       formType: form.form_type || 'FACULTY_SPECIFIC',
       status: form.status,
@@ -281,6 +339,11 @@ export async function getOverallAnalyticsAction(filters?: ScopeFilters): Promise
       googleFormUrl: form.google_form_url,
       responses: canonicalRows,
     });
+
+    if (isSemesterForm) {
+      singleReport.isSemesterForm = true;
+      singleReport.facultyGrids = facultyGrids;
+    }
 
     formReports.push(singleReport);
   }

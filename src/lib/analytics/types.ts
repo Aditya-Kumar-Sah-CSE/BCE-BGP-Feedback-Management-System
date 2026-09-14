@@ -82,6 +82,9 @@ export interface FormAnalyticsReport {
   googleSheetUrl?: string;
   googleFormUrl?: string;
   totalResponses: number;
+  totalStudents?: number;
+  evaluatedItems?: number;
+  percentage?: number;
   validResponses: number;
   unansweredResponses: number;
   averageOverallScore: number; // 0.00 to 5.00
@@ -122,6 +125,9 @@ export interface AggregatedAnalyticsReport {
   totalForms: number;
   formsWithResponses: number;
   totalResponses: number;
+  totalStudents?: number;
+  evaluatedItems?: number;
+  percentage?: number;
   validResponses: number;
   averageOverallScore: number;
   compositeAverageScore: number;

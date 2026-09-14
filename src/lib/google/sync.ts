@@ -383,20 +383,38 @@ export async function syncFormResponsesToSheet(params: {
               }
             }
           }
+
+          // Authoritative student submission count
+          const authoritativeStudentCount = trackingMap.size;
+          if (authoritativeStudentCount > 0) {
+            await supabase
+              .from('feedback_forms')
+              .update({
+                response_count: authoritativeStudentCount,
+                last_synced_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', formUuid);
+          }
         }
       } catch (dbSyncErr) {
         console.error('[Sync] Error syncing response metadata to Supabase:', dbSyncErr);
       }
     }
 
+    const authoritativeTotal =
+      allResponses.length > 0
+        ? allResponses.length
+        : sheetDataRows.length;
+
     return {
       success: true,
       syncedCount: rowsToAppend.length,
-      totalResponses,
+      totalResponses: authoritativeTotal,
       message:
         rowsToAppend.length > 0
-          ? `Successfully synchronized ${rowsToAppend.length} new response(s) to Google Sheet (Total: ${totalResponses}).`
-          : `Sheet is up to date (${totalResponses} response(s) already recorded).`,
+          ? `Successfully synchronized ${rowsToAppend.length} new response(s) to Google Sheet (Total: ${authoritativeTotal}).`
+          : `Sheet is up to date (${authoritativeTotal} response(s) already recorded).`,
     };
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);

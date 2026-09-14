@@ -397,8 +397,15 @@ export async function generateIndividualFacultyPDF(
     doc.text(`• Sample Reliability: Total valid student submissions evaluated: ${report.validResponses} (${report.unansweredResponses} incomplete/unanswered).`, margin + 14, obsY);
     obsY += 11;
 
-    doc.text(`• Scoring Formula Applied: Weighted Average = (EX×5 + VG×4 + G×3 + S×2 + U×1) ÷ Total Valid Submissions.`, margin + 14, obsY);
   }
+
+  // Bottom-Right Signature Block
+  const pageHeight = 841.89;
+  const sigY = Math.min(pageHeight - 60, Math.max(obsY + 14, pageHeight - 75));
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(COLORS.secondary).text('Signature: ____________________', margin, sigY, {
+    width: contentWidth,
+    align: 'right',
+  });
 
   // Draw Footer
   drawFooter(doc, 1, 1);
@@ -637,6 +644,14 @@ export async function generateOverallFeedbackPDF(
     currentY += 12;
   }
 
+  // Bottom-Right Signature Block
+  const pageHeight = 841.89;
+  const sigY = Math.min(pageHeight - 60, Math.max(currentY, pageHeight - 75));
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(COLORS.secondary).text('Signature: ____________________', margin, sigY, {
+    width: contentWidth,
+    align: 'right',
+  });
+
   // Footer on Page 1
   drawFooter(doc, 1, 1);
 
@@ -644,6 +659,10 @@ export async function generateOverallFeedbackPDF(
   return bufferPromise;
 }
 
+/**
+ * Generates an Overall Semester Comparative Feedback Report PDF
+ * Compares all evaluated teachers/subjects for the semester cohort without exposing PII.
+ */
 /**
  * Generates an Overall Semester Comparative Feedback Report PDF
  * Compares all evaluated teachers/subjects for the semester cohort without exposing PII.
@@ -666,93 +685,122 @@ export async function generateSemesterComparativePDF(
   const bufferPromise = streamToBuffer(doc);
   const margin = 36;
   const pageWidth = 595.28;
+  const pageHeight = 841.89;
   const contentWidth = pageWidth - margin * 2;
+  let currentPage = 1;
 
   // Header
   drawHeader(doc, 'Semester Feedback Comparative Evaluation Report');
 
   let currentY = 104;
 
-  // Metadata Card
-  doc.rect(margin, currentY, contentWidth, 54).fillAndStroke(COLORS.bgLight, COLORS.border);
+  // Metadata Card (3 rows of 2 columns)
+  const metaHeight = 68;
+  doc.rect(margin, currentY, contentWidth, metaHeight).fillAndStroke(COLORS.bgLight, COLORS.border);
 
   const col1X = margin + 14;
   const col2X = margin + contentWidth / 2 + 10;
   const metaY = currentY + 8;
 
+  // Row 1
   doc.font('Helvetica-Bold').fontSize(8.5).fillColor(COLORS.secondary).text('Branch / Department: ', col1X, metaY, { continued: true });
   doc.font('Helvetica').fillColor('#000').text(report.branch || 'N/A');
 
-  doc.font('Helvetica-Bold').text('Academic Session: ', col1X, metaY + 14, { continued: true });
+  doc.font('Helvetica-Bold').text('Academic Session: ', col2X, metaY, { continued: true });
   doc.font('Helvetica').text(report.academicYear || 'N/A');
 
-  doc.font('Helvetica-Bold').text('Evaluation Scope: ', col1X, metaY + 28, { continued: true });
-  doc.font('Helvetica').text('Multi-Faculty Semester Evaluation');
-
-  doc.font('Helvetica-Bold').text('Semester Level: ', col2X, metaY, { continued: true });
+  // Row 2
+  doc.font('Helvetica-Bold').text('Semester Level: ', col1X, metaY + 14, { continued: true });
   doc.font('Helvetica').text(report.semester || 'N/A');
 
-  doc.font('Helvetica-Bold').text('Evaluated Faculty: ', col2X, metaY + 14, { continued: true });
+  doc.font('Helvetica-Bold').text('Feedback Type: ', col2X, metaY + 14, { continued: true });
+  doc.font('Helvetica').text(report.formType === 'SEMESTER_FEEDBACK' ? 'Multi-Faculty Semester Evaluation' : (report.formType || 'SEMESTER_FEEDBACK'));
+
+  // Row 3
+  doc.font('Helvetica-Bold').text('Form Title: ', col1X, metaY + 28, { continued: true });
+  doc.font('Helvetica').text(report.title || 'Semester Feedback Form', { width: contentWidth / 2 - 20, ellipsis: true });
+
+  doc.font('Helvetica-Bold').text('Faculty Evaluated: ', col2X, metaY + 28, { continued: true });
   doc.font('Helvetica').text(`${report.facultyGrids?.length || 0} Faculty-Subject Evaluations`);
 
-  doc.font('Helvetica-Bold').text('Report Generated: ', col2X, metaY + 28, { continued: true });
+  // Row 4
+  doc.font('Helvetica-Bold').text('System: ', col1X, metaY + 42, { continued: true });
+  doc.font('Helvetica').text('BCE Faculty Feedback Management System');
+
+  doc.font('Helvetica-Bold').text('Report Generated: ', col2X, metaY + 42, { continued: true });
   doc.font('Helvetica').text(new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }));
 
-  currentY += 66;
+  currentY += metaHeight + 12;
 
-  // 4 KPI Stat Boxes
-  const boxWidth = (contentWidth - 30) / 4;
+  // 5 KPI Stat Boxes
+  const boxGap = 8;
+  const boxWidth = (contentWidth - boxGap * 4) / 5;
   const boxHeight = 44;
-  const boxGap = 10;
 
-  // Total Student Submissions
+  const totalStudents = report.totalStudents ?? report.totalResponses;
+  const evaluatedItems = report.evaluatedItems ?? report.validResponses;
+  const benchmarkScore = report.compositeAverageScore;
+  const percentage = report.percentage ?? (report.hasData ? Number(((benchmarkScore / 5) * 100).toFixed(1)) : 0);
+
+  // Box 1: Total Students (COUNT DISTINCT google_response_id)
   doc.rect(margin, currentY, boxWidth, boxHeight).fillAndStroke('#EFF6FF', '#BFDBFE');
-  doc.font('Helvetica').fontSize(7.5).fillColor('#1E40AF').text('TOTAL STUDENTS', margin, currentY + 8, { width: boxWidth, align: 'center' });
-  doc.font('Helvetica-Bold').fontSize(16).fillColor('#1E3A8A').text(String(report.totalResponses), margin, currentY + 22, { width: boxWidth, align: 'center' });
+  doc.font('Helvetica').fontSize(7).fillColor('#1E40AF').text('TOTAL STUDENTS', margin, currentY + 7, { width: boxWidth, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(15).fillColor('#1E3A8A').text(String(totalStudents), margin, currentY + 20, { width: boxWidth, align: 'center' });
 
-  // Faculty Count
-  const box2X = margin + boxWidth + boxGap;
-  doc.rect(box2X, currentY, boxWidth, boxHeight).fillAndStroke('#F5F3FF', '#DDD6FE');
-  doc.font('Helvetica').fontSize(7.5).fillColor('#5B21B6').text('TEACHERS EVALUATED', box2X, currentY + 8, { width: boxWidth, align: 'center' });
-  doc.font('Helvetica-Bold').fontSize(16).fillColor('#4C1D95').text(String(report.facultyGrids?.length || 0), box2X, currentY + 22, { width: boxWidth, align: 'center' });
+  // Box 2: Evaluated Items (Total faculty-subject evaluations)
+  const box2X = margin + (boxWidth + boxGap);
+  doc.rect(box2X, currentY, boxWidth, boxHeight).fillAndStroke('#F0FDF4', '#BBF7D0');
+  doc.font('Helvetica').fontSize(7).fillColor('#166534').text('EVALUATED ITEMS', box2X, currentY + 7, { width: boxWidth, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(15).fillColor('#14532D').text(String(evaluatedItems), box2X, currentY + 20, { width: boxWidth, align: 'center' });
 
-  // Benchmark Score
+  // Box 3: Semester Benchmark Score
   const box3X = margin + (boxWidth + boxGap) * 2;
-  const bColor = report.compositeAverageScore >= 4.0 ? '#4F46E5' : report.compositeAverageScore >= 3.0 ? '#065F46' : report.compositeAverageScore >= 2.0 ? '#92400E' : '#991B1B';
-  const bBg = report.compositeAverageScore >= 4.0 ? '#EEF2FF' : report.compositeAverageScore >= 3.0 ? '#ECFDF5' : report.compositeAverageScore >= 2.0 ? '#FEF3C7' : '#FEE2E2';
-  const bBorder = report.compositeAverageScore >= 4.0 ? '#C7D2FE' : report.compositeAverageScore >= 3.0 ? '#A7F3D0' : report.compositeAverageScore >= 2.0 ? '#FDE68A' : '#FECACA';
+  const bColor = benchmarkScore >= 4.0 ? '#4F46E5' : benchmarkScore >= 3.0 ? '#065F46' : benchmarkScore >= 2.0 ? '#92400E' : '#991B1B';
+  const bBg = benchmarkScore >= 4.0 ? '#EEF2FF' : benchmarkScore >= 3.0 ? '#ECFDF5' : benchmarkScore >= 2.0 ? '#FEF3C7' : '#FEE2E2';
+  const bBorder = benchmarkScore >= 4.0 ? '#C7D2FE' : benchmarkScore >= 3.0 ? '#A7F3D0' : benchmarkScore >= 2.0 ? '#FDE68A' : '#FECACA';
   doc.rect(box3X, currentY, boxWidth, boxHeight).fillAndStroke(bBg, bBorder);
-  doc.font('Helvetica').fontSize(7.5).fillColor(bColor).text('SEMESTER BENCHMARK', box3X, currentY + 8, { width: boxWidth, align: 'center' });
-  doc.font('Helvetica-Bold').fontSize(16).fillColor(bColor).text(
-    report.hasData ? `${report.compositeAverageScore.toFixed(2)}/5.00` : 'N/A',
+  doc.font('Helvetica').fontSize(7).fillColor(bColor).text('SEMESTER BENCHMARK', box3X, currentY + 7, { width: boxWidth, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(14).fillColor(bColor).text(
+    report.hasData ? `${benchmarkScore.toFixed(2)}/5.00` : 'N/A',
     box3X,
-    currentY + 22,
+    currentY + 20,
     { width: boxWidth, align: 'center' }
   );
 
-  // Overall Grade
+  // Box 4: Percentage Score
   const box4X = margin + (boxWidth + boxGap) * 3;
+  doc.rect(box4X, currentY, boxWidth, boxHeight).fillAndStroke('#FAF5FF', '#E9D5FF');
+  doc.font('Helvetica').fontSize(7).fillColor('#6B21A8').text('PERCENTAGE', box4X, currentY + 7, { width: boxWidth, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(15).fillColor('#581C87').text(
+    report.hasData ? `${percentage.toFixed(1)}%` : 'N/A',
+    box4X,
+    currentY + 20,
+    { width: boxWidth, align: 'center' }
+  );
+
+  // Box 5: Performance Grade
+  const box5X = margin + (boxWidth + boxGap) * 4;
   const gradeLabel = !report.hasData
     ? 'NO DATA'
-    : report.compositeAverageScore >= 4.5
+    : benchmarkScore >= 4.5
     ? 'EXCELLENT'
-    : report.compositeAverageScore >= 3.75
+    : benchmarkScore >= 3.75
     ? 'VERY GOOD'
-    : report.compositeAverageScore >= 3.0
+    : benchmarkScore >= 3.0
     ? 'GOOD'
-    : report.compositeAverageScore >= 2.0
+    : benchmarkScore >= 2.0
     ? 'SATISFACTORY'
-    : 'NEEDS ATTENTION';
-  doc.rect(box4X, currentY, boxWidth, boxHeight).fillAndStroke('#F8FAFC', COLORS.border);
-  doc.font('Helvetica').fontSize(7.5).fillColor(COLORS.secondary).text('COHORT RATING', box4X, currentY + 8, { width: boxWidth, align: 'center' });
-  doc.font('Helvetica-Bold').fontSize(13).fillColor(bColor).text(gradeLabel, box4X, currentY + 24, { width: boxWidth, align: 'center' });
+    : 'NEEDS ATTN';
+  doc.rect(box5X, currentY, boxWidth, boxHeight).fillAndStroke('#F8FAFC', COLORS.border);
+  doc.font('Helvetica').fontSize(7).fillColor(COLORS.secondary).text('PERFORMANCE GRADE', box5X, currentY + 7, { width: boxWidth, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(11).fillColor(bColor).text(gradeLabel, box5X, currentY + 22, { width: boxWidth, align: 'center' });
 
-  currentY += boxHeight + 16;
+  currentY += boxHeight + 14;
 
   // Faculty Comparison Table
   if (report.facultyGrids && report.facultyGrids.length > 0) {
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLORS.primary).text('SEMESTER FACULTY COMPARATIVE EVALUATION MATRIX', margin, currentY);
-    currentY += 14;
+    doc.font('Helvetica-Bold').fontSize(9.5).fillColor(COLORS.primary).text('SEMESTER FACULTY COMPARATIVE EVALUATION MATRIX', margin, currentY);
+    currentY += 13;
 
     const compColWidths = [150, 150, 60, 65, 98];
     const compHeaders = ['Faculty Member', 'Subject / Course', 'Submissions', 'Avg Rating', 'Visual Benchmark'];
@@ -769,23 +817,23 @@ export async function generateSemesterComparativePDF(
     currentY += 16;
 
     report.facultyGrids.forEach((fg, fIdx) => {
-      const rowHeight = 20;
+      const rowHeight = 19;
       if (fIdx % 2 === 1) doc.rect(margin, currentY, contentWidth, rowHeight).fill('#F8FAFC');
       doc.strokeColor('#E2E8F0').lineWidth(0.5).moveTo(margin, currentY + rowHeight).lineTo(margin + contentWidth, currentY + rowHeight).stroke();
 
       let cellX = margin;
-      doc.font('Helvetica-Bold').fontSize(7.5).fillColor(COLORS.secondary).text(fg.facultyName, cellX + 4, currentY + 6, { width: compColWidths[0] - 8 });
+      doc.font('Helvetica-Bold').fontSize(7.5).fillColor(COLORS.secondary).text(fg.facultyName, cellX + 4, currentY + 5, { width: compColWidths[0] - 8 });
       cellX += compColWidths[0];
 
       doc.font('Helvetica').fontSize(7).fillColor('#475569').text(
         `${fg.subjectName}${fg.subjectCode ? ` (${fg.subjectCode})` : ''}`,
         cellX + 4,
-        currentY + 6,
+        currentY + 5,
         { width: compColWidths[1] - 8 }
       );
       cellX += compColWidths[1];
 
-      doc.font('Helvetica').fontSize(7.5).fillColor('#334155').text(String(fg.report.validResponses), cellX + 2, currentY + 6, { width: compColWidths[2] - 4, align: 'center' });
+      doc.font('Helvetica').fontSize(7.5).fillColor('#334155').text(String(fg.report.totalResponses), cellX + 2, currentY + 5, { width: compColWidths[2] - 4, align: 'center' });
       cellX += compColWidths[2];
 
       const score = fg.report.compositeAverageScore;
@@ -793,14 +841,14 @@ export async function generateSemesterComparativePDF(
       doc.font('Helvetica-Bold').fontSize(8).fillColor(fScoreColor).text(
         fg.report.hasData ? `${score.toFixed(2)}/5.00` : 'N/A',
         cellX + 2,
-        currentY + 6,
+        currentY + 5,
         { width: compColWidths[3] - 4, align: 'center' }
       );
       cellX += compColWidths[3];
 
-      // Bar
+      // Visual Bar
       const barWidth = 70;
-      const barHeight = 8;
+      const barHeight = 7;
       const barX = cellX + 14;
       const barY = currentY + 6;
       doc.rect(barX, barY, barWidth, barHeight).fill('#E2E8F0');
@@ -813,30 +861,39 @@ export async function generateSemesterComparativePDF(
       currentY += rowHeight;
     });
 
-    currentY += 16;
+    currentY += 14;
+  }
+
+  // Check if remaining tables need a second page
+  if (currentY + 280 > pageHeight - 60) {
+    drawFooter(doc, currentPage, 2);
+    doc.addPage();
+    currentPage = 2;
+    drawHeader(doc, 'Semester Feedback Comparative Evaluation Report');
+    currentY = 104;
   }
 
   // Parameter Evaluation Table Header
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(COLORS.primary).text('ALL-SUBJECTS COMBINED 8-PARAMETER EVALUATION BENCHMARK', margin, currentY);
-  currentY += 14;
+  doc.font('Helvetica-Bold').fontSize(9.5).fillColor(COLORS.primary).text('ALL-SUBJECTS COMBINED 8-PARAMETER EVALUATION BENCHMARK', margin, currentY);
+  currentY += 13;
 
   const tableColWidths = [165, 48, 48, 48, 48, 52, 58, 56];
   const tableHeaders = ['Parameter (1 to 8)', 'Avg (5.0)', 'Excell %', 'V. Good %', 'Good %', 'Sat %', 'Unsat %', 'Visual Bar'];
 
-  doc.rect(margin, currentY, contentWidth, 18).fill(COLORS.bgHeader);
+  doc.rect(margin, currentY, contentWidth, 16).fill(COLORS.bgHeader);
 
   let curX = margin;
   doc.font('Helvetica-Bold').fontSize(7.5).fillColor(COLORS.white);
   tableHeaders.forEach((h, i) => {
     const align = i === 0 ? 'left' : 'center';
-    doc.text(h, curX + 4, currentY + 5, { width: tableColWidths[i] - 8, align });
+    doc.text(h, curX + 4, currentY + 4, { width: tableColWidths[i] - 8, align });
     curX += tableColWidths[i];
   });
 
-  currentY += 18;
+  currentY += 16;
 
   report.parameters.forEach((p, idx) => {
-    const rowHeight = 20;
+    const rowHeight = 18;
     const isAlt = idx % 2 === 1;
 
     if (isAlt) doc.rect(margin, currentY, contentWidth, rowHeight).fill('#F8FAFC');
@@ -845,35 +902,35 @@ export async function generateSemesterComparativePDF(
     let cellX = margin;
 
     doc.font('Helvetica-Bold').fontSize(7.5).fillColor(COLORS.secondary);
-    doc.text(`${p.parameterId}. ${p.title}`, cellX + 4, currentY + 6, { width: tableColWidths[0] - 8, align: 'left' });
+    doc.text(`${p.parameterId}. ${p.title}`, cellX + 4, currentY + 5, { width: tableColWidths[0] - 8, align: 'left' });
     cellX += tableColWidths[0];
 
     doc.font('Helvetica-Bold').fontSize(8).fillColor(p.averageScore >= 4.0 ? '#4F46E5' : p.averageScore >= 3.0 ? '#059669' : p.averageScore >= 2.0 ? '#D97706' : '#DC2626');
-    doc.text(p.validCount > 0 ? p.averageScore.toFixed(2) : '-', cellX + 2, currentY + 6, { width: tableColWidths[1] - 4, align: 'center' });
+    doc.text(p.validCount > 0 ? p.averageScore.toFixed(2) : '-', cellX + 2, currentY + 5, { width: tableColWidths[1] - 4, align: 'center' });
     cellX += tableColWidths[1];
 
     doc.font('Helvetica').fontSize(7.5).fillColor('#4338CA');
-    doc.text(p.validCount > 0 ? `${p.excellentPct.toFixed(0)}%` : '-', cellX + 2, currentY + 6, { width: tableColWidths[2] - 4, align: 'center' });
+    doc.text(p.validCount > 0 ? `${p.excellentPct.toFixed(0)}%` : '-', cellX + 2, currentY + 5, { width: tableColWidths[2] - 4, align: 'center' });
     cellX += tableColWidths[2];
 
     doc.font('Helvetica').fontSize(7.5).fillColor('#059669');
-    doc.text(p.validCount > 0 ? `${p.veryGoodPct.toFixed(0)}%` : '-', cellX + 2, currentY + 6, { width: tableColWidths[3] - 4, align: 'center' });
+    doc.text(p.validCount > 0 ? `${p.veryGoodPct.toFixed(0)}%` : '-', cellX + 2, currentY + 5, { width: tableColWidths[3] - 4, align: 'center' });
     cellX += tableColWidths[3];
 
-    doc.text(p.validCount > 0 ? `${p.goodPct.toFixed(0)}%` : '-', cellX + 2, currentY + 6, { width: tableColWidths[4] - 4, align: 'center' });
+    doc.text(p.validCount > 0 ? `${p.goodPct.toFixed(0)}%` : '-', cellX + 2, currentY + 5, { width: tableColWidths[4] - 4, align: 'center' });
     cellX += tableColWidths[4];
 
-    doc.text(p.validCount > 0 ? `${p.satisfactoryPct.toFixed(0)}%` : '-', cellX + 2, currentY + 6, { width: tableColWidths[5] - 4, align: 'center' });
+    doc.text(p.validCount > 0 ? `${p.satisfactoryPct.toFixed(0)}%` : '-', cellX + 2, currentY + 5, { width: tableColWidths[5] - 4, align: 'center' });
     cellX += tableColWidths[5];
 
-    doc.text(p.validCount > 0 ? `${p.unsatisfactoryPct.toFixed(0)}%` : '-', cellX + 2, currentY + 6, { width: tableColWidths[6] - 4, align: 'center' });
+    doc.text(p.validCount > 0 ? `${p.unsatisfactoryPct.toFixed(0)}%` : '-', cellX + 2, currentY + 5, { width: tableColWidths[6] - 4, align: 'center' });
     cellX += tableColWidths[6];
 
     // Bar
     const barWidth = 46;
-    const barHeight = 8;
+    const barHeight = 7;
     const barX = cellX + 5;
-    const barY = currentY + 6;
+    const barY = currentY + 5;
     doc.rect(barX, barY, barWidth, barHeight).fill('#E2E8F0');
     if (p.validCount > 0) {
       const fillW = Math.max(2, Math.min(barWidth, (p.averageScore / 5.0) * barWidth));
@@ -884,7 +941,84 @@ export async function generateSemesterComparativePDF(
     currentY += rowHeight;
   });
 
-  drawFooter(doc, 1, 1);
+  currentY += 12;
+
+  // Rating Distribution Section (The 5 Canonical Categories)
+  doc.font('Helvetica-Bold').fontSize(9.5).fillColor(COLORS.primary).text('AGGREGATE RATING DISTRIBUTION (ALL 5 CATEGORIES)', margin, currentY);
+  currentY += 12;
+
+  const distCardHeight = 38;
+  doc.rect(margin, currentY, contentWidth, distCardHeight).fillAndStroke(COLORS.bgLight, COLORS.border);
+
+  const distColW = contentWidth / 5;
+  const distY = currentY + 6;
+
+  // Excellent
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#4F46E5').text('EXCELLENT', margin, distY, { width: distColW, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#3730A3').text(`${report.distribution.excellentCount} (${report.distribution.excellentPct}%)`, margin, distY + 11, { width: distColW, align: 'center' });
+
+  // Very Good
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#059669').text('VERY GOOD', margin + distColW, distY, { width: distColW, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#065F46').text(`${report.distribution.veryGoodCount} (${report.distribution.veryGoodPct}%)`, margin + distColW, distY + 11, { width: distColW, align: 'center' });
+
+  // Good
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#2563EB').text('GOOD', margin + distColW * 2, distY, { width: distColW, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#1E40AF').text(`${report.distribution.goodCount} (${report.distribution.goodPct}%)`, margin + distColW * 2, distY + 11, { width: distColW, align: 'center' });
+
+  // Satisfactory
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#D97706').text('SATISFACTORY', margin + distColW * 3, distY, { width: distColW, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#92400E').text(`${report.distribution.satisfactoryCount} (${report.distribution.satisfactoryPct}%)`, margin + distColW * 3, distY + 11, { width: distColW, align: 'center' });
+
+  // Unsatisfactory
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#DC2626').text('UNSATISFACTORY', margin + distColW * 4, distY, { width: distColW, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#991B1B').text(`${report.distribution.unsatisfactoryCount} (${report.distribution.unsatisfactoryPct}%)`, margin + distColW * 4, distY + 11, { width: distColW, align: 'center' });
+
+  currentY += distCardHeight + 12;
+
+  // Observations & Institutional Summary
+  doc.font('Helvetica-Bold').fontSize(9.5).fillColor(COLORS.primary).text('OBJECTIVE DATA-DRIVEN OBSERVATIONS & SUMMARY', margin, currentY);
+  currentY += 12;
+
+  const obsHeight = 62;
+  doc.rect(margin, currentY, contentWidth, obsHeight).fillAndStroke('#FAF5FF', '#E9D5FF');
+
+  let obsY = currentY + 6;
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#6B21A8').text('Key Observations (Strictly Derived from Computed Submissions):', margin + 10, obsY);
+  obsY += 10;
+
+  const sortedParams = [...report.parameters].filter(p => p.validCount > 0).sort((a, b) => b.averageScore - a.averageScore);
+  doc.font('Helvetica').fontSize(7).fillColor('#4C1D95');
+
+  if (sortedParams.length > 0) {
+    const highest = sortedParams[0];
+    const lowest = sortedParams[sortedParams.length - 1];
+
+    doc.text(`• Highest Rated Parameter: "${highest.title}" scored ${highest.averageScore.toFixed(2)}/5.00 (${highest.excellentPct}% Excellent, ${highest.veryGoodPct}% Very Good).`, margin + 12, obsY);
+    obsY += 9.5;
+
+    doc.text(`• Area for Academic Attention: "${lowest.title}" scored ${lowest.averageScore.toFixed(2)}/5.00 (${lowest.unsatisfactoryPct}% Unsatisfactory).`, margin + 12, obsY);
+    obsY += 9.5;
+
+    doc.text(`• Overall Feedback Satisfaction: ${(report.distribution.excellentPct + report.distribution.veryGoodPct + report.distribution.goodPct).toFixed(1)}% of all individual ratings were Excellent, Very Good or Good.`, margin + 12, obsY);
+    obsY += 9.5;
+
+    doc.text(`• Sample Reliability: ${totalStudents} student submission(s) across ${evaluatedItems} evaluated faculty-subject item(s).`, margin + 12, obsY);
+    obsY += 9.5;
+
+    doc.text(`• Benchmark Formula Applied: Semester Score = SUM(all valid rating weights across all grids) / COUNT(all valid ratings) = ${benchmarkScore.toFixed(2)}/5.00 (${percentage.toFixed(1)}%).`, margin + 12, obsY);
+  }
+
+  currentY += obsHeight + 14;
+
+  // Bottom-Right Signature Block (Strict requirement: Signature: ____________________)
+  const sigY = Math.min(pageHeight - 60, Math.max(currentY, pageHeight - 75));
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(COLORS.secondary).text('Signature: ____________________', margin, sigY, {
+    width: contentWidth,
+    align: 'right',
+  });
+
+  drawFooter(doc, currentPage, currentPage);
+
   doc.end();
   return bufferPromise;
 }
