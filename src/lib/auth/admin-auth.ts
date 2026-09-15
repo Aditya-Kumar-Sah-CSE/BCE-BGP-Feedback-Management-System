@@ -161,14 +161,28 @@ export async function getAdminSession(client?: any): Promise<AdminAuthResult> {
     };
   }
 
-  // 2. Normal Admin verification
-  const { data: adminRecord } = await supabase
+  // 2. Normal Admin verification using adminDb to bypass client RLS restrictions
+  const { data: adminRecord } = await adminDb
     .from('admins')
     .select('*')
     .or(`user_id.eq.${user.id},email.eq.${userEmail}`)
     .maybeSingle();
 
   if (adminRecord) {
+    // If user_id is missing or out-of-sync with current authenticated session, heal it
+    if (adminRecord.user_id !== user.id) {
+      await adminDb
+        .from('admins')
+        .update({ user_id: user.id, updated_at: new Date().toISOString() })
+        .eq('id', adminRecord.id);
+      adminRecord.user_id = user.id;
+
+      await adminDb
+        .from('admin_requests')
+        .update({ user_id: user.id })
+        .eq('email', userEmail);
+    }
+
     const isSuperAdmin = adminRecord.role === 'SUPER_ADMIN';
     const isActive = adminRecord.status === 'ACTIVE' || adminRecord.status === undefined;
 
@@ -189,14 +203,46 @@ export async function getAdminSession(client?: any): Promise<AdminAuthResult> {
     };
   }
 
-  // 3. Not in admins table: Check admin_requests
-  const { data: requestRecord } = await supabase
+  // 3. Not in admins table: Check admin_requests using adminDb
+  const { data: requestRecord } = await adminDb
     .from('admin_requests')
     .select('*')
     .or(`user_id.eq.${user.id},email.eq.${userEmail}`)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (requestRecord && requestRecord.status === 'APPROVED') {
+    // Request was approved: auto-provision into admins table if record was missing
+    const { data: provisionedAdmin } = await adminDb
+      .from('admins')
+      .upsert(
+        {
+          user_id: user.id,
+          email: userEmail,
+          name: requestRecord.name || user.user_metadata?.name || 'Administrator',
+          role: 'ADMIN',
+          status: 'ACTIVE',
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'email' }
+      )
+      .select('*')
+      .maybeSingle();
+
+    if (provisionedAdmin) {
+      return {
+        isAuthenticated: true,
+        user: { id: user.id, email: user.email, name: provisionedAdmin.name },
+        admin: { ...provisionedAdmin, status: provisionedAdmin.status || 'ACTIVE' },
+        isSuperAdmin: false,
+        isApproved: true,
+        isActive: true,
+        isPending: false,
+        isRejected: false,
+      };
+    }
+  }
 
   const isPending = !requestRecord || requestRecord.status === 'PENDING';
   const isRejected = requestRecord?.status === 'REJECTED';
