@@ -1,16 +1,28 @@
 'use client';
 
 import { Check, Crown, Zap, Gift } from 'lucide-react';
+import type { BillingPlan } from '@/types/database';
 
 export interface PlanCardProps {
-  plan: 'FREE' | 'MONTHLY' | 'YEARLY';
+  plan?: 'FREE' | 'MONTHLY' | 'YEARLY';
+  billingPlan?: BillingPlan;
   isSelected?: boolean;
   isDisabled?: boolean;
   onSelect?: () => void;
   isCurrent?: boolean;
 }
 
-const PLAN_CONFIG = {
+const DEFAULT_CONFIGS: Record<string, {
+  name: string;
+  price: string;
+  period: string;
+  description: string;
+  features: string[];
+  Icon: any;
+  borderClass: string;
+  bgClass: string;
+  accentClass: string;
+}> = {
   FREE: {
     name: 'Free',
     price: '₹0',
@@ -44,11 +56,56 @@ const PLAN_CONFIG = {
     bgClass: 'bg-amber-50/30',
     accentClass: 'text-amber-600',
   },
-} as const;
+};
 
-export function PlanCard({ plan, isSelected, isDisabled, onSelect, isCurrent }: PlanCardProps) {
-  const config = PLAN_CONFIG[plan];
-  const { Icon } = config;
+export function PlanCard({ plan, billingPlan, isSelected, isDisabled, onSelect, isCurrent }: PlanCardProps) {
+  // If a DB-driven billingPlan object is provided, derive card UI dynamically
+  let name = '';
+  let priceStr = '';
+  let period = '';
+  let description = '';
+  let features: string[] = [];
+  let Icon = Zap;
+  let borderClass = 'border-slate-200 hover:border-slate-300';
+  let bgClass = 'bg-white';
+  let accentClass = 'text-slate-600';
+  let isRecommended = false;
+
+  if (billingPlan) {
+    name = billingPlan.name;
+    priceStr = `₹${billingPlan.price.toLocaleString('en-IN')}`;
+    const duration = billingPlan.duration_days ?? 0;
+    period = duration > 0 ? `/ ${duration} days` : '';
+    description = billingPlan.description || '';
+    features = billingPlan.features || [];
+    isRecommended = !!billingPlan.is_recommended;
+
+    if (billingPlan.name.toUpperCase().includes('FREE') || billingPlan.price === 0) {
+      Icon = Gift;
+      accentClass = 'text-slate-500';
+    } else if (billingPlan.billing_interval === 'YEARLY' || duration >= 365) {
+      Icon = Crown;
+      borderClass = 'border-amber-300 hover:border-amber-500';
+      bgClass = 'bg-amber-50/30';
+      accentClass = 'text-amber-600';
+    } else {
+      Icon = Zap;
+      borderClass = 'border-blue-200 hover:border-blue-400';
+      accentClass = 'text-blue-600';
+    }
+  } else if (plan && DEFAULT_CONFIGS[plan]) {
+    const config = DEFAULT_CONFIGS[plan];
+    name = config.name;
+    priceStr = config.price;
+    period = config.period;
+    description = config.description;
+    features = config.features;
+    Icon = config.Icon;
+    borderClass = config.borderClass;
+    bgClass = config.bgClass;
+    accentClass = config.accentClass;
+    if (plan === 'YEARLY') isRecommended = true;
+  }
 
   return (
     <button
@@ -57,10 +114,10 @@ export function PlanCard({ plan, isSelected, isDisabled, onSelect, isCurrent }: 
       disabled={isDisabled}
       className={`
         relative w-full text-left p-5 rounded-xl border-2 transition-all duration-200
-        ${config.bgClass}
+        ${bgClass}
         ${isSelected
           ? 'border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-md scale-[1.02]'
-          : config.borderClass
+          : borderClass
         }
         ${isDisabled
           ? 'opacity-50 cursor-not-allowed grayscale'
@@ -72,9 +129,9 @@ export function PlanCard({ plan, isSelected, isDisabled, onSelect, isCurrent }: 
         }
       `}
     >
-      {plan === 'YEARLY' && !isDisabled && (
+      {isRecommended && !isDisabled && (
         <span className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500 text-white shadow-sm">
-          Best Value
+          Recommended
         </span>
       )}
 
@@ -85,20 +142,20 @@ export function PlanCard({ plan, isSelected, isDisabled, onSelect, isCurrent }: 
       )}
 
       <div className="flex items-start gap-3">
-        <div className={`w-10 h-10 rounded-lg ${isSelected ? 'bg-bce-cobalt text-white' : 'bg-slate-100 ' + config.accentClass} flex items-center justify-center shrink-0`}>
+        <div className={`w-10 h-10 rounded-lg ${isSelected ? 'bg-bce-cobalt text-white' : 'bg-slate-100 ' + accentClass} flex items-center justify-center shrink-0`}>
           <Icon className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-lg font-bold text-slate-900">{config.price}</span>
-            {config.period && (
-              <span className="text-xs text-slate-500">{config.period}</span>
+            <span className="text-lg font-bold text-slate-900">{priceStr}</span>
+            {period && (
+              <span className="text-xs text-slate-500">{period}</span>
             )}
           </div>
-          <p className="text-sm font-semibold text-slate-700 mt-0.5">{config.name}</p>
-          <p className="text-xs text-slate-500 mt-1">{config.description}</p>
+          <p className="text-sm font-semibold text-slate-700 mt-0.5">{name}</p>
+          {description && <p className="text-xs text-slate-500 mt-1">{description}</p>}
           <ul className="mt-3 space-y-1">
-            {config.features.map(feature => (
+            {features.map(feature => (
               <li key={feature} className="flex items-center gap-1.5 text-xs text-slate-600">
                 <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                 <span>{feature}</span>

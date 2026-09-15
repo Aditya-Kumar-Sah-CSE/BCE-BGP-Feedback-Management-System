@@ -31,6 +31,7 @@ import {
   updatePaymentSettingsAction,
   getPaymentSettingsAction,
 } from '@/app/admin/billing/actions';
+import { PlanManagementSection } from '@/components/admin/billing/PlanManagementSection';
 import type { PaymentSettings, Admin } from '@/types/database';
 
 interface BillingOverviewItem {
@@ -178,6 +179,9 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
           {message.text}
         </div>
       )}
+
+      {/* Database-Driven Plan Management */}
+      <PlanManagementSection />
 
       {/* Payment Settings Panel */}
       {showSettings && (

@@ -5,7 +5,6 @@ import type { PlanType } from '@/types/database';
 import type { BillingStatus, FormAccessResult } from './constants';
 
 // Re-export for convenience — consumers can import from either file
-export { CANONICAL_PRICING, PLAN_LABELS } from './constants';
 export type { BillingStatus, FormAccessResult } from './constants';
 
 // ====================================================================

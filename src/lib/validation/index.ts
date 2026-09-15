@@ -110,7 +110,7 @@ export const paidPlanTypeSchema = z.enum(['MONTHLY', 'YEARLY']);
 export const paymentMethodSchema = z.enum(['UPI', 'BANK_TRANSFER']);
 
 export const submitPaymentRequestSchema = z.object({
-  planType: paidPlanTypeSchema,
+  billingPlanId: z.string().uuid('Billing plan ID must be a valid UUID'),
   paymentMethod: paymentMethodSchema,
   paymentReference: z.string().trim().min(4, 'UTR / transaction reference must be at least 4 characters').max(255),
   paymentProofUrl: z.string().max(1024).optional().nullable(),
@@ -136,4 +136,32 @@ export const reviewPaymentSchema = z.object({
 });
 
 export type ReviewPaymentInput = z.infer<typeof reviewPaymentSchema>;
+
+// ====================================================================
+// BILLING PLAN MANAGEMENT SCHEMAS (Super Admin only)
+// ====================================================================
+
+export const billingIntervalSchema = z.string().trim().max(20).transform(v => v.toUpperCase());
+
+export const createBillingPlanSchema = z.object({
+  name: z.string().trim().min(1, 'Plan name is required').max(100),
+  slug: z.string().trim().max(50).optional(),
+  description: z.string().trim().max(500).default(''),
+  price: z.number().min(0, 'Price must be 0 or more'),
+  currency: z.string().trim().max(10).default('INR'),
+  billingInterval: billingIntervalSchema,
+  durationDays: z.number().int().min(0).nullable().optional(),
+  features: z.array(z.string().trim().max(200)).max(20).default([]),
+  isActive: z.boolean().default(true),
+  isRecommended: z.boolean().default(false),
+  displayOrder: z.number().int().min(0).default(0),
+});
+
+export type CreateBillingPlanInput = z.infer<typeof createBillingPlanSchema>;
+
+export const updateBillingPlanSchema = createBillingPlanSchema.partial().extend({
+  id: z.string().uuid('Plan ID must be a valid UUID'),
+});
+
+export type UpdateBillingPlanInput = z.infer<typeof updateBillingPlanSchema>;
 

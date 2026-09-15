@@ -214,6 +214,9 @@ export interface PaymentRequest {
   reviewed_by?: string | null;
   reviewed_at?: string | null;
   rejection_reason?: string | null;
+  billing_plan_id?: string | null;
+  snapshot_plan_name?: string | null;
+  snapshot_billing_interval?: string | null;
   created_at: string;
   updated_at: string;
   // joined relations
@@ -231,6 +234,26 @@ export interface PaymentSettings {
   support_phone: string;
   payment_instructions: string;
   updated_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type BillingInterval = 'FREE' | 'MONTHLY' | 'YEARLY' | 'ONETIME' | 'CUSTOM';
+
+export interface BillingPlan {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  price: number;
+  currency: string;
+  billing_interval: BillingInterval;
+  duration_days: number | null;
+  features: string[];
+  is_active: boolean;
+  is_recommended: boolean;
+  display_order: number;
+  created_by?: string | null;
   created_at: string;
   updated_at: string;
 }

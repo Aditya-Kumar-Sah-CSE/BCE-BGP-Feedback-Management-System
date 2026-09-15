@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { getAdminSession, SUPER_ADMIN_EMAIL } from '@/lib/auth/admin-auth';
-import { CANONICAL_PRICING, ensureBillingAccount, getAdminBillingStatus } from '@/lib/billing/access-control';
+import { ensureBillingAccount, getAdminBillingStatus } from '@/lib/billing/access-control';
 import {
   isValidUUID,
   submitPaymentRequestSchema,
@@ -14,7 +14,6 @@ import type {
   AdminBillingAccount,
   PaymentRequest,
   PaymentSettings,
-  PlanType,
 } from '@/types/database';
 
 async function getAdminDb() {
@@ -129,7 +128,7 @@ export async function updatePaymentSettingsAction(input: {
 // ====================================================================
 
 export async function submitPaymentRequestAction(input: {
-  planType: string;
+  billingPlanId: string;
   paymentMethod: string;
   paymentReference: string;
   paymentProofUrl?: string | null;
@@ -144,16 +143,27 @@ export async function submitPaymentRequestAction(input: {
     return { success: false, error: validation.error.issues[0]?.message || 'Invalid payment request data.' };
   }
 
-  const { planType, paymentMethod, paymentReference, paymentProofUrl } = validation.data;
+  const { billingPlanId, paymentMethod, paymentReference, paymentProofUrl } = validation.data;
 
-  // Server-side canonical price — NEVER trust browser amount
-  const canonicalAmount = CANONICAL_PRICING[planType as PlanType];
-  if (!canonicalAmount || canonicalAmount <= 0) {
-    return { success: false, error: 'Invalid plan type for payment.' };
+  const supabase = await getAdminDb();
+
+  // Fetch plan from DB — NEVER trust browser-sent amounts
+  const { data: plan, error: planErr } = await supabase
+    .from('billing_plans')
+    .select('*')
+    .eq('id', billingPlanId)
+    .eq('is_active', true)
+    .single();
+
+  if (planErr || !plan) {
+    return { success: false, error: 'Selected plan not found or is no longer available.' };
+  }
+
+  if (plan.price <= 0) {
+    return { success: false, error: 'Free plans cannot be self-selected. Contact the Super Admin.' };
   }
 
   const adminId = session.admin.id;
-  const supabase = await getAdminDb();
 
   // Ensure billing account exists
   await ensureBillingAccount(adminId);
@@ -174,12 +184,15 @@ export async function submitPaymentRequestAction(input: {
     .from('payment_requests')
     .insert({
       admin_user_id: adminId,
-      plan_type: planType,
-      amount: canonicalAmount,
+      plan_type: plan.slug,
+      amount: plan.price,
       payment_method: paymentMethod,
       payment_reference: paymentReference.trim(),
       payment_proof_url: paymentProofUrl || null,
       status: 'PENDING',
+      billing_plan_id: plan.id,
+      snapshot_plan_name: plan.name,
+      snapshot_billing_interval: plan.billing_interval,
     })
     .select('*')
     .single();
@@ -189,7 +202,7 @@ export async function submitPaymentRequestAction(input: {
     return { success: false, error: 'Failed to submit payment request. Please try again.' };
   }
 
-  await logAudit(supabase, { adminId, email: session.user?.email }, 'PAYMENT_REQUEST_CREATED', 'payment_requests', newRequest.id, `Payment request submitted: ${planType} plan, ₹${canonicalAmount}, via ${paymentMethod}, UTR: ${paymentReference}`);
+  await logAudit(supabase, { adminId, email: session.user?.email }, 'PAYMENT_REQUEST_CREATED', 'payment_requests', newRequest.id, `Payment request submitted: ${plan.name} (${plan.slug}) plan, ₹${plan.price}, via ${paymentMethod}, UTR: ${paymentReference}`);
 
   revalidatePath('/admin/dashboard');
   return {
@@ -305,8 +318,33 @@ export async function approvePaymentAction(requestId: string) {
     return { success: false, error: `This payment request has already been ${payReq.status.toLowerCase()}.` };
   }
 
-  // Validate canonical amount matches plan
-  const expectedAmount = CANONICAL_PRICING[payReq.plan_type as PlanType];
+  // Validate amount: look up the plan from DB (by billing_plan_id or slug)
+  let expectedAmount = payReq.amount; // trust the snapshot by default
+  let durationDays = payReq.plan_type === 'MONTHLY' ? 30 : 365; // fallback
+
+  if (payReq.billing_plan_id) {
+    const { data: plan } = await supabase
+      .from('billing_plans')
+      .select('price, duration_days')
+      .eq('id', payReq.billing_plan_id)
+      .single();
+    if (plan) {
+      expectedAmount = plan.price;
+      if (plan.duration_days) durationDays = plan.duration_days;
+    }
+  } else {
+    // Legacy: lookup by slug
+    const { data: plan } = await supabase
+      .from('billing_plans')
+      .select('price, duration_days')
+      .eq('slug', payReq.plan_type)
+      .maybeSingle();
+    if (plan) {
+      expectedAmount = plan.price;
+      if (plan.duration_days) durationDays = plan.duration_days;
+    }
+  }
+
   if (expectedAmount !== payReq.amount) {
     return { success: false, error: `Amount mismatch. Expected ₹${expectedAmount} for ${payReq.plan_type} plan but request has ₹${payReq.amount}.` };
   }
@@ -323,9 +361,7 @@ export async function approvePaymentAction(requestId: string) {
   }
 
   const now = new Date();
-  const expiresAt = payReq.plan_type === 'MONTHLY'
-    ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) // 30 days
-    : new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 365 days
+  const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
 
   // Transactional: update payment_request + billing account
   const { error: updateReqErr } = await supabase

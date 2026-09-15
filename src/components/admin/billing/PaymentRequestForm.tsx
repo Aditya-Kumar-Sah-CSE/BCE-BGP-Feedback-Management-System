@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { PlanCard } from './PlanCard';
 import {
   CreditCard,
@@ -13,9 +13,13 @@ import {
   Clock,
   ShieldCheck,
 } from 'lucide-react';
-import { submitPaymentRequestAction, uploadPaymentProofAction, getPaymentSettingsAction } from '@/app/admin/billing/actions';
-import type { PaymentSettings, PaymentRequest } from '@/types/database';
-import { useEffect } from 'react';
+import {
+  submitPaymentRequestAction,
+  uploadPaymentProofAction,
+  getPaymentSettingsAction,
+} from '@/app/admin/billing/actions';
+import { getActiveBillingPlansAction } from '@/app/admin/billing/plan-actions';
+import type { PaymentSettings, PaymentRequest, BillingPlan } from '@/types/database';
 
 interface PaymentRequestFormProps {
   latestRequest?: PaymentRequest | null;
@@ -23,7 +27,10 @@ interface PaymentRequestFormProps {
 }
 
 export function PaymentRequestForm({ latestRequest, onSuccess }: PaymentRequestFormProps) {
-  const [selectedPlan, setSelectedPlan] = useState<'MONTHLY' | 'YEARLY'>('YEARLY');
+  const [plans, setPlans] = useState<BillingPlan[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+  const [loadingPlans, setLoadingPlans] = useState(true);
+
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'BANK_TRANSFER'>('UPI');
   const [paymentReference, setPaymentReference] = useState('');
   const [proofPath, setProofPath] = useState<string | null>(null);
@@ -39,7 +46,22 @@ export function PaymentRequestForm({ latestRequest, onSuccess }: PaymentRequestF
       if (res.success && res.settings) setSettings(res.settings);
       setLoadingSettings(false);
     });
+
+    getActiveBillingPlansAction().then(res => {
+      if (res.success && res.plans && res.plans.length > 0) {
+        setPlans(res.plans);
+        // Find default recommended or first non-free plan
+        const nonFree = res.plans.filter(p => p.price > 0);
+        const defaultPlan = nonFree.find(p => p.is_recommended) || nonFree[0] || res.plans[0];
+        if (defaultPlan) {
+          setSelectedPlanId(defaultPlan.id);
+        }
+      }
+      setLoadingPlans(false);
+    });
   }, []);
+
+  const selectedPlan = plans.find(p => p.id === selectedPlanId);
 
   // If there's already a PENDING request, show status instead
   if (latestRequest && latestRequest.status === 'PENDING') {
@@ -70,11 +92,6 @@ export function PaymentRequestForm({ latestRequest, onSuccess }: PaymentRequestF
     );
   }
 
-  // If request was REJECTED, show reason
-  if (latestRequest && latestRequest.status === 'REJECTED') {
-    // Allow re-submission — just show notice
-  }
-
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -97,6 +114,11 @@ export function PaymentRequestForm({ latestRequest, onSuccess }: PaymentRequestF
   }
 
   async function handleSubmit() {
+    if (!selectedPlanId) {
+      setResult({ success: false, message: 'Please select a plan to continue.' });
+      return;
+    }
+
     if (!paymentReference.trim() || paymentReference.trim().length < 4) {
       setResult({ success: false, message: 'Please enter a valid UTR / transaction reference (at least 4 characters).' });
       return;
@@ -107,13 +129,17 @@ export function PaymentRequestForm({ latestRequest, onSuccess }: PaymentRequestF
 
     try {
       const res = await submitPaymentRequestAction({
-        planType: selectedPlan,
+        billingPlanId: selectedPlanId,
         paymentMethod,
         paymentReference: paymentReference.trim(),
         paymentProofUrl: proofPath,
       });
 
-      setResult({ success: res.success, message: res.success ? res.message || 'Payment request submitted.' : res.error || 'Submission failed.' });
+      setResult({
+        success: res.success,
+        message: res.success ? res.message || 'Payment request submitted.' : res.error || 'Submission failed.',
+      });
+
       if (res.success) {
         setPaymentReference('');
         setProofPath(null);
@@ -142,26 +168,33 @@ export function PaymentRequestForm({ latestRequest, onSuccess }: PaymentRequestF
         </div>
       )}
 
-      {/* Plan Selection */}
+      {/* Dynamic Plan Selection */}
       <div>
         <h3 className="text-sm font-semibold text-slate-800 mb-3">Choose a Plan</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <PlanCard
-            plan="FREE"
-            isDisabled={true}
-            isSelected={false}
-          />
-          <PlanCard
-            plan="MONTHLY"
-            isSelected={selectedPlan === 'MONTHLY'}
-            onSelect={() => setSelectedPlan('MONTHLY')}
-          />
-          <PlanCard
-            plan="YEARLY"
-            isSelected={selectedPlan === 'YEARLY'}
-            onSelect={() => setSelectedPlan('YEARLY')}
-          />
-        </div>
+        {loadingPlans ? (
+          <div className="h-40 bg-slate-50 rounded-xl animate-pulse flex items-center justify-center">
+            <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+          </div>
+        ) : plans.length === 0 ? (
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500">
+            No active billing plans available. Please contact Super Admin.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {plans.map(p => {
+              const isFree = p.price === 0 || p.name.toUpperCase().includes('FREE');
+              return (
+                <PlanCard
+                  key={p.id}
+                  billingPlan={p}
+                  isDisabled={isFree}
+                  isSelected={selectedPlanId === p.id}
+                  onSelect={() => !isFree && setSelectedPlanId(p.id)}
+                />
+              );
+            })}
+          </div>
+        )}
         <p className="text-[11px] text-slate-400 mt-2 ml-1">
           FREE plan is assigned by the Super Admin only and cannot be self-selected.
         </p>
@@ -288,11 +321,11 @@ export function PaymentRequestForm({ latestRequest, onSuccess }: PaymentRequestF
         </div>
       )}
 
-      {/* Submit */}
+      {/* Dynamic Submit Button */}
       <button
         type="button"
         onClick={handleSubmit}
-        disabled={submitting || !paymentReference.trim()}
+        disabled={submitting || !paymentReference.trim() || !selectedPlan}
         className="w-full py-3 rounded-xl bg-bce-cobalt text-white font-semibold text-sm hover:bg-bce-navy transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {submitting ? (
@@ -303,7 +336,7 @@ export function PaymentRequestForm({ latestRequest, onSuccess }: PaymentRequestF
         ) : (
           <>
             <CreditCard className="w-4 h-4" />
-            Submit Payment Request — ₹{selectedPlan === 'MONTHLY' ? '2,999' : '29,999'}
+            Submit Payment Request — {selectedPlan ? `₹${selectedPlan.price.toLocaleString('en-IN')}` : 'Select Plan'}
           </>
         )}
       </button>
