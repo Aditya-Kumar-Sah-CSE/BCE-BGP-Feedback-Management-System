@@ -8,11 +8,13 @@ import {
   Faculty,
   Subject,
 } from '@/types/database';
+import { createClient } from '@/lib/supabase/client';
 import {
   getPublicFacultiesForSelectionAction,
   getPublicSubjectsForFacultyAction,
   getPublicFeedbackFormAction,
   getPublicSemesterFeedbackFormAction,
+  getActiveBranchesAction,
   PublicFormSummary,
 } from '@/app/feedback/actions';
 import { PublicFeedbackCard } from '@/components/public/PublicFeedbackCard';
@@ -43,27 +45,74 @@ export function StudentDiscoveryFlow({
   branches,
   semesters,
 }: Props) {
-  // Only consider active branches for public discovery, sorted alphabetically
+  // Dynamic branches state initialized from server props, refreshed dynamically and live via Realtime
+  const [branchList, setBranchList] = useState<Branch[]>(branches);
+  const [loadingBranches, setLoadingBranches] = useState<boolean>(false);
+
+  // Active branches dynamically filtered & sorted alphabetically
   const activeBranches = useMemo(
-    () => branches.filter(b => b.is_active).sort((a, b) => a.name.localeCompare(b.name)),
-    [branches]
+    () => branchList.filter(b => b.is_active).sort((a, b) => a.name.localeCompare(b.name)),
+    [branchList]
   );
 
-  // Cascading selections
+  // Dynamic fetch of active branches on mount
+  useEffect(() => {
+    let isMounted = true;
+    setLoadingBranches(true);
+    getActiveBranchesAction()
+      .then(res => {
+        if (isMounted && res.success && res.branches) {
+          setBranchList(res.branches);
+        }
+      })
+      .catch(err => {
+        console.error('[DYNAMIC_BRANCHES_FETCH]', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingBranches(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Supabase Realtime subscription for dynamic branch changes
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel('public:branches-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'branches' },
+        () => {
+          getActiveBranchesAction().then(res => {
+            if (res.success && res.branches) {
+              setBranchList(res.branches);
+            }
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Cascading selections - Branch starts unselected (empty) so user sees "Select Branch / Discipline"
   const [selectedYearId, setSelectedYearId] = useState<string>(
     academicYears.find(y => y.is_active)?.id || academicYears[0]?.id || ''
   );
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(
-    activeBranches[0]?.id || branches.find(b => b.is_active)?.id || branches[0]?.id || ''
-  );
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [selectedSemesterId, setSelectedSemesterId] = useState<string>(
     semesters.find(s => s.is_active)?.id || semesters[0]?.id || ''
   );
 
-  // Synchronize selected branch if currently selected branch was deactivated
+  // If currently selected branch was deactivated, reset selection to empty
   useEffect(() => {
-    if (activeBranches.length > 0 && !activeBranches.some(b => b.id === selectedBranchId)) {
-      setSelectedBranchId(activeBranches[0].id);
+    if (selectedBranchId && !activeBranches.some(b => b.id === selectedBranchId)) {
+      setSelectedBranchId('');
     }
   }, [activeBranches, selectedBranchId]);
   const [selectedFacultyId, setSelectedFacultyId] = useState<string>('');
@@ -275,14 +324,16 @@ export function StudentDiscoveryFlow({
   ]);
 
   const handleReset = () => {
+    setSelectedBranchId('');
     setSelectedFacultyId('');
     setSelectedSubjectId('');
     setMatchedForm(null);
     setFormStatus('NONE');
+    setSemesterFormResult(null);
   };
 
   const selectedYear = academicYears.find(y => y.id === selectedYearId);
-  const selectedBranch = branches.find(b => b.id === selectedBranchId);
+  const selectedBranch = branchList.find(b => b.id === selectedBranchId);
   const selectedSemester = semesters.find(s => s.id === selectedSemesterId);
   const selectedFaculty = faculties.find(f => f.id === selectedFacultyId);
   const selectedSubject = subjects.find(s => s.id === selectedSubjectId);
@@ -302,7 +353,7 @@ export function StudentDiscoveryFlow({
             </p>
           </div>
 
-          {(selectedFacultyId || selectedSubjectId) && (
+          {(selectedBranchId || selectedFacultyId || selectedSubjectId) && (
             <button
               onClick={handleReset}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition-colors self-start sm:self-auto cursor-pointer"
@@ -336,23 +387,26 @@ export function StudentDiscoveryFlow({
 
           {/* Step 2: Branch */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-bce-cobalt shrink-0" />
-              2. Branch / Discipline
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-bce-cobalt shrink-0" />
+                2. Branch / Discipline
+              </span>
+              {loadingBranches && <Loader2 className="w-3.5 h-3.5 animate-spin text-bce-cobalt" />}
             </label>
             <select
               value={selectedBranchId}
               onChange={e => setSelectedBranchId(e.target.value)}
               aria-label="Branch / Discipline"
-              disabled={activeBranches.length === 0}
+              disabled={activeBranches.length === 0 && !loadingBranches}
               className="w-full min-h-[44px] bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-base sm:text-xs text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {!selectedBranchId && (
+              <option value="">Select Branch / Discipline</option>
+              {loadingBranches && activeBranches.length === 0 ? (
                 <option value="" disabled>
-                  Select Branch / Discipline
+                  Loading branches...
                 </option>
-              )}
-              {activeBranches.length === 0 ? (
+              ) : activeBranches.length === 0 ? (
                 <option value="" disabled>
                   No active branches available
                 </option>
@@ -438,7 +492,11 @@ export function StudentDiscoveryFlow({
               {loadingFaculties && <Loader2 className="w-3.5 h-3.5 animate-spin text-bce-cobalt" />}
             </label>
 
-            {loadingFaculties ? (
+            {!selectedBranchId ? (
+              <div className="min-h-[44px] bg-slate-50 border border-slate-200 rounded-xl flex items-center px-3.5 text-xs text-slate-400 font-medium">
+                Please select your Branch / Discipline above
+              </div>
+            ) : loadingFaculties ? (
               <div className="min-h-[44px] bg-slate-50 border border-slate-200 rounded-xl flex items-center px-3 text-xs text-slate-400">
                 Loading assigned faculties...
               </div>

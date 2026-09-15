@@ -32,7 +32,7 @@ export default async function AdminResultsHubPage() {
     { data: forms },
   ] = await Promise.all([
     supabase.from('academic_years').select('*').order('name', { ascending: false }),
-    supabase.from('branches').select('*').eq('is_active', true).order('name', { ascending: true }),
+    supabase.from('branches').select('id, name, code, is_active').eq('is_active', true).order('name', { ascending: true }),
     supabase.from('semesters').select('*').order('number', { ascending: true }),
     supabase.from('faculties').select('*').order('name', { ascending: true }),
     supabase.from('subjects').select('*').order('name', { ascending: true }),

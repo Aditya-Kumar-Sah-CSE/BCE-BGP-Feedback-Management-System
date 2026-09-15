@@ -21,7 +21,7 @@ export default async function HomePage() {
     initialActiveForms,
   ] = await Promise.all([
     supabase.from('academic_years').select('*').eq('is_active', true).order('name', { ascending: false }),
-    supabase.from('branches').select('*').eq('is_active', true).order('name', { ascending: true }),
+    supabase.from('branches').select('id, name, code, is_active').eq('is_active', true).order('name', { ascending: true }),
     supabase.from('semesters').select('*').eq('is_active', true).order('semester_number', { ascending: true }),
     getPublicActiveFormsAction({ page: 1, pageSize: 12 }),
   ]);
