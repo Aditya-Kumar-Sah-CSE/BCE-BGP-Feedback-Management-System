@@ -147,7 +147,7 @@ export async function createBillingPlanAction(input: {
   }
 
   const v = validation.data;
-  const slug = (v.slug || v.name.toUpperCase().replace(/[^A-Z0-9]/g, '_')).trim();
+  const slug = (v.slug || v.name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')).trim();
   const supabase = await getAdminDb();
 
   // Check slug uniqueness
@@ -182,12 +182,12 @@ export async function createBillingPlanAction(input: {
 
   if (error) {
     console.error('[CREATE_BILLING_PLAN]', error);
-    return { success: false, error: 'Failed to create billing plan.' };
+    return { success: false, error: error.message || 'Failed to create billing plan.' };
   }
 
   await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email },
     'BILLING_PLAN_CREATED', 'billing_plans', newPlan.id,
-    `Created billing plan: ${v.name} (${v.slug}), ₹${v.price}, interval: ${v.billingInterval}`);
+    `Created billing plan: ${v.name} (${slug}), ₹${v.price}, interval: ${v.billingInterval}`);
 
   revalidatePath('/admin/dashboard');
   return { success: true, plan: newPlan as BillingPlan };
@@ -269,7 +269,7 @@ export async function updateBillingPlanAction(input: {
 
   if (error) {
     console.error('[UPDATE_BILLING_PLAN]', error);
-    return { success: false, error: 'Failed to update billing plan.' };
+    return { success: false, error: error.message || 'Failed to update billing plan.' };
   }
 
   const changes = Object.entries(updatePayload)
@@ -317,7 +317,7 @@ export async function toggleBillingPlanAction(planId: string, isActive: boolean)
     .eq('id', planId);
 
   if (error) {
-    return { success: false, error: `Failed to ${isActive ? 'enable' : 'disable'} plan.` };
+    return { success: false, error: error.message || `Failed to ${isActive ? 'enable' : 'disable'} plan.` };
   }
 
   await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email },
@@ -407,7 +407,7 @@ export async function deleteBillingPlanAction(planId: string) {
 
   if (error) {
     console.error('[DELETE_BILLING_PLAN]', error);
-    return { success: false, error: 'Failed to delete billing plan.' };
+    return { success: false, error: error.message || 'Failed to delete billing plan.' };
   }
 
   await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email },

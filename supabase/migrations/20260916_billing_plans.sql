@@ -20,8 +20,8 @@ CREATE TABLE IF NOT EXISTS public.billing_plans (
     description TEXT DEFAULT '',
     price INTEGER NOT NULL DEFAULT 0 CHECK (price >= 0),
     currency VARCHAR(10) NOT NULL DEFAULT 'INR',
-    billing_interval VARCHAR(20) NOT NULL DEFAULT 'one_time'
-        CHECK (billing_interval IN ('one_time', 'monthly', 'yearly')),
+    billing_interval VARCHAR(20) NOT NULL DEFAULT 'MONTHLY'
+        CHECK (billing_interval IN ('FREE', 'MONTHLY', 'YEARLY', 'ONETIME', 'CUSTOM', 'one_time', 'monthly', 'yearly')),
     duration_days INTEGER DEFAULT NULL,
     features JSONB DEFAULT '[]'::jsonb,
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -85,13 +85,13 @@ REVOKE ALL ON public.billing_plans FROM anon, public;
 
 INSERT INTO public.billing_plans (name, slug, description, price, currency, billing_interval, duration_days, features, is_active, is_recommended, display_order)
 VALUES
-    ('Free', 'FREE', 'Assigned by Super Admin only.', 0, 'INR', 'one_time', NULL,
+    ('Free', 'FREE', 'Assigned by Super Admin only.', 0, 'INR', 'FREE', NULL,
      '["Google Form generation", "Google Sheet integration", "Basic analytics"]'::jsonb,
      true, false, 0),
-    ('Monthly', 'MONTHLY', 'Pay monthly, cancel anytime.', 2999, 'INR', 'monthly', 30,
+    ('Monthly', 'MONTHLY', 'Pay monthly, cancel anytime.', 2999, 'INR', 'MONTHLY', 30,
      '["Google Form generation", "Google Sheet integration", "Full analytics access", "Priority support"]'::jsonb,
      true, false, 10),
-    ('Yearly', 'YEARLY', 'Best value — save over ₹5,900/year.', 29999, 'INR', 'yearly', 365,
+    ('Yearly', 'YEARLY', 'Best value — save over ₹5,900/year.', 29999, 'INR', 'YEARLY', 365,
      '["Google Form generation", "Google Sheet integration", "Full analytics access", "Priority support", "2 months free"]'::jsonb,
      true, true, 20)
 ON CONFLICT (slug) DO NOTHING;

@@ -17,7 +17,7 @@
 CREATE TABLE IF NOT EXISTS public.admin_billing_accounts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     admin_user_id UUID NOT NULL REFERENCES public.admins(id) ON DELETE CASCADE,
-    plan_type VARCHAR(20) NOT NULL DEFAULT 'FREE' CHECK (plan_type IN ('FREE', 'MONTHLY', 'YEARLY')),
+    plan_type VARCHAR(50) NOT NULL DEFAULT 'FREE',
     access_status VARCHAR(20) NOT NULL DEFAULT 'LOCKED' CHECK (access_status IN ('LOCKED', 'UNLOCKED')),
     subscription_status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (subscription_status IN ('ACTIVE', 'EXPIRED', 'CANCELLED', 'PENDING')),
     started_at TIMESTAMP WITH TIME ZONE,
@@ -40,7 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_billing_expires ON public.admin_billing_accounts(
 CREATE TABLE IF NOT EXISTS public.payment_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     admin_user_id UUID NOT NULL REFERENCES public.admins(id) ON DELETE CASCADE,
-    plan_type VARCHAR(20) NOT NULL CHECK (plan_type IN ('MONTHLY', 'YEARLY')),
+    plan_type VARCHAR(50) NOT NULL,
     amount INTEGER NOT NULL CHECK (amount > 0),
     payment_method VARCHAR(20) NOT NULL CHECK (payment_method IN ('UPI', 'BANK_TRANSFER')),
     payment_reference VARCHAR(255) NOT NULL,

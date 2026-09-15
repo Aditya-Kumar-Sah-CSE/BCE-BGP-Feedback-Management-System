@@ -79,7 +79,7 @@ export function PlanManagementSection() {
     setPrice(String(plan.price));
     setCurrency(plan.currency);
     setBillingInterval(plan.billing_interval);
-    setDurationDays(String(plan.duration_days));
+    setDurationDays(plan.duration_days !== null && plan.duration_days !== undefined ? String(plan.duration_days) : '');
     setFeaturesText(plan.features?.join('\n') || '');
     setIsRecommended(plan.is_recommended || false);
     setIsActive(plan.is_active);
@@ -99,9 +99,9 @@ export function PlanManagementSection() {
       return;
     }
 
-    const durationNum = parseInt(durationDays, 10);
-    if (isNaN(durationNum) || durationNum < 0) {
-      setMessage({ type: 'error', text: 'Duration must be a valid non-negative integer.' });
+    const durationNum = durationDays.trim() !== '' ? parseInt(durationDays, 10) : null;
+    if (durationNum !== null && (isNaN(durationNum) || durationNum < 0)) {
+      setMessage({ type: 'error', text: 'Duration must be a valid non-negative number of days, or empty for unlimited.' });
       return;
     }
 
@@ -243,7 +243,7 @@ export function PlanManagementSection() {
                     ₹{plan.price.toLocaleString('en-IN')}
                   </span>
                   <span className="text-xs text-slate-500 font-medium">
-                    / {plan.duration_days} days
+                    {plan.duration_days ? `/ ${plan.duration_days} days` : '/ unlimited'}
                   </span>
                 </div>
 
