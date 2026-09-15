@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ['pdfkit'],
+  transpilePackages: ['lucide-react'],
   // Ensure Vercel output tracing includes all pdfkit runtime assets
   // (standard font .cjs chunks resolved via package #imports map at runtime)
   outputFileTracingIncludes: {

@@ -20,7 +20,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import type { Admin, AdminRequest } from '@/types/database';
-import { useHydrated, formatDateShort, formatTime, formatDateSafe } from '@/lib/hooks/use-hydrated';
+import { useHydrated, formatDateShort, formatTime } from '@/lib/hooks/use-hydrated';
 
 interface Props {
   adminRequests: AdminRequest[];
