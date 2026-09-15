@@ -1,7 +1,12 @@
 import Image from 'next/image';
 import { GraduationCap, ShieldCheck, School, ArrowDown, ExternalLink } from 'lucide-react';
+import type { Branch } from '@/types/database';
 
-export function HeroSection() {
+interface HeroSectionProps {
+  branches?: Branch[];
+}
+
+export function HeroSection({ branches }: HeroSectionProps) {
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-[#f0f7ff] via-white to-slate-50/90 border-b border-slate-200/80">
       {/* Subtle decorative background ambient accents */}
@@ -84,7 +89,9 @@ export function HeroSection() {
                     All Departments
                   </p>
                   <p className="text-[10.5px] sm:text-[11.5px] text-slate-500 leading-tight mt-0.5">
-                    CSE, CE, ME, EE, ECE
+                    {branches && branches.length > 0
+                      ? branches.map((b) => b.code).join(', ')
+                      : 'All Engineering Departments'}
                   </p>
                 </div>
               </div>

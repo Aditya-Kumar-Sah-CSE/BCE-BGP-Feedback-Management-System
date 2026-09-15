@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useMemo } from 'react';
 import {
   AcademicYear,
   Branch,
@@ -43,16 +43,26 @@ export function StudentDiscoveryFlow({
   branches,
   semesters,
 }: Props) {
+  // Only consider active branches for public discovery
+  const activeBranches = useMemo(() => branches.filter(b => b.is_active), [branches]);
+
   // Cascading selections
   const [selectedYearId, setSelectedYearId] = useState<string>(
     academicYears.find(y => y.is_active)?.id || academicYears[0]?.id || ''
   );
   const [selectedBranchId, setSelectedBranchId] = useState<string>(
-    branches.find(b => b.is_active)?.id || branches[0]?.id || ''
+    activeBranches[0]?.id || branches.find(b => b.is_active)?.id || branches[0]?.id || ''
   );
   const [selectedSemesterId, setSelectedSemesterId] = useState<string>(
     semesters.find(s => s.is_active)?.id || semesters[0]?.id || ''
   );
+
+  // Synchronize selected branch if currently selected branch was deactivated
+  useEffect(() => {
+    if (activeBranches.length > 0 && !activeBranches.some(b => b.id === selectedBranchId)) {
+      setSelectedBranchId(activeBranches[0].id);
+    }
+  }, [activeBranches, selectedBranchId]);
   const [selectedFacultyId, setSelectedFacultyId] = useState<string>('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
 
@@ -332,7 +342,7 @@ export function StudentDiscoveryFlow({
               onChange={e => setSelectedBranchId(e.target.value)}
               className="w-full min-h-[44px] bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-base sm:text-xs text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
             >
-              {branches.map(b => (
+              {activeBranches.map(b => (
                 <option key={b.id} value={b.id}>
                   {b.name} ({b.code})
                 </option>

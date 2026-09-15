@@ -76,7 +76,7 @@ export default async function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <HeroSection />
+      <HeroSection branches={(branches as Branch[]) || []} />
 
       {/* Discovery Flow Area */}
       <main id="discovery-section" className="flex-1 max-w-6xl mx-auto w-full px-3.5 sm:px-6 lg:px-8 py-6 sm:py-10 scroll-mt-14">

@@ -33,7 +33,7 @@ export default async function CreateFeedbackFormPage() {
     { data: assignments },
   ] = await Promise.all([
     supabase.from('academic_years').select('id, name, is_active').order('name', { ascending: false }),
-    supabase.from('branches').select('id, name, code, is_active').order('name'),
+    supabase.from('branches').select('id, name, code, is_active').eq('is_active', true).order('name'),
     supabase.from('semesters').select('id, name, semester_number, is_active').order('semester_number'),
     supabase.from('faculties').select('id, name, department, is_active').order('name'),
     supabase.from('subjects').select('id, name, code, branch_id, semester_id, is_active').order('name'),

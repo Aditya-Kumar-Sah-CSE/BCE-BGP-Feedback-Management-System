@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAdminSession, SUPER_ADMIN_EMAIL } from '@/lib/auth/admin-auth';
 import { ACADEMIC_CACHE_TAG } from '@/lib/supabase/academic-cache';
+import { branchSchema, isValidUUID } from '@/lib/validation';
 import { deleteFeedbackFormAction as deleteFormInternal } from './forms/actions';
 
 async function getAdminDb() {
@@ -248,6 +249,7 @@ export async function createAcademicYearAction(data: { name: string; is_active: 
     `Created academic year ${newYear.name}`
   );
 
+  revalidateTag(ACADEMIC_CACHE_TAG);
   revalidatePath('/admin/dashboard');
   revalidatePath('/');
   return { success: true, year: newYear };
@@ -280,6 +282,7 @@ export async function updateAcademicYearAction(id: string, data: { name: string;
     `Updated academic year ${data.name}`
   );
 
+  revalidateTag(ACADEMIC_CACHE_TAG);
   revalidatePath('/admin/dashboard');
   revalidatePath('/');
   return { success: true };
@@ -295,13 +298,31 @@ export async function createBranchAction(data: { name: string; code: string; is_
     return { success: false, error: 'Unauthorized.' };
   }
 
+  const validation = branchSchema.safeParse(data);
+  if (!validation.success) {
+    return { success: false, error: validation.error.issues[0]?.message || 'Invalid branch details.' };
+  }
+
+  const { name, code, is_active } = validation.data;
   const supabase = await getAdminDb();
+
+  // Prevent duplicate branch code (case-insensitive check)
+  const { data: existingCode } = await supabase
+    .from('branches')
+    .select('id, code')
+    .ilike('code', code)
+    .maybeSingle();
+
+  if (existingCode) {
+    return { success: false, error: `Branch code "${code}" is already in use.` };
+  }
+
   const { data: newBranch, error } = await supabase
     .from('branches')
     .insert({
-      name: data.name.trim(),
-      code: data.code.trim().toUpperCase(),
-      is_active: data.is_active,
+      name,
+      code,
+      is_active,
     })
     .select('*')
     .single();
@@ -317,6 +338,7 @@ export async function createBranchAction(data: { name: string; code: string; is_
     `Created branch ${newBranch.name} (${newBranch.code})`
   );
 
+  revalidateTag(ACADEMIC_CACHE_TAG);
   revalidatePath('/admin/dashboard');
   revalidatePath('/');
   return { success: true, branch: newBranch };
@@ -328,13 +350,36 @@ export async function updateBranchAction(id: string, data: { name: string; code:
     return { success: false, error: 'Unauthorized.' };
   }
 
+  if (!isValidUUID(id)) {
+    return { success: false, error: 'Invalid branch ID.' };
+  }
+
+  const validation = branchSchema.safeParse(data);
+  if (!validation.success) {
+    return { success: false, error: validation.error.issues[0]?.message || 'Invalid branch details.' };
+  }
+
+  const { name, code, is_active } = validation.data;
   const supabase = await getAdminDb();
+
+  // Prevent duplicate branch code on other branches
+  const { data: existingCode } = await supabase
+    .from('branches')
+    .select('id, code')
+    .ilike('code', code)
+    .neq('id', id)
+    .maybeSingle();
+
+  if (existingCode) {
+    return { success: false, error: `Branch code "${code}" is already assigned to another branch.` };
+  }
+
   const { error } = await supabase
     .from('branches')
     .update({
-      name: data.name.trim(),
-      code: data.code.trim().toUpperCase(),
-      is_active: data.is_active,
+      name,
+      code,
+      is_active,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);
@@ -347,9 +392,110 @@ export async function updateBranchAction(id: string, data: { name: string; code:
     'UPDATE_BRANCH',
     'branches',
     id,
-    `Updated branch ${data.name}`
+    `Updated branch ${name} (${code})`
   );
 
+  revalidateTag(ACADEMIC_CACHE_TAG);
+  revalidatePath('/admin/dashboard');
+  revalidatePath('/');
+  return { success: true };
+}
+
+export async function deleteBranchAction(id: string) {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || !session.isActive) {
+    return { success: false, error: 'Unauthorized.' };
+  }
+
+  if (!isValidUUID(id)) {
+    return { success: false, error: 'Invalid branch ID.' };
+  }
+
+  const supabase = await getAdminDb();
+
+  // Fetch branch details
+  const { data: branch, error: branchErr } = await supabase
+    .from('branches')
+    .select('id, name, code')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (branchErr || !branch) {
+    return { success: false, error: 'Branch not found.' };
+  }
+
+  // 1. Dependency check: feedback_forms
+  const { count: formsCount } = await supabase
+    .from('feedback_forms')
+    .select('id', { count: 'exact', head: true })
+    .eq('branch_id', id);
+
+  if (formsCount && formsCount > 0) {
+    return {
+      success: false,
+      error: `Cannot delete branch "${branch.name}": ${formsCount} feedback form(s) are linked to it. Deactivate the branch instead to preserve historical records.`,
+    };
+  }
+
+  // 2. Dependency check: faculty_subject_assignments
+  const { count: assignCount } = await supabase
+    .from('faculty_subject_assignments')
+    .select('id', { count: 'exact', head: true })
+    .eq('branch_id', id);
+
+  if (assignCount && assignCount > 0) {
+    return {
+      success: false,
+      error: `Cannot delete branch "${branch.name}": ${assignCount} faculty-subject assignment(s) are linked to it. Remove or reassign them first, or deactivate the branch.`,
+    };
+  }
+
+  // 3. Dependency check: subjects
+  const { count: subjectCount } = await supabase
+    .from('subjects')
+    .select('id', { count: 'exact', head: true })
+    .eq('branch_id', id);
+
+  if (subjectCount && subjectCount > 0) {
+    return {
+      success: false,
+      error: `Cannot delete branch "${branch.name}": ${subjectCount} subject(s) belong to this branch. Delete or reassign the subjects first, or deactivate the branch.`,
+    };
+  }
+
+  // 4. Dependency check: faculties
+  const { count: facultyCount } = await supabase
+    .from('faculties')
+    .select('id', { count: 'exact', head: true })
+    .or(`department.eq."${branch.name}",department.eq."${branch.code}"`);
+
+  if (facultyCount && facultyCount > 0) {
+    return {
+      success: false,
+      error: `Cannot delete branch "${branch.name}": ${facultyCount} faculty member(s) belong to this department. Reassign them first, or deactivate the branch.`,
+    };
+  }
+
+  // Safely delete branch
+  const { error: deleteErr } = await supabase
+    .from('branches')
+    .delete()
+    .eq('id', id);
+
+  if (deleteErr) {
+    return { success: false, error: deleteErr.message };
+  }
+
+  await logAuditAction(
+    supabase,
+    { adminId: session.admin?.id, email: session.user?.email },
+    'DELETE_BRANCH',
+    'branches',
+    id,
+    `Deleted branch ${branch.name} (${branch.code})`
+  );
+
+  revalidateTag(ACADEMIC_CACHE_TAG);
   revalidatePath('/admin/dashboard');
   revalidatePath('/');
   return { success: true };
@@ -388,6 +534,7 @@ export async function createSemesterAction(data: { name: string; year_number: nu
     `Created semester ${newSem.name}`
   );
 
+  revalidateTag(ACADEMIC_CACHE_TAG);
   revalidatePath('/admin/dashboard');
   revalidatePath('/');
   return { success: true, semester: newSem };
@@ -422,6 +569,7 @@ export async function updateSemesterAction(id: string, data: { name: string; yea
     `Updated semester ${data.name}`
   );
 
+  revalidateTag(ACADEMIC_CACHE_TAG);
   revalidatePath('/admin/dashboard');
   revalidatePath('/');
   return { success: true };
@@ -1199,33 +1347,6 @@ export async function getPaginatedAssignmentsAction(params: {
   };
 }
 
-export async function deleteBranchAction(id: string) {
-  const session = await getAdminSession();
-  if (!session.isAuthenticated || !session.isActive) {
-    return { success: false, error: 'Unauthorized.' };
-  }
-
-  const supabase = await getAdminDb();
-  const { error } = await supabase.from('branches').delete().eq('id', id);
-  if (error) return { success: false, error: error.message };
-
-  await logAuditAction(
-    supabase,
-    { adminId: session.admin?.id, email: session.user?.email },
-    'DELETE_BRANCH',
-    'branches',
-    id,
-    'Deleted branch'
-  );
-
-  try {
-    revalidateTag(ACADEMIC_CACHE_TAG);
-  } catch {
-    // Ignore in unsupported environments
-  }
-
-  return { success: true };
-}
 
 export async function deleteAcademicYearAction(id: string) {
   const session = await getAdminSession();

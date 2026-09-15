@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -23,7 +23,8 @@ function AdminSignupForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [department, setDepartment] = useState('Computer Science & Engineering');
+  const [department, setDepartment] = useState('');
+  const [branches, setBranches] = useState<{ id: string; name: string; code: string }[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +32,20 @@ function AdminSignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
+
+  useEffect(() => {
+    supabase
+      .from('branches')
+      .select('id, name, code')
+      .eq('is_active', true)
+      .order('name', { ascending: true })
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setBranches(data);
+          setDepartment((current) => current || data[0].name);
+        }
+      });
+  }, [supabase]);
 
   const redirectParam = searchParams.get('redirect');
   const targetDestination =
@@ -192,11 +207,11 @@ function AdminSignupForm() {
               onChange={(e) => setDepartment(e.target.value)}
               className="block w-full pl-10 pr-3.5 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-base sm:text-sm min-h-[44px] text-white focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all"
             >
-              <option value="Computer Science & Engineering">Computer Science & Engineering</option>
-              <option value="Civil Engineering">Civil Engineering</option>
-              <option value="Mechanical Engineering">Mechanical Engineering</option>
-              <option value="Electrical Engineering">Electrical Engineering</option>
-              <option value="Electronics & Communication Engineering">Electronics & Communication Engineering</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.name}>
+                  {b.name} ({b.code})
+                </option>
+              ))}
               <option value="Applied Science & Humanities">Applied Science & Humanities</option>
               <option value="General Administration">General Administration</option>
             </select>

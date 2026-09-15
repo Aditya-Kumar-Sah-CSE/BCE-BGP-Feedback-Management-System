@@ -83,3 +83,21 @@ export const subjectSchema = z.object({
   semester_id: z.string().uuid('Semester must be selected').optional().nullable(),
   is_active: z.boolean().default(true),
 });
+
+/**
+ * Branch Creation & Update Schema
+ */
+export const branchSchema = z.object({
+  name: z.string().trim().min(2, 'Branch name must be at least 2 characters').max(150),
+  code: z
+    .string()
+    .trim()
+    .min(1, 'Branch code must be at least 1 character')
+    .max(50)
+    .regex(/^[A-Za-z0-9_-]+$/, 'Branch code can only contain alphanumeric characters, hyphens, or underscores')
+    .transform(val => val.toUpperCase()),
+  is_active: z.boolean().default(true),
+});
+
+export type BranchInput = z.infer<typeof branchSchema>;
+
