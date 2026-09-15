@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useTransition, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Search,
@@ -14,6 +14,7 @@ import {
   Loader2,
   User,
   GraduationCap,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   AdminResponsesResult,
@@ -38,9 +39,98 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
   const [isPending, startTransition] = useTransition();
   const [selectedDetail, setSelectedDetail] = useState<StudentResponseDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
+  const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+  const [downloadNotification, setDownloadNotification] = useState<{
+    type: 'error' | 'success';
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const handleDownloadResponsePdf = async (responseId: string) => {
+    if (!responseId) {
+      setDownloadNotification({
+        type: 'error',
+        message: 'Invalid response identifier.',
+      });
+      return;
+    }
+
+    setDownloadingPdfId(responseId);
+    setDownloadNotification(null);
+
+    try {
+      const res = await fetch(
+        `/api/admin/results/${formId}/responses/${encodeURIComponent(responseId)}/pdf`
+      );
+
+      if (!res.ok) {
+        let errMsg = 'Failed to generate student response PDF.';
+        try {
+          const errJson = await res.json();
+          errMsg = errJson.error || errJson.detail || errMsg;
+        } catch {
+          const text = await res.text();
+          if (text) errMsg = text;
+        }
+        setDownloadNotification({
+          type: 'error',
+          message: `PDF Download Error: ${errMsg}`,
+        });
+        return;
+      }
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/pdf')) {
+        const text = await res.text();
+        setDownloadNotification({
+          type: 'error',
+          message: `Unexpected response format: ${text.slice(0, 120)}`,
+        });
+        return;
+      }
+
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      const disposition = res.headers.get('content-disposition');
+      const filenameMatch = disposition?.match(/filename="?([^"]+)"?/);
+      link.download = filenameMatch
+        ? filenameMatch[1]
+        : `student-response-${responseId.slice(0, 8)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+
+      setDownloadNotification({
+        type: 'success',
+        message: 'Student Response PDF downloaded successfully.',
+      });
+      setTimeout(() => setDownloadNotification(null), 4000);
+    } catch (err: any) {
+      console.error('PDF download error:', err);
+      setDownloadNotification({
+        type: 'error',
+        message: `Failed to download PDF: ${err?.message || 'Network error'}`,
+      });
+    } finally {
+      setDownloadingPdfId(null);
+    }
+  };
 
   // Fetch responses on search or pagination changes
-  const loadResponses = (page: number, currentSearch = search, currentStart = startDate, currentEnd = endDate, currentSize = pageSize) => {
+  const loadResponses = (
+    page: number,
+    currentSearch = search,
+    currentStart = startDate,
+    currentEnd = endDate,
+    currentSize = pageSize
+  ) => {
     startTransition(async () => {
       const res = await getFormResponsesAction({
         formId,
@@ -79,11 +169,17 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
       if (res.success && res.detail) {
         setSelectedDetail(res.detail);
       } else {
-        alert(res.error || 'Failed to load response detail.');
+        setDownloadNotification({
+          type: 'error',
+          message: res.error || 'Failed to load response detail.',
+        });
       }
     } catch (err) {
       console.error(err);
-      alert('Error fetching response detail.');
+      setDownloadNotification({
+        type: 'error',
+        message: 'Error fetching response detail.',
+      });
     } finally {
       setLoadingDetail(null);
     }
@@ -201,6 +297,33 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
         </form>
       </div>
 
+      {/* Notification Toast/Banner */}
+      {downloadNotification && (
+        <div
+          className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-2.5 transition-all ${
+            downloadNotification.type === 'error'
+              ? 'bg-rose-50 border-rose-200 text-rose-800'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {downloadNotification.type === 'error' ? (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            )}
+            <span>{downloadNotification.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDownloadNotification(null)}
+            className="text-slate-400 hover:text-slate-600 p-1"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Responses Table Card */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -212,11 +335,11 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
                 <th className="py-3 px-4">Verified Email</th>
                 <th className="py-3 px-4">Submission Date</th>
                 <th className="py-3 px-4">Response ID</th>
-                <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4 text-center">Receipt Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 font-medium">
               {isPending ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400">
@@ -227,12 +350,12 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
               ) : data.responses.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400">
-                    <AlertCircle className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                    <User className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                     <p className="font-semibold text-slate-700 text-sm">No Student Responses Found</p>
                     <p className="text-xs text-slate-400 mt-1">
                       {search || startDate || endDate
                         ? 'No responses match your search or date filter criteria.'
-                        : 'Submissions will appear automatically once students submit Google Forms.'}
+                        : 'No students have submitted feedback responses for this form yet.'}
                     </p>
                   </td>
                 </tr>
@@ -242,21 +365,23 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
                     <td className="py-3 px-4 font-semibold text-slate-900">
                       {row.studentName || 'Confidential Student'}
                     </td>
-                    <td className="py-3 px-4 font-mono text-[11px] text-slate-700">
+                    <td className="py-3 px-4 font-mono text-slate-700">
                       {row.registrationNumber || 'N/A'}
                     </td>
-                    <td className="py-3 px-4 text-slate-700">
+                    <td className="py-3 px-4 text-slate-600">
                       {row.studentEmail}
                     </td>
-                    <td className="py-3 px-4 text-slate-500">
+                    <td className="py-3 px-4 text-slate-500" suppressHydrationWarning>
                       {row.submittedAt
-                        ? new Date(row.submittedAt).toLocaleString('en-IN', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
+                        ? isMounted
+                          ? new Date(row.submittedAt).toLocaleString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : row.submittedAt.slice(0, 10)
                         : 'Google Form Recorded'}
                     </td>
                     <td className="py-3 px-4 font-mono text-[10px] text-slate-400" title={row.googleResponseId}>
@@ -283,11 +408,11 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
                       <div className="inline-flex items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => handleViewDetail(row.googleResponseId)}
-                          disabled={loadingDetail === row.googleResponseId}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition-colors disabled:opacity-50"
+                          onClick={() => handleViewDetail(row.googleResponseId || row.id)}
+                          disabled={loadingDetail === (row.googleResponseId || row.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition-colors disabled:opacity-50 cursor-pointer"
                         >
-                          {loadingDetail === row.googleResponseId ? (
+                          {loadingDetail === (row.googleResponseId || row.id) ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           ) : (
                             <Eye className="w-3.5 h-3.5" />
@@ -295,17 +420,20 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
                           <span>View</span>
                         </button>
 
-                        <a
-                          href={`/api/feedback/response/download?formId=${formId}&responseId=${encodeURIComponent(row.googleResponseId)}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          download
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors"
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadResponsePdf(row.googleResponseId || row.id)}
+                          disabled={downloadingPdfId === (row.googleResponseId || row.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors disabled:opacity-50 cursor-pointer"
                           title="Download Student Response PDF"
                         >
-                          <Download className="w-3.5 h-3.5 text-slate-500" />
+                          {downloadingPdfId === (row.googleResponseId || row.id) ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" />
+                          ) : (
+                            <Download className="w-3.5 h-3.5 text-slate-500" />
+                          )}
                           <span>PDF</span>
-                        </a>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -323,29 +451,29 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
               <span className="font-bold text-slate-900">
                 {Math.min(currentPage * pageSize, data.totalCount)}
               </span>{' '}
-              of <span className="font-bold text-slate-900">{data.totalCount}</span> submissions
+              of <span className="font-bold text-slate-900">{data.totalCount}</span> responses
             </div>
 
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage <= 1 || isPending}
-                className="p-1.5 rounded-lg border border-slate-300 hover:bg-white text-slate-600 disabled:opacity-30 transition-colors"
+                disabled={currentPage <= 1}
+                className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600"
                 title="Previous Page"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <span className="px-3 py-1 font-semibold text-slate-700">
-                Page {currentPage} of {data.totalPages}
+              <span className="px-3 py-1 font-semibold text-slate-800">
+                {currentPage} / {data.totalPages}
               </span>
 
               <button
                 type="button"
                 onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage >= data.totalPages || isPending}
-                className="p-1.5 rounded-lg border border-slate-300 hover:bg-white text-slate-600 disabled:opacity-30 transition-colors"
+                disabled={currentPage >= data.totalPages}
+                className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600"
                 title="Next Page"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -355,36 +483,36 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
         )}
       </div>
 
-      {/* Response Detail Modal */}
+      {/* Detail Modal */}
       {selectedDetail && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden my-8 max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/80">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
                   <User className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base">Student Feedback Detail</h3>
-                  <p className="text-xs text-slate-500 font-medium">
-                    ID: {selectedDetail.responseId}
+                  <h3 className="font-bold text-slate-900 text-sm">Student Submission Details</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Response ID: {selectedDetail.responseId}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedDetail(null)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Modal Content */}
-            <div className="p-6 space-y-6 overflow-y-auto flex-1 text-xs">
-              {/* Student Metadata Card */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-5 text-xs text-slate-600">
+              {/* Identity Details Card */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                 <div>
                   <span className="text-slate-400 block text-[11px]">Student Name</span>
                   <span className="font-bold text-slate-900">
@@ -450,11 +578,11 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
                 ))}
               </div>
 
-              {/* General Feedback */}
+              {/* General Feedback Comments */}
               {selectedDetail.generalFeedback && (
-                <div className="space-y-1.5">
-                  <h4 className="font-bold text-slate-900 text-xs">General Feedback / Suggestions</h4>
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-xs leading-relaxed italic">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1.5">General Feedback</h4>
+                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 italic">
                     &ldquo;{selectedDetail.generalFeedback}&rdquo;
                   </div>
                 </div>
@@ -463,21 +591,24 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
 
             {/* Modal Footer */}
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
-              <a
-                href={`/api/feedback/response/download?formId=${formId}&responseId=${encodeURIComponent(selectedDetail.responseId)}`}
-                target="_blank"
-                rel="noreferrer"
-                download
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+              <button
+                type="button"
+                onClick={() => handleDownloadResponsePdf(selectedDetail.responseId)}
+                disabled={downloadingPdfId === selectedDetail.responseId}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
               >
-                <Download className="w-3.5 h-3.5" />
+                {downloadingPdfId === selectedDetail.responseId ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
                 <span>Download Response PDF</span>
-              </a>
+              </button>
 
               <button
                 type="button"
                 onClick={() => setSelectedDetail(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
               >
                 Close
               </button>

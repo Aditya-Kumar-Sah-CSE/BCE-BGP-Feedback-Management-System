@@ -236,12 +236,24 @@ export async function fetchSingleResponseFromSheet(
 ): Promise<{ headers: string[]; row: string[] } | null> {
   try {
     const { sheets } = getGoogleServices();
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: "'Form Responses'!A1:ZZ",
-    });
+    let rows: any[][] = [];
+    try {
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: "'Form Responses'!A1:ZZ",
+      });
+      rows = res.data.values || [];
+    } catch {
+      // Fallback: query first sheet title dynamically
+      const meta = await sheets.spreadsheets.get({ spreadsheetId });
+      const sheetTitle = meta.data.sheets?.[0]?.properties?.title || 'Form Responses';
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `'${sheetTitle}'!A1:ZZ`,
+      });
+      rows = res.data.values || [];
+    }
 
-    const rows = res.data.values || [];
     if (rows.length < 2) return null;
 
     const headers = (rows[0] || []).map(h => String(h || '').trim());

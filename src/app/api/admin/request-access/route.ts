@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { SUPER_ADMIN_EMAIL } from '@/lib/auth/admin-auth';
 import { requestAccessSchema, isValidUUID } from '@/lib/validation';
 
@@ -19,14 +20,44 @@ export async function POST(request: Request) {
     }
 
     const { name, email, department } = validation.data;
-    const userId = body.userId && isValidUUID(body.userId) ? body.userId : null;
-
     const cleanEmail = email.trim().toLowerCase();
     const isSuperAdminEmail = cleanEmail === SUPER_ADMIN_EMAIL;
 
-    const supabase = await createClient();
+    // Use service role admin client on server if available, fallback to SSR client
+    const adminSupabase = createAdminClient();
+    const supabase = adminSupabase || (await createClient());
 
-    // If Super Admin, promote immediately on the server
+    // 1. Resolve Auth user ID safely
+    let resolvedUserId = body.userId && isValidUUID(body.userId) ? body.userId : null;
+
+    if (!resolvedUserId && adminSupabase) {
+      try {
+        const { data: userListData } = await adminSupabase.auth.admin.listUsers();
+        const matchedUser = userListData?.users?.find(
+          u => u.email?.toLowerCase() === cleanEmail
+        );
+        if (matchedUser) {
+          resolvedUserId = matchedUser.id;
+        } else if (body.password && typeof body.password === 'string' && body.password.length >= 6) {
+          // If auth user not yet created, create securely in Supabase Auth
+          const { data: newAuthData, error: createAuthErr } = await adminSupabase.auth.admin.createUser({
+            email: cleanEmail,
+            password: body.password,
+            email_confirm: true,
+            user_metadata: { name, department },
+          });
+          if (createAuthErr) {
+            console.error('[REQUEST_ACCESS_AUTH_CREATE_ERROR]', createAuthErr);
+          } else if (newAuthData?.user) {
+            resolvedUserId = newAuthData.user.id;
+          }
+        }
+      } catch (authLookupErr) {
+        console.warn('[REQUEST_ACCESS_AUTH_LOOKUP_WARNING]', authLookupErr);
+      }
+    }
+
+    // 2. If Super Admin, promote immediately on the server
     if (isSuperAdminEmail) {
       const { data: existingAdmin } = await supabase
         .from('admins')
@@ -36,7 +67,7 @@ export async function POST(request: Request) {
 
       let adminData;
       const basePayload: Record<string, any> = {
-        user_id: userId || (existingAdmin ? existingAdmin.user_id : null),
+        user_id: resolvedUserId || (existingAdmin ? existingAdmin.user_id : null),
         name,
         role: 'SUPER_ADMIN',
         updated_at: new Date().toISOString(),
@@ -89,7 +120,7 @@ export async function POST(request: Request) {
         adminData = data;
       }
 
-      // Also mark any request as approved
+      // Also mark any request as approved in admin_requests
       await supabase
         .from('admin_requests')
         .update({
@@ -101,59 +132,129 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, isSuperAdmin: true, admin: adminData });
     }
 
-    // Standard admin applicant: Insert or update PENDING request in admin_requests
-    const { data: existingReq } = await supabase
-      .from('admin_requests')
-      .select('id')
+    // 3. Check if applicant is already an active admin in admins table
+    const { data: existingAdminRecord } = await supabase
+      .from('admins')
+      .select('id, email, status, role')
       .eq('email', cleanEmail)
       .maybeSingle();
 
+    if (existingAdminRecord) {
+      return NextResponse.json(
+        { error: 'An administrator account with this email already exists. Please sign in.' },
+        { status: 409 }
+      );
+    }
+
+    // Ensure resolvedUserId is available before writing to admin_requests (column is NOT NULL)
+    if (!resolvedUserId) {
+      return NextResponse.json(
+        { error: 'Authentication account registration required before submitting admin request.' },
+        { status: 400 }
+      );
+    }
+
+    // 4. Prevent duplicate requests for the same email
+    const { data: existingReq } = await supabase
+      .from('admin_requests')
+      .select('id, status, created_at')
+      .eq('email', cleanEmail)
+      .maybeSingle();
+
+    const formattedName = department ? `${name} (${department})` : name;
     let reqData;
+
     if (existingReq) {
-      const { data, error } = await supabase
+      if (existingReq.status === 'PENDING') {
+        return NextResponse.json({
+          success: true,
+          isSuperAdmin: false,
+          status: 'PENDING',
+          alreadyPending: true,
+          message: 'An administrator access request for this email is already pending approval from the Super Admin.',
+        });
+      }
+
+      if (existingReq.status === 'APPROVED') {
+        return NextResponse.json(
+          { error: 'Your access request has already been approved. Please sign in.' },
+          { status: 409 }
+        );
+      }
+
+      // If previous request was REJECTED, allow re-requesting by updating back to PENDING
+      const { data: updatedData, error: updateErr } = await supabase
         .from('admin_requests')
         .update({
-          user_id: userId || null,
-          name: `${name} (${department || 'Faculty'})`,
+          user_id: resolvedUserId,
+          name: formattedName,
           status: 'PENDING',
+          reviewed_by: null,
+          reviewed_at: null,
         })
         .eq('id', existingReq.id)
         .select('*')
         .single();
 
-      if (error) {
-        console.error('Admin request update error:', error);
-        return NextResponse.json({ error: 'Failed to update admin request.' }, { status: 500 });
+      if (updateErr) {
+        console.error('[ADMIN_REQUEST_UPDATE_ERROR]', {
+          code: updateErr.code,
+          message: updateErr.message,
+          details: updateErr.details,
+          hint: updateErr.hint,
+        });
+        return NextResponse.json({ error: 'Failed to record admin request.' }, { status: 500 });
       }
-      reqData = data;
+      reqData = updatedData;
     } else {
-      const { data, error } = await supabase
+      // 5. Insert new PENDING admin request
+      // Strictly matches live schema: id, user_id, email, name, status, reviewed_by, reviewed_at, created_at
+      const { data: insertedData, error: insertErr } = await supabase
         .from('admin_requests')
         .insert({
-          user_id: userId || null,
+          user_id: resolvedUserId,
           email: cleanEmail,
-          name: `${name} (${department || 'Faculty'})`,
+          name: formattedName,
           status: 'PENDING',
         })
         .select('*')
         .single();
 
-      if (error) {
-        console.error('Admin request insert error:', error);
+      if (insertErr) {
+        console.error('[ADMIN_REQUEST_INSERT_ERROR]', {
+          code: insertErr.code,
+          message: insertErr.message,
+          details: insertErr.details,
+          hint: insertErr.hint,
+        });
         return NextResponse.json({ error: 'Failed to record admin request.' }, { status: 500 });
       }
-      reqData = data;
+      reqData = insertedData;
     }
 
-    // Record audit log for request submission
-    await supabase.from('audit_logs').insert({
-      action: 'REQUEST_ADMIN_ACCESS',
-      details: `New admin access requested by ${name} (${cleanEmail})`,
-    });
+    // 6. Record audit log (non-blocking)
+    try {
+      await supabase.from('audit_logs').insert({
+        action: 'REQUEST_ADMIN_ACCESS',
+        details: `New admin access requested by ${name} (${cleanEmail})`,
+      });
+    } catch (auditErr) {
+      console.warn('[ADMIN_REQUEST_AUDIT_WARNING]', auditErr);
+    }
 
-    return NextResponse.json({ success: true, isSuperAdmin: false, status: 'PENDING', request: reqData });
+    return NextResponse.json({
+      success: true,
+      isSuperAdmin: false,
+      status: 'PENDING',
+      request: reqData,
+    });
   } catch (error: unknown) {
-    console.error('Request access error:', error);
+    const errObj = error instanceof Error ? error : new Error(String(error));
+    console.error('[REQUEST_ACCESS_ERROR]', {
+      name: errObj.name,
+      message: errObj.message,
+      stack: errObj.stack?.split('\n').slice(0, 5).join('\n'),
+    });
     return NextResponse.json(
       { error: 'An unexpected error occurred while processing your request.' },
       { status: 500 }

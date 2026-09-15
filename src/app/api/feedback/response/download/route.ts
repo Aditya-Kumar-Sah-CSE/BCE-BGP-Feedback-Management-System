@@ -72,13 +72,13 @@ export async function GET(req: NextRequest) {
       google_sheet_url,
       branch:branches(name),
       semester:semesters(name),
-      academic_year:academic_years(year_name),
-      faculty:faculty(name),
+      academic_year:academic_years(name),
+      faculty:faculties(name),
       subject:subjects(name, code),
       items:feedback_form_items(
         grid_title,
         order_index,
-        faculty:faculty(name),
+        faculty:faculties(name),
         subject:subjects(name, code)
       )
     `)
@@ -215,29 +215,38 @@ export async function GET(req: NextRequest) {
   }
 
   // Generate PDF
-  const pdfBuffer = await generateStudentResponsePDF({
-    studentName,
-    registrationNumber,
-    studentEmail,
-    academicYear: (form.academic_year as any)?.year_name || 'Academic Session',
-    branch: (form.branch as any)?.name || 'Engineering',
-    semester: (form.semester as any)?.name || 'Semester',
-    formTitle: form.title,
-    submittedAt,
-    facultyEvaluations,
-    generalFeedback,
-  });
+  try {
+    const pdfBuffer = await generateStudentResponsePDF({
+      studentName,
+      registrationNumber,
+      studentEmail,
+      academicYear: (form.academic_year as any)?.name || 'Academic Session',
+      branch: (form.branch as any)?.name || 'Engineering',
+      semester: (form.semester as any)?.name || 'Semester',
+      formTitle: form.title,
+      submittedAt,
+      facultyEvaluations,
+      generalFeedback,
+    });
 
-  const safeReg = (registrationNumber || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const filename = `BCE_Feedback_Response_${safeReg}.pdf`;
+    const safeReg = (registrationNumber || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `BCE_Feedback_Response_${safeReg}.pdf`;
 
-  return new NextResponse(pdfBuffer as unknown as BodyInit, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Content-Length': String(pdfBuffer.length),
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
-    },
-  });
+    return new Response(new Uint8Array(pdfBuffer), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': String(pdfBuffer.length),
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      },
+    });
+  } catch (err) {
+    console.error('[STUDENT_RESPONSE_DOWNLOAD_ERROR]', err);
+    return NextResponse.json(
+      { error: 'Failed to generate response PDF.' },
+      { status: 500 }
+    );
+  }
 }
+

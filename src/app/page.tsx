@@ -33,7 +33,7 @@ export default async function HomePage() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-1 sm:gap-2 text-center sm:text-left">
           <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <span className="truncate">Government of Bihar | Department of Science, Technology & Technical Education</span>
+            <span className="truncate">Govt. of Bihar | Dept. of Science, Technology & Technical Education</span>
           </div>
           <div className="flex items-center gap-3 sm:gap-4 text-slate-300 text-[10px] sm:text-xs">
             <span>Estd. 1960</span>

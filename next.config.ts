@@ -16,6 +16,16 @@ const nextConfig: NextConfig = {
       './node_modules/pdfkit/js/**/*.js',
       './node_modules/pdfkit/js/**/*.mjs',
     ],
+    '/api/admin/results/[id]/responses/[responseId]/pdf': [
+      './node_modules/pdfkit/js/**/*.cjs',
+      './node_modules/pdfkit/js/**/*.js',
+      './node_modules/pdfkit/js/**/*.mjs',
+    ],
+    '/api/feedback/response/download': [
+      './node_modules/pdfkit/js/**/*.cjs',
+      './node_modules/pdfkit/js/**/*.js',
+      './node_modules/pdfkit/js/**/*.mjs',
+    ],
   },
 };
 

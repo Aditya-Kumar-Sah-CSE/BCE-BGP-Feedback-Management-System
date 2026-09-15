@@ -4,12 +4,25 @@ import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { School, User, Lock, Mail, Building2, ArrowRight, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
+import {
+  School,
+  User,
+  Lock,
+  Mail,
+  Building2,
+  ArrowRight,
+  AlertCircle,
+  Loader2,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
 
 function AdminSignupForm() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [department, setDepartment] = useState('Computer Science & Engineering');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -46,7 +59,8 @@ function AdminSignupForm() {
         },
       });
 
-      if (authError) {
+      const currentUserId = authData?.user?.id;
+      if (authError && !authError.message.toLowerCase().includes('already registered')) {
         setErrorMsg(authError.message);
         setIsLoading(false);
         return;
@@ -57,10 +71,11 @@ function AdminSignupForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: authData.user?.id,
+          userId: currentUserId,
           name,
           email: cleanEmail,
           department,
+          password,
         }),
       });
 
@@ -79,14 +94,31 @@ function AdminSignupForm() {
         return;
       }
 
-      // 4. Otherwise redirect to pending notification page
-      setSuccessMsg('Your request for administrator access has been registered and is pending approval.');
+      // 4. If request is already pending
+      if (reqData.alreadyPending) {
+        setSuccessMsg(
+          reqData.message ||
+            'Your administrator access request is already registered and pending approval.'
+        );
+        setTimeout(() => {
+          router.push('/admin/pending');
+        }, 1500);
+        return;
+      }
+
+      // 5. Standard pending notification
+      setSuccessMsg(
+        'Your request for administrator access has been registered and is pending approval.'
+      );
       setTimeout(() => {
         router.push('/admin/pending');
       }, 1500);
     } catch (err: unknown) {
       console.error('Signup error:', err);
-      const msg = err instanceof Error ? err.message : 'An unexpected error occurred during request submission.';
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'An unexpected error occurred during request submission.';
       setErrorMsg(msg);
       setIsLoading(false);
     }
@@ -180,14 +212,27 @@ function AdminSignupForm() {
               <Lock className="w-4 h-4" />
             </div>
             <input
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               required
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="At least 6 characters"
-              className="block w-full pl-10 pr-3.5 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-base sm:text-sm min-h-[44px] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all"
+              className="block w-full pl-10 pr-10 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-base sm:text-sm min-h-[44px] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 focus:outline-none transition-colors cursor-pointer"
+              title={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? (
+                <EyeOff className="w-4 h-4" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
+            </button>
           </div>
         </div>
 
