@@ -21,10 +21,10 @@ export function HeroSection({ branches }: HeroSectionProps) {
 
       {/* Main hero container */}
       <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-12 items-center md:items-end min-h-[520px] md:min-h-[560px] lg:min-h-[600px] xl:min-h-[640px] gap-6 md:gap-4 lg:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-12 items-center min-h-[380px] md:min-h-[420px] lg:min-h-[460px] gap-6 md:gap-4 lg:gap-6">
           
           {/* Left Column: Semantic Content */}
-          <div className="md:col-span-7 lg:col-span-7 xl:col-span-7 flex flex-col justify-center py-6 sm:py-8 md:py-8 lg:py-10 z-10 max-w-[650px]">
+          <div className="md:col-span-7 lg:col-span-7 xl:col-span-7 flex flex-col justify-center py-3 sm:py-4 md:py-5 lg:py-6 z-10 max-w-[650px]">
             
             {/* Hero Badge */}
             <div className="inline-flex items-center gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-amber-50 border border-amber-200/90 text-amber-900 text-xs sm:text-sm font-semibold shadow-xs mb-3 sm:mb-4 w-fit">
@@ -121,7 +121,7 @@ export function HeroSection({ branches }: HeroSectionProps) {
           </div>
 
           {/* Right Column: Visual Composite (Campus + Aditya Portrait) */}
-          <div className="md:col-span-5 lg:col-span-5 xl:col-span-5 relative w-full flex items-end justify-center md:justify-end">
+          <div className="md:col-span-5 lg:col-span-5 xl:col-span-5 relative w-full flex items-end self-end justify-center md:justify-end">
             {/* Soft subtle left edge blend overlay on medium/large screens */}
             <div 
               className="hidden md:block absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-white/90 via-white/40 to-transparent pointer-events-none z-10" 
@@ -136,7 +136,7 @@ export function HeroSection({ branches }: HeroSectionProps) {
                 height={818}
                 priority
                 sizes="(min-width: 1280px) 520px, (min-width: 1024px) 440px, (min-width: 768px) 340px, 100vw"
-                className="w-auto h-auto max-h-[300px] sm:max-h-[360px] md:max-h-[460px] lg:max-h-[540px] xl:max-h-[600px] object-contain object-bottom select-none pointer-events-none drop-shadow-xs"
+                className="w-auto h-auto max-h-[280px] sm:max-h-[340px] md:max-h-[400px] lg:max-h-[450px] xl:max-h-[480px] object-contain object-bottom select-none pointer-events-none drop-shadow-xs"
               />
               <a
                 href="https://portfolio-two-ashen-zseywond41.vercel.app/"
