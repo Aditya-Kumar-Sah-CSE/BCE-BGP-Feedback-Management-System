@@ -161,28 +161,54 @@ export async function getAdminSession(client?: any): Promise<AdminAuthResult> {
     };
   }
 
-  // 2. Normal Admin verification using adminDb to bypass client RLS restrictions
-  const { data: adminRecord } = await adminDb
+  // 2. Canonical query by authenticated user ID (auth.uid() / user.id)
+  let { data: adminRecord } = await adminDb
     .from('admins')
     .select('*')
-    .or(`user_id.eq.${user.id},email.eq.${userEmail}`)
+    .eq('user_id', user.id)
     .maybeSingle();
 
-  if (adminRecord) {
-    // If user_id is missing or out-of-sync with current authenticated session, heal it
-    if (adminRecord.user_id !== user.id) {
-      await adminDb
+  // 3. Controlled self-healing: If not found by canonical user_id, check if an existing
+  // approved admin record exists with this verified email and has a stale/missing user_id.
+  if (!adminRecord) {
+    const { data: legacyAdmin } = await adminDb
+      .from('admins')
+      .select('*')
+      .eq('email', userEmail)
+      .maybeSingle();
+
+    if (legacyAdmin) {
+      console.log('[ADMIN_AUTH_SELF_HEAL]', {
+        event: 'SYNC_STALE_ADMIN_USER_ID',
+        email: userEmail,
+        staleUserId: legacyAdmin.user_id,
+        canonicalUserId: user.id,
+      });
+
+      // Update to canonical user.id without creating duplicate rows
+      const { data: healedAdmin, error: healErr } = await adminDb
         .from('admins')
-        .update({ user_id: user.id, updated_at: new Date().toISOString() })
-        .eq('id', adminRecord.id);
-      adminRecord.user_id = user.id;
+        .update({
+          user_id: user.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', legacyAdmin.id)
+        .select('*')
+        .single();
 
-      await adminDb
-        .from('admin_requests')
-        .update({ user_id: user.id })
-        .eq('email', userEmail);
+      if (!healErr && healedAdmin) {
+        adminRecord = healedAdmin;
+
+        // Also synchronize corresponding admin_requests
+        await adminDb
+          .from('admin_requests')
+          .update({ user_id: user.id })
+          .eq('email', userEmail);
+      }
     }
+  }
 
+  if (adminRecord) {
     const isSuperAdmin = adminRecord.role === 'SUPER_ADMIN';
     const isActive = adminRecord.status === 'ACTIVE' || adminRecord.status === undefined;
 
@@ -203,17 +229,46 @@ export async function getAdminSession(client?: any): Promise<AdminAuthResult> {
     };
   }
 
-  // 3. Not in admins table: Check admin_requests using adminDb
-  const { data: requestRecord } = await adminDb
+  // 4. Not in admins table: Check admin_requests using canonical user.id first
+  let { data: requestRecord } = await adminDb
     .from('admin_requests')
     .select('*')
-    .or(`user_id.eq.${user.id},email.eq.${userEmail}`)
+    .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
+  // Controlled self-healing for admin_requests if not matched by canonical user_id
+  if (!requestRecord) {
+    const { data: legacyReq } = await adminDb
+      .from('admin_requests')
+      .select('*')
+      .eq('email', userEmail)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (legacyReq) {
+      if (legacyReq.user_id !== user.id) {
+        console.log('[ADMIN_AUTH_SELF_HEAL]', {
+          event: 'SYNC_STALE_REQUEST_USER_ID',
+          email: userEmail,
+          staleUserId: legacyReq.user_id,
+          canonicalUserId: user.id,
+        });
+
+        await adminDb
+          .from('admin_requests')
+          .update({ user_id: user.id })
+          .eq('id', legacyReq.id);
+        legacyReq.user_id = user.id;
+      }
+      requestRecord = legacyReq;
+    }
+  }
+
+  // If request is APPROVED but admin record was missing, auto-provision with canonical user.id
   if (requestRecord && requestRecord.status === 'APPROVED') {
-    // Request was approved: auto-provision into admins table if record was missing
     const { data: provisionedAdmin } = await adminDb
       .from('admins')
       .upsert(

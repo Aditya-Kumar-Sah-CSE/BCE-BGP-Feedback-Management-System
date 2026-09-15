@@ -59,11 +59,32 @@ export async function approveAdminRequestAction(requestId: string) {
     return { success: false, error: 'Request not found.' };
   }
 
+  // Duplicate approval prevention
+  if (req.status === 'APPROVED') {
+    return { success: false, error: 'This administrator request has already been approved.' };
+  }
+
   console.log('[ADMIN_REQUEST_APPROVE]', { requestId, email: req.email, currentStatus: req.status });
+
+  // Resolve canonical user_id from auth.users if missing from the request
+  let targetUserId = req.user_id;
+  if (!targetUserId) {
+    try {
+      const { data: userListData } = await supabase.auth.admin.listUsers();
+      const matchedUser = userListData?.users?.find(
+        (u: any) => u.email?.toLowerCase() === req.email.toLowerCase().trim()
+      );
+      if (matchedUser) {
+        targetUserId = matchedUser.id;
+      }
+    } catch (authResolveErr) {
+      console.warn('[APPROVE_USER_ID_RESOLVE_WARNING]', authResolveErr);
+    }
+  }
 
   // Create / activate admin in admins table with schema fallback
   const baseAdminPayload = {
-    user_id: req.user_id || null,
+    user_id: targetUserId || null,
     email: req.email.toLowerCase().trim(),
     name: req.name,
     role: 'ADMIN',
@@ -99,11 +120,12 @@ export async function approveAdminRequestAction(requestId: string) {
     return { success: false, error: adminErr.message };
   }
 
-  // Update request status (omit updated_at if not present in schema)
+  // Update request status and ensure user_id is synchronized
   await supabase
     .from('admin_requests')
     .update({
       status: 'APPROVED',
+      user_id: targetUserId || req.user_id,
       reviewed_by: session.admin?.id || null,
       reviewed_at: new Date().toISOString(),
     })
@@ -144,8 +166,14 @@ export async function rejectAdminRequestAction(requestId: string) {
     return { success: false, error: 'Request not found.' };
   }
 
+  // Duplicate rejection prevention
+  if (req.status === 'REJECTED') {
+    return { success: false, error: 'This administrator request has already been rejected.' };
+  }
+
   console.log('[ADMIN_REQUEST_REJECT]', { requestId, email: req.email, currentStatus: req.status });
 
+  // Update request status
   await supabase
     .from('admin_requests')
     .update({
@@ -154,6 +182,16 @@ export async function rejectAdminRequestAction(requestId: string) {
       reviewed_at: new Date().toISOString(),
     })
     .eq('id', requestId);
+
+  // Maintain consistency: if non-super-admin record exists in admins, deactivate it
+  await supabase
+    .from('admins')
+    .update({
+      status: 'INACTIVE',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('email', req.email.toLowerCase().trim())
+    .neq('role', 'SUPER_ADMIN');
 
   await logAuditAction(
     supabase,
@@ -169,10 +207,10 @@ export async function rejectAdminRequestAction(requestId: string) {
   return { success: true };
 }
 
-export async function toggleAdminStatusAction(targetAdminId: string, newStatus: 'ACTIVE' | 'INACTIVE') {
+export async function revokeAdminAccessAction(targetAdminId: string, reason?: string) {
   const session = await getAdminSession();
-  if (!session.isAuthenticated || !session.isSuperAdmin) {
-    return { success: false, error: 'Only a Super Admin can change admin status.' };
+  if (!session.isAuthenticated || !session.isSuperAdmin || !session.isActive) {
+    return { success: false, error: 'Unauthorized: Only an active Super Admin can revoke administrator access.' };
   }
 
   const supabase = await getAdminDb();
@@ -184,17 +222,90 @@ export async function toggleAdminStatusAction(targetAdminId: string, newStatus: 
     .single();
 
   if (fetchErr || !target) {
-    return { success: false, error: 'Admin record not found.' };
+    return { success: false, error: 'Target administrator record not found.' };
   }
 
-  if (target.email.toLowerCase().trim() === SUPER_ADMIN_EMAIL && newStatus === 'INACTIVE') {
-    return { success: false, error: 'The primary Super Admin cannot be deactivated.' };
+  // Security check: Target must have ADMIN role
+  if (target.role !== 'ADMIN') {
+    return { success: false, error: 'Super Admin accounts cannot be revoked.' };
+  }
+
+  if (target.email.toLowerCase().trim() === SUPER_ADMIN_EMAIL) {
+    return { success: false, error: 'The primary Super Admin account cannot be revoked.' };
+  }
+
+  // Prevent self-revocation
+  if (target.id === session.admin?.id || (target.user_id && target.user_id === session.user?.id)) {
+    return { success: false, error: 'Administrators cannot revoke their own account.' };
+  }
+
+  if (target.status === 'INACTIVE') {
+    return { success: false, error: 'This administrator account is already revoked / inactive.' };
   }
 
   let { error: updateErr } = await supabase
     .from('admins')
     .update({
-      status: newStatus,
+      status: 'INACTIVE',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', targetAdminId);
+
+  if (updateErr && (updateErr.message.includes('status') || updateErr.code === '42703')) {
+    const { error: fallbackErr } = await supabase
+      .from('admins')
+      .update({
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', targetAdminId);
+    updateErr = fallbackErr;
+  }
+
+  if (updateErr) {
+    return { success: false, error: updateErr.message };
+  }
+
+  // Record audit log with safe metadata (no tokens/passwords)
+  await logAuditAction(
+    supabase,
+    { adminId: session.admin?.id, email: session.user?.email },
+    'ADMIN_ACCESS_REVOKED',
+    'admins',
+    targetAdminId,
+    `Revoked admin access for ${target.email} (${target.name}). Target User ID: ${target.user_id || 'unlinked'}.${reason ? ` Reason: ${reason}` : ''}`
+  );
+
+  revalidatePath('/admin/dashboard');
+  revalidatePath('/admin');
+  return { success: true };
+}
+
+export async function reactivateAdminAccessAction(targetAdminId: string) {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || !session.isSuperAdmin || !session.isActive) {
+    return { success: false, error: 'Unauthorized: Only an active Super Admin can reactivate administrator access.' };
+  }
+
+  const supabase = await getAdminDb();
+
+  const { data: target, error: fetchErr } = await supabase
+    .from('admins')
+    .select('*')
+    .eq('id', targetAdminId)
+    .single();
+
+  if (fetchErr || !target) {
+    return { success: false, error: 'Target administrator record not found.' };
+  }
+
+  if (target.status === 'ACTIVE') {
+    return { success: false, error: 'This administrator account is already active.' };
+  }
+
+  let { error: updateErr } = await supabase
+    .from('admins')
+    .update({
+      status: 'ACTIVE',
       updated_at: new Date().toISOString(),
     })
     .eq('id', targetAdminId);
@@ -216,14 +327,23 @@ export async function toggleAdminStatusAction(targetAdminId: string, newStatus: 
   await logAuditAction(
     supabase,
     { adminId: session.admin?.id, email: session.user?.email },
-    'TOGGLE_ADMIN_STATUS',
+    'ADMIN_ACCESS_REACTIVATED',
     'admins',
     targetAdminId,
-    `Changed status of admin ${target.email} to ${newStatus}`
+    `Reactivated admin access for ${target.email} (${target.name}). Target User ID: ${target.user_id || 'unlinked'}.`
   );
 
   revalidatePath('/admin/dashboard');
+  revalidatePath('/admin');
   return { success: true };
+}
+
+export async function toggleAdminStatusAction(targetAdminId: string, newStatus: 'ACTIVE' | 'INACTIVE') {
+  if (newStatus === 'INACTIVE') {
+    return revokeAdminAccessAction(targetAdminId);
+  } else {
+    return reactivateAdminAccessAction(targetAdminId);
+  }
 }
 
 // -------------------------------------------------------------

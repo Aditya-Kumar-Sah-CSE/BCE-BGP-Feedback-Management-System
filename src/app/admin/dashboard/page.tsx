@@ -100,6 +100,7 @@ export default async function AdminDashboardPage() {
         isSuperAdmin={session.isSuperAdmin}
         currentUserEmail={session.admin?.email || session.user?.email || ''}
         counts={counts}
+        adminReqError={adminReqError ? adminReqError.message : null}
       />
     </div>
   );

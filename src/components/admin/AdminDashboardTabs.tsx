@@ -14,6 +14,7 @@ import {
   FileSpreadsheet,
   Activity,
   BarChart3,
+  AlertCircle,
 } from 'lucide-react';
 import type {
   AcademicYear,
@@ -85,6 +86,7 @@ interface Props {
   isSuperAdmin: boolean;
   currentUserEmail: string;
   counts?: DashboardCounts;
+  adminReqError?: string | null;
 }
 
 export function AdminDashboardTabs({
@@ -101,6 +103,7 @@ export function AdminDashboardTabs({
   isSuperAdmin,
   currentUserEmail,
   counts,
+  adminReqError,
 }: Props) {
   const [activeTab, setActiveTab] = useState<'overview' | 'admins' | 'academic' | 'forms' | 'audit'>('overview');
   const router = useRouter();
@@ -133,6 +136,15 @@ export function AdminDashboardTabs({
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {adminReqError && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-800 text-xs flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">Failed to fetch administrator access requests</p>
+            <p className="text-red-600 mt-0.5">{adminReqError}</p>
+          </div>
+        </div>
+      )}
       {/* Mobile Navigation Bar with Drawer Trigger */}
       <div className="md:hidden flex items-center justify-between bg-white px-3.5 py-2.5 rounded-2xl border border-slate-200 shadow-xs">
         <div className="flex items-center gap-2 min-w-0">
