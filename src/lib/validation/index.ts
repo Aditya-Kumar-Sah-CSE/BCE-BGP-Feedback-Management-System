@@ -101,3 +101,39 @@ export const branchSchema = z.object({
 
 export type BranchInput = z.infer<typeof branchSchema>;
 
+// ====================================================================
+// BILLING & PAYMENT VALIDATION SCHEMAS
+// ====================================================================
+
+export const planTypeSchema = z.enum(['FREE', 'MONTHLY', 'YEARLY']);
+export const paidPlanTypeSchema = z.enum(['MONTHLY', 'YEARLY']);
+export const paymentMethodSchema = z.enum(['UPI', 'BANK_TRANSFER']);
+
+export const submitPaymentRequestSchema = z.object({
+  planType: paidPlanTypeSchema,
+  paymentMethod: paymentMethodSchema,
+  paymentReference: z.string().trim().min(4, 'UTR / transaction reference must be at least 4 characters').max(255),
+  paymentProofUrl: z.string().max(1024).optional().nullable(),
+});
+
+export type SubmitPaymentRequestInput = z.infer<typeof submitPaymentRequestSchema>;
+
+export const updatePaymentSettingsSchema = z.object({
+  upiId: z.string().trim().max(255).default(''),
+  accountName: z.string().trim().max(255).default(''),
+  bankName: z.string().trim().max(255).default(''),
+  accountNumber: z.string().trim().max(50).default(''),
+  ifscCode: z.string().trim().max(20).default(''),
+  supportPhone: z.string().trim().max(20).default('9470870830'),
+  paymentInstructions: z.string().trim().max(2000).default(''),
+});
+
+export type UpdatePaymentSettingsInput = z.infer<typeof updatePaymentSettingsSchema>;
+
+export const reviewPaymentSchema = z.object({
+  requestId: z.string().uuid('Payment request ID must be a valid UUID'),
+  rejectionReason: z.string().trim().max(500).optional(),
+});
+
+export type ReviewPaymentInput = z.infer<typeof reviewPaymentSchema>;
+

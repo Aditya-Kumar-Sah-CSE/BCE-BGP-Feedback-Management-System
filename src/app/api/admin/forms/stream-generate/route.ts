@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { getAdminSession } from '@/lib/auth/admin-auth';
+import { assertFormGenerationAccess } from '@/lib/billing/access-control';
 import {
   validateAndPrepareFormDraftAction,
   provisionGoogleFormAndSheetAction,
@@ -15,6 +16,18 @@ export async function POST(req: NextRequest) {
   if (!session.isAuthenticated || !session.isActive) {
     return NextResponse.json({ error: 'Unauthorized. Active admin session required.' }, { status: 401 });
   }
+
+  // ─── BILLING ACCESS GATE ────────────────────────────────────────
+  const accessResult = await assertFormGenerationAccess(
+    session.admin?.id,
+    session.admin?.email || session.user?.email,
+    session.admin?.role,
+    session.admin?.status,
+  );
+  if (!accessResult.allowed) {
+    return NextResponse.json({ error: accessResult.reason }, { status: 403 });
+  }
+  // ────────────────────────────────────────────────────────────────
 
   // Obtain authenticated client & session while request context is valid
   const sessionClient = await createClient();

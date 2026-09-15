@@ -178,4 +178,60 @@ export interface FeedbackResponseRecord {
   form?: FeedbackForm;
 }
 
+// ====================================================================
+// BILLING & PAYMENT TYPES
+// ====================================================================
+
+export type PlanType = 'FREE' | 'MONTHLY' | 'YEARLY';
+export type AccessStatus = 'LOCKED' | 'UNLOCKED';
+export type SubscriptionStatus = 'ACTIVE' | 'EXPIRED' | 'CANCELLED' | 'PENDING';
+export type PaymentMethod = 'UPI' | 'BANK_TRANSFER';
+export type PaymentRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface AdminBillingAccount {
+  id: string;
+  admin_user_id: string;
+  plan_type: PlanType;
+  access_status: AccessStatus;
+  subscription_status: SubscriptionStatus;
+  started_at?: string | null;
+  expires_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined relations
+  admin?: Admin;
+}
+
+export interface PaymentRequest {
+  id: string;
+  admin_user_id: string;
+  plan_type: 'MONTHLY' | 'YEARLY';
+  amount: number;
+  payment_method: PaymentMethod;
+  payment_reference: string;
+  payment_proof_url?: string | null;
+  status: PaymentRequestStatus;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  rejection_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined relations
+  admin?: Admin;
+  reviewer?: Admin;
+}
+
+export interface PaymentSettings {
+  id: string;
+  upi_id: string;
+  account_name: string;
+  bank_name: string;
+  account_number: string;
+  ifsc_code: string;
+  support_phone: string;
+  payment_instructions: string;
+  updated_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
 

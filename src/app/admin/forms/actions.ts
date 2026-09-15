@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAdminSession } from '@/lib/auth/admin-auth';
+import { assertFormGenerationAccess } from '@/lib/billing/access-control';
 
 async function getAdminDb() {
   return createAdminClient() || await createClient();
@@ -227,6 +228,18 @@ export async function validateAndPrepareFormDraftAction(payload: CreateFormPaylo
   if (!session.isAuthenticated || !session.isActive) {
     return { success: false, error: 'Unauthorized. Active admin session required.' };
   }
+
+  // ─── BILLING ACCESS GATE ────────────────────────────────────────
+  const accessResult = await assertFormGenerationAccess(
+    session.admin?.id,
+    session.admin?.email || session.user?.email,
+    session.admin?.role,
+    session.admin?.status,
+  );
+  if (!accessResult.allowed) {
+    return { success: false, error: accessResult.reason };
+  }
+  // ────────────────────────────────────────────────────────────────
 
   const validation = createFormPayloadSchema.safeParse(payload);
   if (!validation.success) {

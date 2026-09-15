@@ -15,14 +15,15 @@ import {
   BarChart3,
   ArrowLeft,
   LogOut,
+  CreditCard,
 } from 'lucide-react';
 
 interface Props {
   adminName: string;
   adminEmail: string;
   isSuperAdmin: boolean;
-  activeTab: 'overview' | 'admins' | 'academic' | 'forms' | 'audit';
-  onSelectTab: (tab: 'overview' | 'admins' | 'academic' | 'forms' | 'audit') => void;
+  activeTab: 'overview' | 'admins' | 'academic' | 'forms' | 'audit' | 'billing';
+  onSelectTab: (tab: 'overview' | 'admins' | 'academic' | 'forms' | 'audit' | 'billing') => void;
   pendingRequestsCount?: number;
   onSignOut: () => void;
 }
@@ -49,9 +50,10 @@ export function AdminMobileNav({
     { id: 'academic', label: 'Academic Structure', icon: GraduationCap },
     { id: 'forms', label: 'Feedback Forms', icon: FileSpreadsheet },
     { id: 'audit', label: 'Audit Trail', icon: Activity },
+    ...(isSuperAdmin ? [{ id: 'billing', label: 'Billing & Access', icon: CreditCard }] : []),
   ];
 
-  const handleTabClick = (tabId: 'overview' | 'admins' | 'academic' | 'forms' | 'audit') => {
+  const handleTabClick = (tabId: 'overview' | 'admins' | 'academic' | 'forms' | 'audit' | 'billing') => {
     onSelectTab(tabId);
     setIsOpen(false);
   };

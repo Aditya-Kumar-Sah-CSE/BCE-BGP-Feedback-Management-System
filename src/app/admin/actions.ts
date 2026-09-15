@@ -7,6 +7,7 @@ import { getAdminSession, SUPER_ADMIN_EMAIL } from '@/lib/auth/admin-auth';
 import { ACADEMIC_CACHE_TAG } from '@/lib/supabase/academic-cache';
 import { branchSchema, isValidUUID } from '@/lib/validation';
 import { deleteFeedbackFormAction as deleteFormInternal } from './forms/actions';
+import { ensureBillingAccount } from '@/lib/billing/access-control';
 
 async function getAdminDb() {
   return createAdminClient() || await createClient();
@@ -143,6 +144,16 @@ export async function approveAdminRequestAction(requestId: string) {
 
   revalidatePath('/admin/dashboard');
   console.log('[ADMIN_REQUEST_APPROVE]', { requestId, result: 'success', adminId: newAdmin?.id });
+
+  // Auto-create billing account for newly approved admin (defaults to LOCKED)
+  if (newAdmin?.id) {
+    try {
+      await ensureBillingAccount(newAdmin.id, { accessStatus: 'LOCKED', planType: 'FREE' });
+    } catch (billingErr) {
+      console.warn('[BILLING_ACCOUNT_INIT]', { adminId: newAdmin.id, error: billingErr });
+    }
+  }
+
   return { success: true, admin: newAdmin };
 }
 

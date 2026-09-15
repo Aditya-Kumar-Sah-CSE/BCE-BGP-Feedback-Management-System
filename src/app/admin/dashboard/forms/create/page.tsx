@@ -3,6 +3,7 @@ import { getAdminSession } from '@/lib/auth/admin-auth';
 import { redirect } from 'next/navigation';
 import { getGoogleConfigStatus } from '@/lib/google/auth';
 import { CreateGoogleFormWizard } from '@/components/admin/forms/CreateGoogleFormWizard';
+import { FormAccessGate } from '@/components/admin/billing/FormAccessGate';
 import type {
   AcademicYear,
   Branch,
@@ -42,15 +43,18 @@ export default async function CreateFeedbackFormPage() {
 
   return (
     <div className="space-y-6">
-      <CreateGoogleFormWizard
-        academicYears={(years as unknown as AcademicYear[]) || []}
-        branches={(branches as unknown as Branch[]) || []}
-        semesters={(semesters as unknown as Semester[]) || []}
-        faculties={(faculties as unknown as Faculty[]) || []}
-        subjects={(subjects as unknown as Subject[]) || []}
-        assignments={(assignments as unknown as FacultySubjectAssignment[]) || []}
-        googleStatus={googleStatus}
-      />
+      <FormAccessGate isSuperAdmin={session.isSuperAdmin}>
+        <CreateGoogleFormWizard
+          academicYears={(years as unknown as AcademicYear[]) || []}
+          branches={(branches as unknown as Branch[]) || []}
+          semesters={(semesters as unknown as Semester[]) || []}
+          faculties={(faculties as unknown as Faculty[]) || []}
+          subjects={(subjects as unknown as Subject[]) || []}
+          assignments={(assignments as unknown as FacultySubjectAssignment[]) || []}
+          googleStatus={googleStatus}
+        />
+      </FormAccessGate>
     </div>
   );
 }
+
