@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import { Activity, Search } from 'lucide-react';
 import type { AuditLog } from '@/types/database';
+import { useHydrated, formatDateShort, formatTime } from '@/lib/hooks/use-hydrated';
 
 interface Props {
   auditLogs: AuditLog[];
 }
 
 export function AuditLogsTab({ auditLogs }: Props) {
+  const hydrated = useHydrated();
   const [search, setSearch] = useState('');
   const [selectedAction, setSelectedAction] = useState('ALL');
 
@@ -94,8 +96,8 @@ export function AuditLogsTab({ auditLogs }: Props) {
                       {log.action}
                     </span>
                     <span className="text-[11px] text-slate-400 font-mono">
-                      {new Date(log.created_at).toLocaleDateString()}{' '}
-                      {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatDateShort(log.created_at, hydrated)}{' '}
+                      {formatTime(log.created_at, hydrated)}
                     </span>
                   </div>
                   <div className="text-xs font-mono text-slate-700 font-medium truncate">
@@ -131,9 +133,9 @@ export function AuditLogsTab({ auditLogs }: Props) {
                   {filteredLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-5 py-3.5 text-slate-500 whitespace-nowrap">
-                        {new Date(log.created_at).toLocaleDateString()}{' '}
+                        {formatDateShort(log.created_at, hydrated)}{' '}
                         <span className="text-slate-400 font-mono">
-                          {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {formatTime(log.created_at, hydrated)}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 font-mono text-slate-700 font-medium">

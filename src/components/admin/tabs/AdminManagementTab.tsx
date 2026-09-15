@@ -20,6 +20,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import type { Admin, AdminRequest } from '@/types/database';
+import { useHydrated, formatDateShort, formatTime, formatDateSafe } from '@/lib/hooks/use-hydrated';
 
 interface Props {
   adminRequests: AdminRequest[];
@@ -34,6 +35,7 @@ export function AdminManagementTab({
   isSuperAdmin,
   currentUserEmail,
 }: Props) {
+  const hydrated = useHydrated();
   const [isPending, startTransition] = useTransition();
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -197,8 +199,8 @@ export function AdminManagementTab({
                         {req.email}
                       </td>
                       <td className="px-5 py-3.5 text-slate-500">
-                        {new Date(req.created_at).toLocaleDateString()} at{' '}
-                        {new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatDateShort(req.created_at, hydrated)} at{' '}
+                        {formatTime(req.created_at, hydrated)}
                       </td>
                       <td className="px-5 py-3.5">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
@@ -316,7 +318,7 @@ export function AdminManagementTab({
                         )}
                       </td>
                       <td className="px-5 py-3.5 text-slate-500">
-                        {new Date(admin.created_at).toLocaleDateString()}
+                        {formatDateShort(admin.created_at, hydrated)}
                       </td>
                       <td className="px-5 py-3.5 text-right">
                         {isSuperAdmin ? (
@@ -523,7 +525,7 @@ export function AdminManagementTab({
                       </span>
                     </td>
                     <td className="px-5 py-2.5 text-slate-400">
-                      {req.reviewed_at ? new Date(req.reviewed_at).toLocaleDateString() : '—'}
+                      {req.reviewed_at ? formatDateShort(req.reviewed_at, hydrated) : '—'}
                     </td>
                   </tr>
                 ))}

@@ -22,6 +22,7 @@ import type {
   FeedbackForm,
   AuditLog
 } from '@/types/database';
+import { useHydrated, formatTime } from '@/lib/hooks/use-hydrated';
 
 export interface DashboardCounts {
   totalFaculties?: number;
@@ -62,6 +63,7 @@ export function OverviewTab({
   onNavigateTab,
   counts,
 }: Props) {
+  const hydrated = useHydrated();
   const pendingRequestsCount = adminRequests.filter((r) => r.status === 'PENDING').length;
   const activeYearsCount = academicYears.filter((y) => y.is_active).length;
   const activeBranchesCount = branches.filter((b) => b.is_active).length;
@@ -293,7 +295,7 @@ export function OverviewTab({
                     </p>
                   </div>
                   <span className="text-[11px] text-slate-400 whitespace-nowrap">
-                    {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {formatTime(log.created_at, hydrated)}
                   </span>
                 </div>
               ))}

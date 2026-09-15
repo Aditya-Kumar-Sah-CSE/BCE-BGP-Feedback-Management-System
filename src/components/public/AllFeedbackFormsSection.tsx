@@ -19,6 +19,7 @@ import {
   PublicActiveFormsResult,
   getPublicActiveFormsAction,
 } from '@/app/feedback/actions';
+import { useHydrated, formatDateShort } from '@/lib/hooks/use-hydrated';
 
 interface Props {
   initialData: PublicActiveFormsResult;
@@ -62,6 +63,7 @@ export function AllFeedbackFormsSection({ initialData }: Props) {
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(initialData.page || 1);
   const [isPending, startTransition] = useTransition();
+  const hydrated = useHydrated();
 
   const handleSearchChange = (val: string) => {
     setSearch(val);
@@ -229,11 +231,7 @@ export function AllFeedbackFormsSection({ initialData }: Props) {
                           Published
                         </span>
                         <span>
-                          {new Date(form.publishedAt).toLocaleDateString('en-IN', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
+                          {formatDateShort(form.publishedAt, hydrated)}
                         </span>
                       </div>
                     )}

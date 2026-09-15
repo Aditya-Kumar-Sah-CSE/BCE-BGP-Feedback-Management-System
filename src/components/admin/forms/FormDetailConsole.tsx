@@ -14,6 +14,7 @@ import {
   deleteFeedbackFormAction,
 } from '@/app/admin/forms/actions';
 import { BCE_FEEDBACK_PARAMETERS } from '@/lib/google/template';
+import { useHydrated, formatDateShort, formatTime, formatDateTimeFull } from '@/lib/hooks/use-hydrated';
 import {
   ArrowLeft,
   FileSpreadsheet,
@@ -43,6 +44,7 @@ interface Props {
 
 export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEmail }: Props) {
   const router = useRouter();
+  const hydrated = useHydrated();
   const [form, setForm] = useState<FeedbackForm>(initialForm);
   const [isPending, startTransition] = useTransition();
   const [copiedUrl, setCopiedUrl] = useState(false);
@@ -154,7 +156,7 @@ export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEma
             <div className="flex items-center gap-3 text-xs text-slate-500 ml-8">
               <span>Form ID: <code className="font-mono text-[11px] text-slate-700">{form.id}</code></span>
               <span>•</span>
-              <span>Created {new Date(form.created_at).toLocaleDateString()}</span>
+              <span>Created {formatDateShort(form.created_at, hydrated)}</span>
               {currentUserEmail && (
                 <>
                   <span>•</span>
@@ -371,7 +373,7 @@ export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEma
                 </span>
                 <span className="text-xs font-semibold text-slate-800 mt-2 block">
                   {form.last_synced_at
-                    ? new Date(form.last_synced_at).toLocaleTimeString() + ' (' + new Date(form.last_synced_at).toLocaleDateString() + ')'
+                    ? formatTime(form.last_synced_at, hydrated) + ' (' + formatDateShort(form.last_synced_at, hydrated) + ')'
                     : 'Never synced'}
                 </span>
                 <span className="text-[10px] text-slate-500">Forms → Sheet</span>
@@ -582,19 +584,19 @@ export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEma
             <div className="space-y-1.5 text-xs text-slate-600">
               <div className="flex justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-400">Created:</span>
-                <span>{new Date(form.created_at).toLocaleString()}</span>
+                <span>{formatDateTimeFull(form.created_at, hydrated)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-400">Published:</span>
-                <span>{form.published_at ? new Date(form.published_at).toLocaleString() : 'Not published'}</span>
+                <span>{form.published_at ? formatDateTimeFull(form.published_at, hydrated) : 'Not published'}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-400">Closed:</span>
-                <span>{form.closed_at ? new Date(form.closed_at).toLocaleString() : 'Not closed'}</span>
+                <span>{form.closed_at ? formatDateTimeFull(form.closed_at, hydrated) : 'Not closed'}</span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-slate-400">Archived:</span>
-                <span>{form.archived_at ? new Date(form.archived_at).toLocaleString() : 'Not archived'}</span>
+                <span>{form.archived_at ? formatDateTimeFull(form.archived_at, hydrated) : 'Not archived'}</span>
               </div>
             </div>
           </div>
@@ -615,7 +617,7 @@ export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEma
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-slate-900 font-mono text-[10px]">{log.action}</span>
                       <span className="text-[9px] text-slate-400">
-                        {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatTime(log.created_at, hydrated)}
                       </span>
                     </div>
                     {log.details && <p className="text-slate-600">{log.details}</p>}

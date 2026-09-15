@@ -10,6 +10,7 @@ import {
 } from './AnalyticsCharts';
 import { FormAnalyticsReport } from '@/lib/analytics/types';
 import { syncSingleFormResponsesAction, getFormAnalyticsAction } from '@/app/admin/results/actions';
+import { useHydrated, formatDateTimeFull } from '@/lib/hooks/use-hydrated';
 import {
   ArrowLeft,
   FileDown,
@@ -37,6 +38,7 @@ export function FormResultsConsole({ initialReport }: Props) {
   const [selectedGridIndex, setSelectedGridIndex] = useState<number>(-1); // -1 = All Subjects Combined
   const [isSyncing, startSync] = useTransition();
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const hydrated = useHydrated();
 
   const handleSync = () => {
     setSyncMessage(null);
@@ -205,7 +207,7 @@ export function FormResultsConsole({ initialReport }: Props) {
             </span>
             <span className="text-slate-400">•</span>
             <span className="text-slate-500 text-[11px]">
-              Last synced: {report.lastSyncedAt ? new Date(report.lastSyncedAt).toLocaleString() : 'Not yet synced'}
+              Last synced: {report.lastSyncedAt ? formatDateTimeFull(report.lastSyncedAt, hydrated) : 'Not yet synced'}
             </span>
           </div>
 

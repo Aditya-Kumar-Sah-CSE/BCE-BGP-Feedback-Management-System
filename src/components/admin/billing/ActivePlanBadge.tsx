@@ -2,6 +2,7 @@
 
 import { BadgeCheck, Crown, Zap } from 'lucide-react';
 import type { PlanType } from '@/types/database';
+import { useHydrated, daysRemainingSafe } from '@/lib/hooks/use-hydrated';
 
 interface ActivePlanBadgeProps {
   planType: PlanType;
@@ -9,6 +10,8 @@ interface ActivePlanBadgeProps {
 }
 
 export function ActivePlanBadge({ planType, expiresAt }: ActivePlanBadgeProps) {
+  const hydrated = useHydrated();
+
   const badgeConfig: Record<PlanType, { label: string; className: string; Icon: typeof BadgeCheck }> = {
     FREE: {
       label: 'Free Plan',
@@ -30,8 +33,7 @@ export function ActivePlanBadge({ planType, expiresAt }: ActivePlanBadgeProps) {
   const config = badgeConfig[planType] || badgeConfig.FREE;
   const { label, className, Icon } = config;
 
-  const expiresDate = expiresAt ? new Date(expiresAt) : null;
-  const daysRemaining = expiresDate ? Math.max(0, Math.ceil((expiresDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : null;
+  const daysRemaining = daysRemainingSafe(expiresAt, hydrated);
 
   return (
     <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${className}`}>
