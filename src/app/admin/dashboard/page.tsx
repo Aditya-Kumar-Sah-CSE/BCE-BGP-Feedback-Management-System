@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import { AdminDashboardTabs } from '@/components/admin/AdminDashboardTabs';
 import type {
@@ -30,6 +31,7 @@ export default async function AdminDashboardPage() {
   }
 
   const supabase = await createClient();
+  const adminDb = createAdminClient() || supabase;
 
   // Parallel lean data fetching for the admin portal with exact counts & range limits
   const [
@@ -39,8 +41,8 @@ export default async function AdminDashboardPage() {
     { data: faculties, count: totalFacultiesCount },
     { data: subjects, count: totalSubjectsCount },
     { data: assignments, count: totalAssignmentsCount },
-    { data: adminRequests },
-    { data: adminsList },
+    { data: adminRequests, error: adminReqError },
+    { data: adminsList, error: adminsListError },
     { data: feedbackForms, count: totalFormsCount },
     { data: auditLogs },
     { count: activeFacultiesCount },
@@ -53,14 +55,24 @@ export default async function AdminDashboardPage() {
     supabase.from('faculties').select('id, name, employee_id, department, designation, is_active, created_at', { count: 'exact' }).order('name', { ascending: true }).range(0, 19),
     supabase.from('subjects').select('id, name, code, semester_id, branch_id, is_active, created_at', { count: 'exact' }).order('code', { ascending: true }).range(0, 19),
     supabase.from('faculty_subject_assignments').select('id, faculty_id, subject_id, academic_year_id, branch_id, semester_id, created_at', { count: 'exact' }).order('created_at', { ascending: false }).range(0, 19),
-    supabase.from('admin_requests').select('*').order('created_at', { ascending: false }),
-    supabase.from('admins').select('*').order('created_at', { ascending: false }),
+    adminDb.from('admin_requests').select('*').order('created_at', { ascending: false }),
+    adminDb.from('admins').select('*').order('created_at', { ascending: false }),
     supabase.from('feedback_forms').select('*', { count: 'exact' }).order('created_at', { ascending: false }).range(0, 49),
-    supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(20),
+    adminDb.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(20),
     supabase.from('faculties').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('subjects').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('feedback_forms').select('id', { count: 'exact', head: true }).eq('status', 'PUBLISHED'),
   ]);
+
+  // Structured logging for admin request queries
+  if (adminReqError) {
+    console.error('[ADMIN_REQUEST_QUERY]', { error: adminReqError.message, code: adminReqError.code });
+  } else {
+    console.log('[ADMIN_REQUEST_QUERY]', { count: adminRequests?.length ?? 0 });
+  }
+  if (adminsListError) {
+    console.error('[ADMINS_LIST_QUERY]', { error: adminsListError.message, code: adminsListError.code });
+  }
 
   const counts = {
     totalFaculties: totalFacultiesCount ?? (faculties?.length || 0),

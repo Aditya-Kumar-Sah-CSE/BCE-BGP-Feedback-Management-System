@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -9,7 +9,6 @@ import {
   User,
   Lock,
   Mail,
-  Building2,
   ArrowRight,
   AlertCircle,
   Loader2,
@@ -23,8 +22,6 @@ function AdminSignupForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [department, setDepartment] = useState('');
-  const [branches, setBranches] = useState<{ id: string; name: string; code: string }[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -32,20 +29,6 @@ function AdminSignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
-
-  useEffect(() => {
-    supabase
-      .from('branches')
-      .select('id, name, code')
-      .eq('is_active', true)
-      .order('name', { ascending: true })
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          setBranches(data);
-          setDepartment((current) => current || data[0].name);
-        }
-      });
-  }, [supabase]);
 
   const redirectParam = searchParams.get('redirect');
   const targetDestination =
@@ -69,7 +52,6 @@ function AdminSignupForm() {
         options: {
           data: {
             name,
-            department,
           },
         },
       });
@@ -89,7 +71,6 @@ function AdminSignupForm() {
           userId: currentUserId,
           name,
           email: cleanEmail,
-          department,
           password,
         }),
       });
@@ -194,29 +175,6 @@ function AdminSignupForm() {
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-            Department
-          </label>
-          <div className="relative rounded-xl shadow-xs">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <Building2 className="w-4 h-4" />
-            </div>
-            <select
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-              className="block w-full pl-10 pr-3.5 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-base sm:text-sm min-h-[44px] text-white focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all"
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.name}>
-                  {b.name} ({b.code})
-                </option>
-              ))}
-              <option value="Applied Science & Humanities">Applied Science & Humanities</option>
-              <option value="General Administration">General Administration</option>
-            </select>
-          </div>
-        </div>
 
         <div>
           <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">

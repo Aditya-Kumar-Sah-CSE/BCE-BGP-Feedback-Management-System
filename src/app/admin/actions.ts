@@ -55,8 +55,11 @@ export async function approveAdminRequestAction(requestId: string) {
     .single();
 
   if (fetchErr || !req) {
+    console.error('[ADMIN_REQUEST_APPROVE]', { requestId, error: 'Request not found', fetchErr });
     return { success: false, error: 'Request not found.' };
   }
+
+  console.log('[ADMIN_REQUEST_APPROVE]', { requestId, email: req.email, currentStatus: req.status });
 
   // Create / activate admin in admins table with schema fallback
   const baseAdminPayload = {
@@ -117,6 +120,7 @@ export async function approveAdminRequestAction(requestId: string) {
   );
 
   revalidatePath('/admin/dashboard');
+  console.log('[ADMIN_REQUEST_APPROVE]', { requestId, result: 'success', adminId: newAdmin?.id });
   return { success: true, admin: newAdmin };
 }
 
@@ -136,8 +140,11 @@ export async function rejectAdminRequestAction(requestId: string) {
     .single();
 
   if (fetchErr || !req) {
+    console.error('[ADMIN_REQUEST_REJECT]', { requestId, error: 'Request not found', fetchErr });
     return { success: false, error: 'Request not found.' };
   }
+
+  console.log('[ADMIN_REQUEST_REJECT]', { requestId, email: req.email, currentStatus: req.status });
 
   await supabase
     .from('admin_requests')
@@ -158,6 +165,7 @@ export async function rejectAdminRequestAction(requestId: string) {
   );
 
   revalidatePath('/admin/dashboard');
+  console.log('[ADMIN_REQUEST_REJECT]', { requestId, result: 'success' });
   return { success: true };
 }
 

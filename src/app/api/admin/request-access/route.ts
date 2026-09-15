@@ -19,9 +19,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const { name, email, department } = validation.data;
+    const { name, email } = validation.data;
     const cleanEmail = email.trim().toLowerCase();
     const isSuperAdminEmail = cleanEmail === SUPER_ADMIN_EMAIL;
+
+    console.log('[ADMIN_REQUEST_SUBMIT]', { name, email: cleanEmail, isSuperAdminEmail });
 
     // Use service role admin client on server if available, fallback to SSR client
     const adminSupabase = createAdminClient();
@@ -44,7 +46,7 @@ export async function POST(request: Request) {
             email: cleanEmail,
             password: body.password,
             email_confirm: true,
-            user_metadata: { name, department },
+            user_metadata: { name },
           });
           if (createAuthErr) {
             console.error('[REQUEST_ACCESS_AUTH_CREATE_ERROR]', createAuthErr);
@@ -161,7 +163,7 @@ export async function POST(request: Request) {
       .eq('email', cleanEmail)
       .maybeSingle();
 
-    const formattedName = department ? `${name} (${department})` : name;
+    const formattedName = name.trim();
     let reqData;
 
     if (existingReq) {
@@ -230,6 +232,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Failed to record admin request.' }, { status: 500 });
       }
       reqData = insertedData;
+      console.log('[ADMIN_REQUEST_INSERT]', { id: insertedData?.id, email: cleanEmail, status: 'PENDING' });
     }
 
     // 6. Record audit log (non-blocking)
