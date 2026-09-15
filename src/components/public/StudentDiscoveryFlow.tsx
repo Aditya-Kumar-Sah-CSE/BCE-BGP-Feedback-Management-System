@@ -43,8 +43,11 @@ export function StudentDiscoveryFlow({
   branches,
   semesters,
 }: Props) {
-  // Only consider active branches for public discovery
-  const activeBranches = useMemo(() => branches.filter(b => b.is_active), [branches]);
+  // Only consider active branches for public discovery, sorted alphabetically
+  const activeBranches = useMemo(
+    () => branches.filter(b => b.is_active).sort((a, b) => a.name.localeCompare(b.name)),
+    [branches]
+  );
 
   // Cascading selections
   const [selectedYearId, setSelectedYearId] = useState<string>(
@@ -340,13 +343,26 @@ export function StudentDiscoveryFlow({
             <select
               value={selectedBranchId}
               onChange={e => setSelectedBranchId(e.target.value)}
-              className="w-full min-h-[44px] bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-base sm:text-xs text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
+              aria-label="Branch / Discipline"
+              disabled={activeBranches.length === 0}
+              className="w-full min-h-[44px] bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-base sm:text-xs text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {activeBranches.map(b => (
-                <option key={b.id} value={b.id}>
-                  {b.name} ({b.code})
+              {!selectedBranchId && (
+                <option value="" disabled>
+                  Select Branch / Discipline
                 </option>
-              ))}
+              )}
+              {activeBranches.length === 0 ? (
+                <option value="" disabled>
+                  No active branches available
+                </option>
+              ) : (
+                activeBranches.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.code})
+                  </option>
+                ))
+              )}
             </select>
           </div>
 

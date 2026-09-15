@@ -81,6 +81,12 @@ export function AcademicManagementTab({
   const [yearList, setYearList] = useState<AcademicYear[]>(academicYears);
   const [semesterList, setSemesterList] = useState<Semester[]>(semesters);
 
+  // Only active branches for assignment/subject/faculty dropdowns, sorted alphabetically
+  const activeBranches = useMemo(
+    () => branchList.filter((b) => b.is_active).sort((a, b) => a.name.localeCompare(b.name)),
+    [branchList]
+  );
+
   // -------------------------------------------------------------
   // 1. FACULTIES STATE & PAGINATION
   // -------------------------------------------------------------
@@ -96,7 +102,9 @@ export function AcademicManagementTab({
 
   // Faculty form
   const [facName, setFacName] = useState('');
-  const [facDept, setFacDept] = useState(branches[0]?.name || 'General');
+  const [facDept, setFacDept] = useState(
+    branches.find((b) => b.is_active)?.name || branches[0]?.name || ''
+  );
   const [facDesig, setFacDesig] = useState('Assistant Professor');
   const [facEmpId, setFacEmpId] = useState('');
 
@@ -149,7 +157,9 @@ export function AcademicManagementTab({
   // Subject form
   const [subName, setSubName] = useState('');
   const [subCode, setSubCode] = useState('');
-  const [subBranchId, setSubBranchId] = useState(branches[0]?.id || '');
+  const [subBranchId, setSubBranchId] = useState(
+    branches.find((b) => b.is_active)?.id || branches[0]?.id || ''
+  );
   const [subSemesterId, setSubSemesterId] = useState(semesters[0]?.id || '');
 
   // 300ms debounce on subject search
@@ -202,7 +212,9 @@ export function AcademicManagementTab({
   const [assignYearId, setAssignYearId] = useState(
     academicYears.find((y) => y.is_active)?.id || academicYears[0]?.id || ''
   );
-  const [assignBranchId, setAssignBranchId] = useState(branches[0]?.id || '');
+  const [assignBranchId, setAssignBranchId] = useState(
+    branches.find((b) => b.is_active)?.id || branches[0]?.id || ''
+  );
   const [assignSemesterId, setAssignSemesterId] = useState(semesters[0]?.id || '');
 
   const loadAssignments = useCallback(async () => {
@@ -666,19 +678,20 @@ export function AcademicManagementTab({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Department</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Department / Branch *</label>
                 <select
                   value={facDept}
                   onChange={(e) => setFacDept(e.target.value)}
+                  required
+                  aria-label="Department / Branch"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs min-h-[42px] sm:min-h-[36px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
                 >
-                  {branchList.map((b) => (
+                  <option value="">Select Branch / Discipline</option>
+                  {activeBranches.map((b) => (
                     <option key={b.id} value={b.name}>
-                      {b.name}
+                      {b.name} ({b.code})
                     </option>
                   ))}
-                  <option value="Applied Science & Humanities">Applied Science & Humanities</option>
-                  <option value="General">General</option>
                 </select>
               </div>
 
@@ -738,16 +751,15 @@ export function AcademicManagementTab({
                     setFacultyDeptFilter(e.target.value);
                     setFacultyPage(1);
                   }}
+                  aria-label="Filter Department"
                   className="flex-1 sm:flex-none px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs min-h-[38px] sm:min-h-[32px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
                 >
                   <option value="ALL">All Departments</option>
-                  {branchList.map((b) => (
+                  {activeBranches.map((b) => (
                     <option key={b.id} value={b.name}>
-                      {b.code}
+                      {b.code} - {b.name}
                     </option>
                   ))}
-                  <option value="Applied Science & Humanities">Applied Science</option>
-                  <option value="General">General</option>
                 </select>
 
                 <select
@@ -876,14 +888,15 @@ export function AcademicManagementTab({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Branch</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Branch / Discipline</label>
                 <select
                   value={subBranchId}
                   onChange={(e) => setSubBranchId(e.target.value)}
+                  aria-label="Branch / Discipline"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs min-h-[42px] sm:min-h-[36px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
                 >
                   <option value="">Common / All Branches</option>
-                  {branchList.map((b) => (
+                  {activeBranches.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name} ({b.code})
                     </option>
@@ -940,10 +953,11 @@ export function AcademicManagementTab({
                     setSubjectBranchFilter(e.target.value);
                     setSubjectPage(1);
                   }}
+                  aria-label="Filter Branch"
                   className="flex-1 sm:flex-none px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs min-h-[38px] sm:min-h-[32px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
                 >
                   <option value="ALL">All Branches</option>
-                  {branchList.map((b) => (
+                  {activeBranches.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.code}
                     </option>
@@ -1111,17 +1125,30 @@ export function AcademicManagementTab({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Branch</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Branch / Discipline</label>
                 <select
                   value={assignBranchId}
                   onChange={(e) => setAssignBranchId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs min-h-[42px] sm:min-h-[36px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
+                  aria-label="Branch / Discipline"
+                  disabled={activeBranches.length === 0}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs min-h-[42px] sm:min-h-[36px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {branchList.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.code})
+                  {!assignBranchId && (
+                    <option value="" disabled>
+                      Select Branch / Discipline
                     </option>
-                  ))}
+                  )}
+                  {activeBranches.length === 0 ? (
+                    <option value="" disabled>
+                      No active branches available
+                    </option>
+                  ) : (
+                    activeBranches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.code})
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -1179,10 +1206,11 @@ export function AcademicManagementTab({
                     setAssignBranchFilter(e.target.value);
                     setAssignPage(1);
                   }}
+                  aria-label="Filter Branch"
                   className="flex-1 sm:flex-none px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs min-h-[38px] sm:min-h-[32px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-bce-cobalt"
                 >
                   <option value="ALL">All Branches</option>
-                  {branchList.map((b) => (
+                  {activeBranches.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.code}
                     </option>

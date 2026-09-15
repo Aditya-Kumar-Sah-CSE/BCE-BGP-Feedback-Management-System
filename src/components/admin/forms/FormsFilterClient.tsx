@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, RotateCcw } from 'lucide-react';
 import { AcademicYear, Branch, Semester } from '@/types/database';
-import { useState, useTransition, useEffect, useCallback } from 'react';
+import { useState, useTransition, useEffect, useCallback, useMemo } from 'react';
 
 interface Props {
   academicYears: AcademicYear[];
@@ -35,6 +35,11 @@ export function FormsFilterClient({
   const [branch, setBranch] = useState(selectedBranch);
   const [semester, setSemester] = useState(selectedSemester);
   const [status, setStatus] = useState(selectedStatus);
+
+  const activeBranches = useMemo(
+    () => (branches || []).filter((b: Branch) => b.is_active).sort((a: Branch, b: Branch) => a.name.localeCompare(b.name)),
+    [branches]
+  );
 
   const applyFilters = useCallback(
     (newParams: {
@@ -139,10 +144,10 @@ export function FormsFilterClient({
           </select>
         </div>
 
-        {/* Branch */}
+        {/* Branch / Discipline */}
         <div>
           <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-            Branch
+            Branch / Discipline
           </label>
           <select
             value={branch}
@@ -150,10 +155,11 @@ export function FormsFilterClient({
               setBranch(e.target.value);
               applyFilters({ branch: e.target.value });
             }}
+            aria-label="Filter Branch / Discipline"
             className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-bce-cobalt/20"
           >
             <option value="ALL">All Branches</option>
-            {branches.map(b => (
+            {activeBranches.map(b => (
               <option key={b.id} value={b.id}>
                 {b.name} ({b.code})
               </option>

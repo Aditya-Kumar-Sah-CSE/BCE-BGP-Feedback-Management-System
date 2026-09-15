@@ -61,7 +61,14 @@ export function CreateGoogleFormWizard({
     academicYears.find(y => y.is_active)?.id || academicYears[0]?.id || ''
   );
   const [semesterId, setSemesterId] = useState<string>(semesters[0]?.id || '');
-  const [branchId, setBranchId] = useState<string>(branches[0]?.id || '');
+  // Filter active branches only, sorted alphabetically by name
+  const activeBranches = useMemo(
+    () => branches.filter(b => b.is_active).sort((a, b) => a.name.localeCompare(b.name)),
+    [branches]
+  );
+  const [branchId, setBranchId] = useState<string>(
+    activeBranches[0]?.id || branches.find(b => b.is_active)?.id || branches[0]?.id || ''
+  );
 
   // Scope: SEMESTER_FEEDBACK (Default multi-faculty grid) or FACULTY_FEEDBACK (legacy single-faculty)
   const [scope, setScope] = useState<'SEMESTER_FEEDBACK' | 'FACULTY_FEEDBACK'>('SEMESTER_FEEDBACK');
@@ -696,30 +703,37 @@ export function CreateGoogleFormWizard({
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {branches.map(b => (
-                        <button
-                          key={b.id}
-                          type="button"
-                          onClick={() => setBranchId(b.id)}
-                          className={`p-4 rounded-2xl border text-left transition-all ${
-                            branchId === b.id
-                              ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
-                              : 'bg-white border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-sm text-slate-900">{b.name}</span>
-                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded-md">
-                              {b.code}
+                    {activeBranches.length === 0 ? (
+                      <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200">
+                        <p className="text-sm font-semibold text-slate-700">No active branches available</p>
+                        <p className="text-xs text-slate-400 mt-1">Please activate or add branches in Academic Management.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {activeBranches.map(b => (
+                          <button
+                            key={b.id}
+                            type="button"
+                            onClick={() => setBranchId(b.id)}
+                            className={`p-4 rounded-2xl border text-left transition-all ${
+                              branchId === b.id
+                                ? 'bg-blue-50/80 border-bce-cobalt ring-2 ring-bce-cobalt/20 shadow-xs'
+                                : 'bg-white border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-sm text-slate-900">{b.name}</span>
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded-md">
+                                {b.code}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-400 mt-1 block">
+                              Department of {b.name}
                             </span>
-                          </div>
-                          <span className="text-[11px] text-slate-400 mt-1 block">
-                            Department of {b.name}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

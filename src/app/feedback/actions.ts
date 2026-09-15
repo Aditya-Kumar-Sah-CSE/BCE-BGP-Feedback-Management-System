@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { Faculty, Subject } from '@/types/database';
+import { Faculty, Subject, Branch } from '@/types/database';
 import { isValidUUID } from '@/lib/validation';
 
 
@@ -578,4 +578,32 @@ export async function getPublicActiveFormsAction(params?: {
   }
 }
 
+/**
+ * Dynamically fetch all active branches from the database table.
+ * Filtered by is_active = true and sorted alphabetically by name.
+ */
+export async function getActiveBranchesAction(): Promise<{
+  success: boolean;
+  branches: Branch[];
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+    const { data: branches, error } = await supabase
+      .from('branches')
+      .select('id, name, code, is_active, created_at, updated_at')
+      .eq('is_active', true)
+      .order('name', { ascending: true });
 
+    if (error) {
+      console.error('[GET_ACTIVE_BRANCHES]', error);
+      return { success: false, branches: [], error: error.message };
+    }
+
+    return { success: true, branches: (branches || []) as Branch[] };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unexpected error loading branches.';
+    console.error('[GET_ACTIVE_BRANCHES]', err);
+    return { success: false, branches: [], error: message };
+  }
+}

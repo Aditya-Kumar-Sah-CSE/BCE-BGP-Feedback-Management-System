@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useTransition, useMemo } from 'react';
 import Link from 'next/link';
 import {
   ParameterScoreBarChart,
@@ -59,6 +59,11 @@ export function ResultsDashboardClient({
   const [semesterId, setSemesterId] = useState<string>('ALL');
   const [facultyId, setFacultyId] = useState<string>('ALL');
   const [subjectId, setSubjectId] = useState<string>('ALL');
+
+  const activeBranches = useMemo(
+    () => (branches || []).filter(b => b.is_active).sort((a, b) => a.name.localeCompare(b.name)),
+    [branches]
+  );
 
   const activeFiltersCount = [
     academicYearId !== 'ALL',
@@ -222,10 +227,10 @@ export function ResultsDashboardClient({
               </select>
             </div>
 
-            {/* Branch */}
+            {/* Branch / Discipline */}
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                Branch / Dept
+                Branch / Discipline
               </label>
               <select
                 value={branchId}
@@ -233,10 +238,11 @@ export function ResultsDashboardClient({
                   setBranchId(e.target.value);
                   handleFilterChange(academicYearId, e.target.value, semesterId, facultyId, subjectId);
                 }}
+                aria-label="Filter Branch / Discipline"
                 className="w-full text-xs bg-white border border-slate-300 rounded-xl px-2.5 py-2 font-medium text-slate-800 focus:ring-2 focus:ring-bce-cobalt focus:outline-hidden"
               >
                 <option value="ALL">All Branches</option>
-                {branches.map(b => (
+                {activeBranches.map(b => (
                   <option key={b.id} value={b.id}>
                     {b.name} ({b.code})
                   </option>

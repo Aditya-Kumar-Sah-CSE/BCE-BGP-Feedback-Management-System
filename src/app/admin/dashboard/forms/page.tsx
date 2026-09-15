@@ -60,7 +60,7 @@ export default async function FeedbackFormsPage({
     { data: semesters },
   ] = await Promise.all([
     supabase.from('academic_years').select('id, name, is_active').order('name', { ascending: false }),
-    supabase.from('branches').select('id, name, code, is_active').order('name'),
+    supabase.from('branches').select('id, name, code, is_active').eq('is_active', true).order('name', { ascending: true }),
     supabase.from('semesters').select('id, name, semester_number, is_active').order('semester_number'),
   ]);
 
