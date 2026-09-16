@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { getAdminSession, SUPER_ADMIN_EMAIL } from '@/lib/auth/admin-auth';
-import { ensureBillingAccount, getAdminBillingStatus } from '@/lib/billing/access-control';
+import { ensureBillingAccount, getAdminBillingStatus, assertAnalyticsAccess } from '@/lib/billing/access-control';
 import {
   isValidUUID,
   submitPaymentRequestSchema,
@@ -746,10 +746,39 @@ export async function getMyBillingStatusAction() {
     .limit(1)
     .maybeSingle();
 
+  const hasFullAnalytics = session.isSuperAdmin || (billingStatus.isUnlocked && !!billingStatus.hasFullAnalytics);
+
   return {
     success: true,
-    billing: billingStatus,
+    billing: {
+      ...billingStatus,
+      hasFullAnalytics,
+    },
+    hasFullAnalytics,
     latestPaymentRequest: latestRequest as PaymentRequest | null,
     isSuperAdmin: session.isSuperAdmin,
   };
 }
+
+export async function checkAnalyticsAccessAction() {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || !session.isActive) {
+    return { allowed: false, isSuperAdmin: false, reason: 'Unauthorized.' };
+  }
+
+  const result = await assertAnalyticsAccess(
+    session.admin?.id,
+    session.admin?.email || session.user?.email,
+    session.admin?.role,
+    session.admin?.status
+  );
+
+  return {
+    allowed: result.allowed,
+    isSuperAdmin: session.isSuperAdmin,
+    reason: result.reason,
+    code: result.code,
+    billingStatus: result.billingStatus,
+  };
+}
+

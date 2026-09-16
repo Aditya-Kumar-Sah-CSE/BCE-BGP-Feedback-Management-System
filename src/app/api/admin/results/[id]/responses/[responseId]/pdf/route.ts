@@ -6,6 +6,7 @@ import { syncFormResponsesToSheet } from '@/lib/google/sync';
 import { BCE_FEEDBACK_PARAMETERS } from '@/lib/google/template';
 import { generateStudentResponsePDF, StudentResponsePDFData } from '@/lib/analytics/pdf-generator';
 import { isValidUUID } from '@/lib/validation';
+import { assertAnalyticsAccess } from '@/lib/billing/access-control';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -28,6 +29,24 @@ export async function GET(
       return NextResponse.json(
         { error: 'Unauthorized. Active admin credentials required to access student response PDF.' },
         { status: 401 }
+      );
+    }
+
+    // 2. Mandatory Full Analytics Access Authorization Check
+    const access = await assertAnalyticsAccess(
+      session.admin?.id,
+      session.admin?.email || session.user?.email,
+      session.admin?.role,
+      session.admin?.status
+    );
+
+    if (!access.allowed) {
+      return NextResponse.json(
+        {
+          error: access.reason || 'Full analytics access required to download student response PDF reports.',
+          code: 'ANALYTICS_UPGRADE_REQUIRED',
+        },
+        { status: 403 }
       );
     }
 

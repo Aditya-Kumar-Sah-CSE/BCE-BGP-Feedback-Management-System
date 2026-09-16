@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth/admin-auth';
 import { getOverallAnalyticsData } from '@/lib/analytics/service';
 import { generateOverallFeedbackPDF } from '@/lib/analytics/pdf-generator';
+import { assertAnalyticsAccess } from '@/lib/billing/access-control';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -14,6 +15,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'Unauthorized. Active admin credentials required to access institutional report PDFs.' },
         { status: 401 }
+      );
+    }
+
+    // 2. Mandatory Full Analytics Access Authorization Check
+    const access = await assertAnalyticsAccess(
+      session.admin?.id,
+      session.admin?.email || session.user?.email,
+      session.admin?.role,
+      session.admin?.status
+    );
+
+    if (!access.allowed) {
+      return NextResponse.json(
+        {
+          error: access.reason || 'Full analytics access required to download institutional analytics PDF reports.',
+          code: 'ANALYTICS_UPGRADE_REQUIRED',
+        },
+        { status: 403 }
       );
     }
 

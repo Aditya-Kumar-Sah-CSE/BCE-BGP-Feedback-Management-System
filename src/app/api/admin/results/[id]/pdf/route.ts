@@ -6,6 +6,7 @@ import {
   generateSemesterComparativePDF,
 } from '@/lib/analytics/pdf-generator';
 import { isValidUUID } from '@/lib/validation';
+import { assertAnalyticsAccess } from '@/lib/billing/access-control';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -32,7 +33,25 @@ export async function GET(
       return NextResponse.json({ error: 'Valid Feedback Form ID is required.' }, { status: 400 });
     }
 
-    // 2. Fetch Form Analytics using shared authoritative service (guaranteeing 100% parity with dashboard)
+    // 2. Mandatory Full Analytics Access Authorization Check
+    const access = await assertAnalyticsAccess(
+      session.admin?.id,
+      session.admin?.email || session.user?.email,
+      session.admin?.role,
+      session.admin?.status
+    );
+
+    if (!access.allowed) {
+      return NextResponse.json(
+        {
+          error: access.reason || 'Full analytics access required to download analytics PDF reports.',
+          code: 'ANALYTICS_UPGRADE_REQUIRED',
+        },
+        { status: 403 }
+      );
+    }
+
+    // 3. Fetch Form Analytics using shared authoritative service (guaranteeing 100% parity with dashboard)
     const result = await getFormAnalyticsData(formId);
     if (!result.success || !result.report) {
       return NextResponse.json(

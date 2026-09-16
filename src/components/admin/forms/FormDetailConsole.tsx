@@ -33,16 +33,23 @@ import {
   Activity,
   BarChart3,
   Trash2,
+  Lock,
 } from 'lucide-react';
 
 interface Props {
   form: FeedbackForm;
   auditLogs: AuditLog[];
   currentUserEmail: string;
+  hasAnalyticsAccess?: boolean;
 }
 
 
-export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEmail }: Props) {
+export function FormDetailConsole({
+  form: initialForm,
+  auditLogs,
+  currentUserEmail,
+  hasAnalyticsAccess = false,
+}: Props) {
   const router = useRouter();
   const hydrated = useHydrated();
   const [form, setForm] = useState<FeedbackForm>(initialForm);
@@ -251,13 +258,28 @@ export function FormDetailConsole({ form: initialForm, auditLogs, currentUserEma
               </a>
             ) : null}
 
-            <Link
-              href={`/admin/dashboard/results/${form.id}`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-bce-navy hover:bg-slate-800 text-amber-300 border border-slate-700 rounded-xl text-xs font-bold transition-colors shadow-2xs"
-            >
-              <BarChart3 className="w-4 h-4 text-amber-400" />
-              <span>Results & Analytics</span>
-            </Link>
+            {hasAnalyticsAccess ? (
+              <Link
+                href={`/admin/dashboard/results/${form.id}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-bce-navy hover:bg-slate-800 text-amber-300 border border-slate-700 rounded-xl text-xs font-bold transition-colors shadow-2xs"
+              >
+                <BarChart3 className="w-4 h-4 text-amber-400" />
+                <span>Results & Analytics</span>
+              </Link>
+            ) : (
+              <Link
+                href={`/admin/dashboard/results/${form.id}`}
+                title="Full Analytics Access Required - Click to upgrade your plan"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/95 hover:bg-slate-800 text-slate-300 hover:text-white border border-amber-500/40 rounded-xl text-xs font-bold transition-all shadow-2xs group"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+                <BarChart3 className="w-4 h-4 text-slate-400" />
+                <span>Results & Analytics</span>
+                <span className="text-[10px] font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded ml-0.5 uppercase tracking-wider">
+                  Locked
+                </span>
+              </Link>
+            )}
           </div>
 
           {/* Lifecycle State Changer */}

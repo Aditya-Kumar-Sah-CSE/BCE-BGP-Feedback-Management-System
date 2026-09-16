@@ -3,6 +3,7 @@ import { getAdminSession } from '@/lib/auth/admin-auth';
 import { createClient } from '@/lib/supabase/server';
 import { FeedbackForm, AuditLog } from '@/types/database';
 import { FormDetailConsole } from '@/components/admin/forms/FormDetailConsole';
+import { assertAnalyticsAccess } from '@/lib/billing/access-control';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,12 +97,21 @@ export default async function FeedbackFormDetailPage({
     .eq('entity_id', id)
     .order('created_at', { ascending: false });
 
+  // Check server-side analytics access permission
+  const analyticsAccess = await assertAnalyticsAccess(
+    session.admin?.id,
+    session.admin?.email || session.user?.email,
+    session.admin?.role,
+    session.admin?.status
+  );
+
   return (
     <div className="space-y-6">
       <FormDetailConsole
         form={form as FeedbackForm}
         auditLogs={(auditLogs || []) as AuditLog[]}
         currentUserEmail={session.admin?.email || session.user?.email || ''}
+        hasAnalyticsAccess={analyticsAccess.allowed}
       />
     </div>
   );

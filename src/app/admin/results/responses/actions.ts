@@ -8,6 +8,7 @@ import { syncFormResponsesToSheet } from '@/lib/google/sync';
 import { isGoogleConfigured } from '@/lib/google/auth';
 import { BCE_FEEDBACK_PARAMETERS } from '@/lib/google/template';
 import { isValidUUID } from '@/lib/validation';
+import { assertAnalyticsAccess } from '@/lib/billing/access-control';
 
 export interface AdminResponseItem {
   id: string;
@@ -31,6 +32,7 @@ export interface AdminResponsesResult {
   formTitle: string;
   formType: string;
   error?: string;
+  code?: string;
 }
 
 export interface ResponseDetailItem {
@@ -85,6 +87,29 @@ export async function getFormResponsesAction(
       formTitle: '',
       formType: '',
       error: 'Unauthorized. Active admin session required.',
+    };
+  }
+
+  // Centralized Billing & Plan Analytics Permission Check
+  const access = await assertAnalyticsAccess(
+    session.admin?.id,
+    session.admin?.email || session.user?.email,
+    session.admin?.role,
+    session.admin?.status
+  );
+
+  if (!access.allowed) {
+    return {
+      success: false,
+      responses: [],
+      totalCount: 0,
+      page: 1,
+      pageSize: 20,
+      totalPages: 0,
+      formTitle: '',
+      formType: '',
+      code: 'ANALYTICS_UPGRADE_REQUIRED',
+      error: access.reason || 'Full analytics access required. Please upgrade your plan.',
     };
   }
 
@@ -250,10 +275,26 @@ export async function getResponseDetailAction(
     responseId: string;
   },
   options?: { client?: any }
-): Promise<{ success: boolean; detail?: StudentResponseDetail; error?: string }> {
+): Promise<{ success: boolean; detail?: StudentResponseDetail; error?: string; code?: string }> {
   const session = await getAdminSession(options?.client);
   if (!session.isAuthenticated || !session.isActive) {
     return { success: false, error: 'Unauthorized. Active admin session required.' };
+  }
+
+  // Centralized Billing & Plan Analytics Permission Check
+  const access = await assertAnalyticsAccess(
+    session.admin?.id,
+    session.admin?.email || session.user?.email,
+    session.admin?.role,
+    session.admin?.status
+  );
+
+  if (!access.allowed) {
+    return {
+      success: false,
+      code: 'ANALYTICS_UPGRADE_REQUIRED',
+      error: access.reason || 'Full analytics access required. Please upgrade your plan.',
+    };
   }
 
   const { formId, responseId } = params;

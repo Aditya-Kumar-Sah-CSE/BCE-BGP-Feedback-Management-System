@@ -13,11 +13,21 @@ export interface BillingStatus {
   startedAt: string | null;
   billingAccountId: string | null;
   isExpired: boolean;
+  features?: string[];
+  hasFullAnalytics?: boolean;
 }
 
 export interface FormAccessResult {
   allowed: boolean;
   reason: string;
+  code?: 'FORM_GENERATION_LOCKED' | 'UNAUTHORIZED' | 'ACCOUNT_INACTIVE';
+  billingStatus?: BillingStatus;
+}
+
+export interface AnalyticsAccessResult {
+  allowed: boolean;
+  reason: string;
+  code?: 'ANALYTICS_UPGRADE_REQUIRED' | 'UNAUTHORIZED' | 'ACCOUNT_INACTIVE';
   billingStatus?: BillingStatus;
 }
 

@@ -3,6 +3,8 @@ import { getAdminSession } from '@/lib/auth/admin-auth';
 import { createClient } from '@/lib/supabase/server';
 import { getOverallAnalyticsAction } from '@/app/admin/results/actions';
 import { ResultsDashboardClient } from '@/components/admin/results/ResultsDashboardClient';
+import { AnalyticsAccessGate } from '@/components/admin/billing/AnalyticsAccessGate';
+import { assertAnalyticsAccess } from '@/lib/billing/access-control';
 import {
   AcademicYear,
   Branch,
@@ -18,6 +20,22 @@ export default async function AdminResultsHubPage() {
   const session = await getAdminSession();
   if (!session.isAuthenticated) {
     redirect('/admin/login');
+  }
+
+  // Authoritative server-side analytics access check BEFORE any query/fetch
+  const access = await assertAnalyticsAccess(
+    session.admin?.id,
+    session.admin?.email || session.user?.email,
+    session.admin?.role,
+    session.admin?.status
+  );
+
+  if (!access.allowed) {
+    return (
+      <div className="space-y-6">
+        <AnalyticsAccessGate isSuperAdmin={session.isSuperAdmin} returnUrl="/admin/dashboard" />
+      </div>
+    );
   }
 
   const supabase = await createClient();

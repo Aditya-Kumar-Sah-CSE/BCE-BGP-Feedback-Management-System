@@ -10,13 +10,14 @@ import { createClient } from '@/lib/supabase/server';
 import { syncFormResponsesToSheet } from '@/lib/google/sync';
 import { isGoogleConfigured } from '@/lib/google/auth';
 import { isValidUUID } from '@/lib/validation';
+import { assertAnalyticsAccess } from '@/lib/billing/access-control';
 import type { FormAnalyticsReport, AggregatedAnalyticsReport } from '@/lib/analytics/types';
 
 export type { ScopeFilters };
 
 /**
  * Server action to fetch real-time analytics for a specific feedback form.
- * Directly delegates to authoritative shared analytics service.
+ * Directly delegates to authoritative shared analytics service after verifying Full Analytics Access.
  */
 export async function getFormAnalyticsAction(
   formId: string,
@@ -24,13 +25,45 @@ export async function getFormAnalyticsAction(
 ): Promise<{
   success: boolean;
   error?: string;
+  code?: string;
   report?: FormAnalyticsReport;
 }> {
+  // 1. Mandatory Admin Authentication & Active Check
+  const session = await getAdminSession(options?.client);
+  if (!session.isAuthenticated) {
+    return { success: false, error: 'Unauthorized. Admin session required.', code: 'UNAUTHORIZED' };
+  }
+  if (!session.isActive) {
+    return { success: false, error: 'Unauthorized. Active admin credentials required.', code: 'ACCOUNT_INACTIVE' };
+  }
+
+  // 2. Validate Form ID format
+  if (!formId || !isValidUUID(formId)) {
+    return { success: false, error: 'Invalid feedback form identifier format.' };
+  }
+
+  // 3. Centralized Billing & Plan Analytics Permission Check
+  const access = await assertAnalyticsAccess(
+    session.admin?.id,
+    session.admin?.email || session.user?.email,
+    session.admin?.role,
+    session.admin?.status
+  );
+
+  if (!access.allowed) {
+    return {
+      success: false,
+      code: 'ANALYTICS_UPGRADE_REQUIRED',
+      error: access.reason || 'Full analytics access required. Please upgrade your plan.',
+    };
+  }
+
   return getFormAnalyticsData(formId, options);
 }
 
 /**
  * Server action to fetch institutional scope analytics aggregated across matching feedback forms.
+ * Requires Full Analytics Access.
  */
 export async function getOverallAnalyticsAction(
   filters?: ScopeFilters,
@@ -38,8 +71,34 @@ export async function getOverallAnalyticsAction(
 ): Promise<{
   success: boolean;
   error?: string;
+  code?: string;
   report?: AggregatedAnalyticsReport;
 }> {
+  // 1. Mandatory Admin Authentication & Active Check
+  const session = await getAdminSession(options?.client);
+  if (!session.isAuthenticated) {
+    return { success: false, error: 'Unauthorized. Admin session required.', code: 'UNAUTHORIZED' };
+  }
+  if (!session.isActive) {
+    return { success: false, error: 'Unauthorized. Active admin credentials required.', code: 'ACCOUNT_INACTIVE' };
+  }
+
+  // 2. Centralized Billing & Plan Analytics Permission Check
+  const access = await assertAnalyticsAccess(
+    session.admin?.id,
+    session.admin?.email || session.user?.email,
+    session.admin?.role,
+    session.admin?.status
+  );
+
+  if (!access.allowed) {
+    return {
+      success: false,
+      code: 'ANALYTICS_UPGRADE_REQUIRED',
+      error: access.reason || 'Full analytics access required. Please upgrade your plan.',
+    };
+  }
+
   return getOverallAnalyticsData(filters, options);
 }
 
