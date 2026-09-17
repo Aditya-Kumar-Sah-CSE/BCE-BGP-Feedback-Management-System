@@ -3,7 +3,7 @@ import { getAdminSession } from '@/lib/auth/admin-auth';
 import { getFormResponsesAction } from '@/app/admin/results/responses/actions';
 import { FormResponsesConsole } from '@/components/admin/results/FormResponsesConsole';
 import { AnalyticsAccessGate } from '@/components/admin/billing/AnalyticsAccessGate';
-import { assertAnalyticsAccess } from '@/lib/billing/access-control';
+import { assertBasicAnalyticsAccess } from '@/lib/billing/access-control';
 import { isValidUUID } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
@@ -29,8 +29,8 @@ export default async function FormResponsesPage({
     notFound();
   }
 
-  // 3. Authoritative server-side analytics access check BEFORE any query/fetch
-  const access = await assertAnalyticsAccess(
+  // 3. Authoritative server-side basic analytics access check BEFORE any query/fetch
+  const access = await assertBasicAnalyticsAccess(
     session.admin?.id,
     session.admin?.email || session.user?.email,
     session.admin?.role,

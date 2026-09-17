@@ -7,20 +7,33 @@ import {
   FEATURE_GOOGLE_SHEET_INTEGRATION,
   FEATURE_FULL_ANALYTICS_ACCESS,
   FEATURE_BASIC_ANALYTICS,
+  FEATURE_ANALYTICS_PDF,
   FEATURE_PRIORITY_SUPPORT,
   planHasFeature,
   type BillingStatus,
   type FormAccessResult,
+  type SheetIntegrationAccessResult,
+  type BasicAnalyticsAccessResult,
   type AnalyticsAccessResult,
+  type PdfAccessResult,
 } from './constants';
 
 // Re-export for convenience — consumers can import from either file
-export type { BillingStatus, FormAccessResult, AnalyticsAccessResult } from './constants';
+export type {
+  BillingStatus,
+  FormAccessResult,
+  SheetIntegrationAccessResult,
+  BasicAnalyticsAccessResult,
+  AnalyticsAccessResult,
+  PdfAccessResult,
+} from './constants';
+
 export {
   FEATURE_GOOGLE_FORM_GENERATION,
   FEATURE_GOOGLE_SHEET_INTEGRATION,
   FEATURE_FULL_ANALYTICS_ACCESS,
   FEATURE_BASIC_ANALYTICS,
+  FEATURE_ANALYTICS_PDF,
   FEATURE_PRIORITY_SUPPORT,
   planHasFeature,
 } from './constants';
@@ -125,9 +138,11 @@ export async function getEffectiveBillingFeatures(adminId: string): Promise<{
   billingAccount: any;
   planType: PlanType;
   isUnlocked: boolean;
-  hasFullAnalytics: boolean;
   hasFormGeneration: boolean;
   hasSheetIntegration: boolean;
+  hasBasicAnalytics: boolean;
+  hasFullAnalytics: boolean;
+  hasPdfAccess: boolean;
   trialStatus: 'NONE' | TrialStatus;
   trialExpiresAt: string | null;
   trialDaysRemaining: number | null;
@@ -235,14 +250,15 @@ export async function getEffectiveBillingFeatures(adminId: string): Promise<{
   const combinedSet = new Set<string>([...planFeatures, ...trialFeatures]);
   const effectiveFeatures = Array.from(combinedSet);
 
-  // 5. Capability flags
+  // 5. Capability flags (derived strictly from effectiveFeatures)
   const hasFormGeneration = planHasFeature(effectiveFeatures, FEATURE_GOOGLE_FORM_GENERATION);
   const hasSheetIntegration = planHasFeature(effectiveFeatures, FEATURE_GOOGLE_SHEET_INTEGRATION);
+  const hasBasicAnalytics = planHasFeature(effectiveFeatures, FEATURE_BASIC_ANALYTICS);
   const hasFullAnalytics = planHasFeature(effectiveFeatures, FEATURE_FULL_ANALYTICS_ACCESS);
+  const hasPdfAccess = planHasFeature(effectiveFeatures, FEATURE_ANALYTICS_PDF);
 
-  // Form access is UNLOCKED if the admin has form generation entitlement (via trial or paid plan)
-  // or if explicitly UNLOCKED with free plan
-  const isUnlocked = hasFormGeneration || billing?.access_status === 'UNLOCKED' || hasActiveTrialBool;
+  // Form access is UNLOCKED if and only if effective features include form generation
+  const isUnlocked = hasFormGeneration;
 
   // Calculate days remaining on active trial
   let trialDaysRemaining: number | null = null;
@@ -258,9 +274,11 @@ export async function getEffectiveBillingFeatures(adminId: string): Promise<{
     billingAccount: billing,
     planType,
     isUnlocked,
-    hasFullAnalytics,
     hasFormGeneration,
     hasSheetIntegration,
+    hasBasicAnalytics,
+    hasFullAnalytics,
+    hasPdfAccess,
     trialStatus: latestTrialStatus,
     trialExpiresAt,
     trialDaysRemaining,
@@ -291,7 +309,11 @@ export async function getAdminBillingStatus(adminId: string): Promise<BillingSta
     billingAccount,
     planType,
     isUnlocked,
+    hasFormGeneration,
+    hasSheetIntegration,
+    hasBasicAnalytics,
     hasFullAnalytics,
+    hasPdfAccess,
     trialStatus,
     trialExpiresAt,
     trialDaysRemaining,
@@ -312,7 +334,11 @@ export async function getAdminBillingStatus(adminId: string): Promise<BillingSta
     billingAccountId: billingAccount?.id || null,
     isExpired: !!isPaidExpired,
     features: effectiveFeatures,
+    hasFormGeneration,
+    hasSheetIntegration,
+    hasBasicAnalytics,
     hasFullAnalytics,
+    hasPdfAccess,
     hasActiveTrial: activeTrialPresent,
     activeTrial,
     trialStatus,
@@ -405,12 +431,6 @@ export async function canGenerateForms(
   return res.allowed;
 }
 
-export interface SheetIntegrationAccessResult {
-  allowed: boolean;
-  reason?: string;
-  code?: string;
-  billingStatus?: BillingStatus;
-}
 
 /**
  * Authorization function for Google Sheet creation, integration, and response sync management.
@@ -590,7 +610,182 @@ export async function canAccessAnalytics(
 }
 
 // ====================================================================
-// 6. ENSURE BILLING ACCOUNT
+// 6. CENTRALIZED BASIC ANALYTICS ACCESS GATE
+// ====================================================================
+
+/**
+ * THE ONE centralized authorization function for Basic Analytics (read/view existing response Sheet/data).
+ *
+ * Rules:
+ * - Super Admin is ALWAYS allowed.
+ * - Admin must be active.
+ * - Basic Analytics is ALLOWED if:
+ *   a) Effective features contain "Basic analytics", OR
+ *   b) Effective features contain "Full analytics access" (which supersedes basic).
+ * - Otherwise DENIED with code: "BASIC_ANALYTICS_LOCKED".
+ */
+export async function assertBasicAnalyticsAccess(
+  adminId: string | null | undefined,
+  adminEmail: string | undefined,
+  adminRole: string | undefined,
+  adminStatus: string | undefined,
+): Promise<BasicAnalyticsAccessResult> {
+  if (!adminId) {
+    return {
+      allowed: false,
+      code: 'UNAUTHORIZED',
+      reason: 'No admin record found. Please log in or contact the Super Admin.',
+    };
+  }
+
+  if (adminStatus !== 'ACTIVE') {
+    return {
+      allowed: false,
+      code: 'ACCOUNT_INACTIVE',
+      reason: 'Your administrator account is inactive. Please contact the Super Admin.',
+    };
+  }
+
+  const isSuperAdmin = adminRole === 'SUPER_ADMIN'
+    || (adminEmail && adminEmail.toLowerCase().trim() === SUPER_ADMIN_EMAIL);
+
+  if (isSuperAdmin) {
+    return { allowed: true, reason: 'Super Admin access granted.' };
+  }
+
+  const billingStatus = await getAdminBillingStatus(adminId);
+  const hasBasic = billingStatus.hasBasicAnalytics || billingStatus.hasFullAnalytics;
+
+  if (!hasBasic) {
+    return {
+      allowed: false,
+      code: 'BASIC_ANALYTICS_LOCKED',
+      reason: 'Basic analytics access is locked on your current account. Please contact the Super Admin.',
+      billingStatus,
+    };
+  }
+
+  return {
+    allowed: true,
+    reason: 'Basic analytics access granted.',
+    billingStatus,
+  };
+}
+
+export async function canAccessBasicAnalytics(
+  sessionOrAdminId: any,
+  adminEmail?: string,
+  adminRole?: string,
+  adminStatus?: string
+): Promise<boolean> {
+  if (!sessionOrAdminId) return false;
+
+  if (typeof sessionOrAdminId === 'object') {
+    const session = sessionOrAdminId;
+    if (session.isSuperAdmin) return true;
+    if (!session.isAuthenticated || !session.isActive || !session.admin?.id) return false;
+    const res = await assertBasicAnalyticsAccess(
+      session.admin.id,
+      session.admin.email || session.user?.email,
+      session.admin.role,
+      session.admin.status
+    );
+    return res.allowed;
+  }
+
+  const res = await assertBasicAnalyticsAccess(sessionOrAdminId, adminEmail, adminRole, adminStatus);
+  return res.allowed;
+}
+
+// ====================================================================
+// 7. CENTRALIZED PDF REPORTS & EXPORTS ACCESS GATE
+// ====================================================================
+
+/**
+ * THE ONE centralized authorization function for PDF Reports & Exports.
+ *
+ * Rules:
+ * - Super Admin is ALWAYS allowed.
+ * - Admin must be active.
+ * - ALLOWED if:
+ *   a) Effective features contain "Analytics PDF reports", OR
+ *   b) Active Trial or Paid Plan contains "Analytics PDF reports".
+ * - Otherwise DENIED with code: "PDF_EXPORT_LOCKED".
+ */
+export async function assertPdfAccess(
+  adminId: string | null | undefined,
+  adminEmail: string | undefined,
+  adminRole: string | undefined,
+  adminStatus: string | undefined,
+): Promise<PdfAccessResult> {
+  if (!adminId) {
+    return {
+      allowed: false,
+      code: 'UNAUTHORIZED',
+      reason: 'No admin record found. Please log in or contact the Super Admin.',
+    };
+  }
+
+  if (adminStatus !== 'ACTIVE') {
+    return {
+      allowed: false,
+      code: 'ACCOUNT_INACTIVE',
+      reason: 'Your administrator account is inactive. Please contact the Super Admin.',
+    };
+  }
+
+  const isSuperAdmin = adminRole === 'SUPER_ADMIN'
+    || (adminEmail && adminEmail.toLowerCase().trim() === SUPER_ADMIN_EMAIL);
+
+  if (isSuperAdmin) {
+    return { allowed: true, reason: 'Super Admin access granted.' };
+  }
+
+  const billingStatus = await getAdminBillingStatus(adminId);
+
+  if (!billingStatus.hasPdfAccess) {
+    return {
+      allowed: false,
+      code: 'PDF_EXPORT_LOCKED',
+      reason: 'PDF Reports & Exports are locked on your current plan. Please upgrade to Full Access to download PDF reports.',
+      billingStatus,
+    };
+  }
+
+  return {
+    allowed: true,
+    reason: 'PDF reports and exports access granted.',
+    billingStatus,
+  };
+}
+
+export async function canAccessPdf(
+  sessionOrAdminId: any,
+  adminEmail?: string,
+  adminRole?: string,
+  adminStatus?: string
+): Promise<boolean> {
+  if (!sessionOrAdminId) return false;
+
+  if (typeof sessionOrAdminId === 'object') {
+    const session = sessionOrAdminId;
+    if (session.isSuperAdmin) return true;
+    if (!session.isAuthenticated || !session.isActive || !session.admin?.id) return false;
+    const res = await assertPdfAccess(
+      session.admin.id,
+      session.admin.email || session.user?.email,
+      session.admin.role,
+      session.admin.status
+    );
+    return res.allowed;
+  }
+
+  const res = await assertPdfAccess(sessionOrAdminId, adminEmail, adminRole, adminStatus);
+  return res.allowed;
+}
+
+// ====================================================================
+// 8. ENSURE BILLING ACCOUNT
 // ====================================================================
 
 /**

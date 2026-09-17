@@ -6,7 +6,7 @@ import { syncFormResponsesToSheet } from '@/lib/google/sync';
 import { BCE_FEEDBACK_PARAMETERS } from '@/lib/google/template';
 import { generateStudentResponsePDF, StudentResponsePDFData } from '@/lib/analytics/pdf-generator';
 import { isValidUUID } from '@/lib/validation';
-import { assertAnalyticsAccess } from '@/lib/billing/access-control';
+import { assertPdfAccess } from '@/lib/billing/access-control';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -32,8 +32,8 @@ export async function GET(
       );
     }
 
-    // 2. Mandatory Full Analytics Access Authorization Check
-    const access = await assertAnalyticsAccess(
+    // 2. Mandatory PDF Reports & Exports Authorization Check
+    const access = await assertPdfAccess(
       session.admin?.id,
       session.admin?.email || session.user?.email,
       session.admin?.role,
@@ -43,8 +43,8 @@ export async function GET(
     if (!access.allowed) {
       return NextResponse.json(
         {
-          error: access.reason || 'Full analytics access required to download student response PDF reports.',
-          code: 'ANALYTICS_UPGRADE_REQUIRED',
+          error: access.reason || 'PDF Reports & Exports are locked on your current plan. Please upgrade to Full Access to download PDF reports.',
+          code: access.code || 'PDF_EXPORT_LOCKED',
         },
         { status: 403 }
       );

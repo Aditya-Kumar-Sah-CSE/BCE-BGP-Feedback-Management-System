@@ -8,7 +8,7 @@ import { syncFormResponsesToSheet } from '@/lib/google/sync';
 import { isGoogleConfigured } from '@/lib/google/auth';
 import { BCE_FEEDBACK_PARAMETERS } from '@/lib/google/template';
 import { isValidUUID } from '@/lib/validation';
-import { assertAnalyticsAccess } from '@/lib/billing/access-control';
+import { assertBasicAnalyticsAccess } from '@/lib/billing/access-control';
 
 export interface AdminResponseItem {
   id: string;
@@ -90,8 +90,8 @@ export async function getFormResponsesAction(
     };
   }
 
-  // Centralized Billing & Plan Analytics Permission Check
-  const access = await assertAnalyticsAccess(
+  // Centralized Billing & Plan Basic Analytics Permission Check
+  const access = await assertBasicAnalyticsAccess(
     session.admin?.id,
     session.admin?.email || session.user?.email,
     session.admin?.role,
@@ -108,8 +108,8 @@ export async function getFormResponsesAction(
       totalPages: 0,
       formTitle: '',
       formType: '',
-      code: 'ANALYTICS_UPGRADE_REQUIRED',
-      error: access.reason || 'Full analytics access required. Please upgrade your plan.',
+      code: access.code || 'BASIC_ANALYTICS_LOCKED',
+      error: access.reason || 'Basic analytics access required. Please contact the Super Admin.',
     };
   }
 
@@ -281,8 +281,8 @@ export async function getResponseDetailAction(
     return { success: false, error: 'Unauthorized. Active admin session required.' };
   }
 
-  // Centralized Billing & Plan Analytics Permission Check
-  const access = await assertAnalyticsAccess(
+  // Centralized Billing & Plan Basic Analytics Permission Check
+  const access = await assertBasicAnalyticsAccess(
     session.admin?.id,
     session.admin?.email || session.user?.email,
     session.admin?.role,
@@ -293,7 +293,7 @@ export async function getResponseDetailAction(
     return {
       success: false,
       code: 'ANALYTICS_UPGRADE_REQUIRED',
-      error: access.reason || 'Full analytics access required. Please upgrade your plan.',
+      error: access.reason || 'Basic analytics access required. Please contact the Super Admin.',
     };
   }
 
