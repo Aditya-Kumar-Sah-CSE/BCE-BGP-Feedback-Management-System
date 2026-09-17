@@ -1,8 +1,18 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { Faculty, Subject, Branch } from '@/types/database';
 import { isValidUUID } from '@/lib/validation';
+
+/**
+ * Obtain a database client for public operations.
+ * Prioritizes admin client (service_role) to eliminate session-cookie expiration failures.
+ * Falls back safely to createClient() when service_role is unavailable.
+ */
+async function getPublicDb() {
+  return createAdminClient() || (await createClient());
+}
 
 
 export interface PublicFormSummary {
@@ -55,7 +65,7 @@ export async function getPublicFacultiesForSelectionAction(
       return { success: false, faculties: [], error: 'Invalid academic parameters.' };
     }
 
-    const supabase = await createClient();
+    const supabase = await getPublicDb();
 
     const { data: assignments, error } = await supabase
       .from('faculty_subject_assignments')
@@ -119,7 +129,7 @@ export async function getPublicSubjectsForFacultyAction(
       return { success: false, subjects: [], error: 'Invalid academic parameters.' };
     }
 
-    const supabase = await createClient();
+    const supabase = await getPublicDb();
 
     const { data: assignments, error } = await supabase
       .from('faculty_subject_assignments')
@@ -198,7 +208,7 @@ export async function getPublicFeedbackFormAction(
       };
     }
 
-    const supabase = await createClient();
+    const supabase = await getPublicDb();
 
     const { data: form, error } = await supabase
       .from('feedback_forms')
@@ -290,7 +300,7 @@ export async function getPublicFeedbackFormByIdAction(formId: string): Promise<{
       };
     }
 
-    const supabase = await createClient();
+    const supabase = await getPublicDb();
 
     const { data: form, error } = await supabase
       .from('feedback_forms')
@@ -375,7 +385,7 @@ export async function getPublicSemesterFeedbackFormAction(
       return { success: false, form: null, status: 'NONE', message: 'Invalid academic parameters.' };
     }
 
-    const supabase = await createClient();
+    const supabase = await getPublicDb();
 
     const { data: form, error } = await supabase
       .from('feedback_forms')
@@ -472,7 +482,7 @@ export async function getPublicActiveFormsAction(params?: {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    const supabase = await createClient();
+    const supabase = await getPublicDb();
 
     let query = supabase
       .from('feedback_forms')
@@ -512,7 +522,12 @@ export async function getPublicActiveFormsAction(params?: {
     const { data, count, error } = await query;
 
     if (error) {
-      console.error('getPublicActiveFormsAction error:', error);
+      console.error('getPublicActiveFormsAction error:', {
+        message: error.message || 'Unknown error',
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
       return {
         success: false,
         forms: [],
@@ -565,7 +580,11 @@ export async function getPublicActiveFormsAction(params?: {
       totalPages,
     };
   } catch (err: unknown) {
-    console.error('getPublicActiveFormsAction exception:', err);
+    const errorDetails =
+      err instanceof Error
+        ? { message: err.message, stack: err.stack }
+        : { message: String(err) };
+    console.error('getPublicActiveFormsAction exception:', errorDetails);
     return {
       success: false,
       forms: [],
@@ -588,7 +607,7 @@ export async function getActiveBranchesAction(): Promise<{
   error?: string;
 }> {
   try {
-    const supabase = await createClient();
+    const supabase = await getPublicDb();
     const { data: branches, error } = await supabase
       .from('branches')
       .select('id, name, code, is_active, created_at, updated_at')

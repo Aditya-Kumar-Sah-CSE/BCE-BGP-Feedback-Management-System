@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { HeroSection } from '@/components/public/HeroSection';
 import { StudentDiscoveryFlow } from '@/components/public/StudentDiscoveryFlow';
 import { AllFeedbackFormsSection } from '@/components/public/AllFeedbackFormsSection';
@@ -11,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function HomePage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient() || (await createClient());
 
   // Fetch public active academic data for discovery and initial active forms
   const [
