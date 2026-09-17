@@ -240,16 +240,38 @@ export async function uploadPaymentProofAction(formData: FormData): Promise<{ su
   const ext = file.name.split('.').pop() || 'png';
   const fileName = `${session.admin.id}/${Date.now()}.${ext}`;
 
-  const { data, error } = await supabase.storage
+  let { data, error } = await supabase.storage
     .from('payment-proofs')
     .upload(fileName, file, {
       cacheControl: '3600',
       upsert: false,
     });
 
-  if (error) {
+  // If the bucket doesn't exist yet, auto-create it as a private bucket and retry
+  if (error && (error.message?.includes('not found') || (error as any).statusCode === '404' || (error as any).statusCode === 404)) {
+    try {
+      await supabase.storage.createBucket('payment-proofs', {
+        public: false,
+        fileSizeLimit: 5242880, // 5MB
+        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'],
+      });
+
+      const retry = await supabase.storage
+        .from('payment-proofs')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+      data = retry.data;
+      error = retry.error;
+    } catch (createErr) {
+      console.error('[PAYMENT_PROOF_BUCKET_AUTO_CREATE]', createErr);
+    }
+  }
+
+  if (error || !data) {
     console.error('[PAYMENT_PROOF_UPLOAD]', error);
-    return { success: false, error: 'Failed to upload payment proof. Please try again.' };
+    return { success: false, error: error?.message || 'Failed to upload payment proof. Please try again.' };
   }
 
   // Return path (not public URL) — we generate signed URLs for authorized viewers
