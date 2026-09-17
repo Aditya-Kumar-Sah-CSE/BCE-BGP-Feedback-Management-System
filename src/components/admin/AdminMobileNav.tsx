@@ -50,7 +50,7 @@ export function AdminMobileNav({
     { id: 'academic', label: 'Academic Structure', icon: GraduationCap },
     { id: 'forms', label: 'Feedback Forms', icon: FileSpreadsheet },
     { id: 'audit', label: 'Audit Trail', icon: Activity },
-    ...(isSuperAdmin ? [{ id: 'billing', label: 'Billing & Access', icon: CreditCard }] : []),
+    { id: 'billing', label: isSuperAdmin ? 'Billing & Access' : 'Billing & Plan', icon: CreditCard },
   ];
 
   const handleTabClick = (tabId: 'overview' | 'admins' | 'academic' | 'forms' | 'audit' | 'billing') => {

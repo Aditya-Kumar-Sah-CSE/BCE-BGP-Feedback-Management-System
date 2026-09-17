@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAdminSession } from '@/lib/auth/admin-auth';
+import { canAccessAnalytics } from '@/lib/billing/access-control';
 import { AdminDashboardTabs } from '@/components/admin/AdminDashboardTabs';
 import type {
   AcademicYear,
@@ -84,6 +85,8 @@ export default async function AdminDashboardPage() {
     publishedForms: publishedFormsCount ?? 0,
   };
 
+  const hasFullAnalytics = await canAccessAnalytics(session);
+
   return (
     <div className="space-y-6">
       <AdminDashboardTabs
@@ -98,6 +101,7 @@ export default async function AdminDashboardPage() {
         feedbackForms={(feedbackForms as FeedbackForm[]) || []}
         auditLogs={(auditLogs as AuditLog[]) || []}
         isSuperAdmin={session.isSuperAdmin}
+        hasFullAnalytics={hasFullAnalytics}
         currentUserEmail={session.admin?.email || session.user?.email || ''}
         counts={counts}
         adminReqError={adminReqError ? adminReqError.message : null}

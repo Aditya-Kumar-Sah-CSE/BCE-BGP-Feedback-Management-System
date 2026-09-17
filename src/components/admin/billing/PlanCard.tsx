@@ -4,107 +4,40 @@ import { Check, Crown, Zap, Gift } from 'lucide-react';
 import type { BillingPlan } from '@/types/database';
 
 export interface PlanCardProps {
-  plan?: 'FREE' | 'MONTHLY' | 'YEARLY';
-  billingPlan?: BillingPlan;
+  billingPlan: BillingPlan;
   isSelected?: boolean;
   isDisabled?: boolean;
   onSelect?: () => void;
   isCurrent?: boolean;
 }
 
-const DEFAULT_CONFIGS: Record<string, {
-  name: string;
-  price: string;
-  period: string;
-  description: string;
-  features: string[];
-  Icon: any;
-  borderClass: string;
-  bgClass: string;
-  accentClass: string;
-}> = {
-  FREE: {
-    name: 'Free',
-    price: '₹0',
-    period: '',
-    description: 'Assigned by Super Admin only.',
-    features: ['Google Form generation', 'Google Sheet integration', 'Basic analytics'],
-    Icon: Gift,
-    borderClass: 'border-slate-200 hover:border-slate-300',
-    bgClass: 'bg-white',
-    accentClass: 'text-slate-500',
-  },
-  MONTHLY: {
-    name: 'Monthly',
-    price: '₹2,999',
-    period: '/month',
-    description: 'Pay monthly, cancel anytime.',
-    features: ['Google Form generation', 'Google Sheet integration', 'Full analytics access', 'Priority support'],
-    Icon: Zap,
-    borderClass: 'border-blue-200 hover:border-blue-400',
-    bgClass: 'bg-white',
-    accentClass: 'text-blue-600',
-  },
-  YEARLY: {
-    name: 'Yearly',
-    price: '₹29,999',
-    period: '/year',
-    description: 'Best value — save over ₹5,900/year.',
-    features: ['Google Form generation', 'Google Sheet integration', 'Full analytics access', 'Priority support', '2 months free'],
-    Icon: Crown,
-    borderClass: 'border-amber-300 hover:border-amber-500',
-    bgClass: 'bg-amber-50/30',
-    accentClass: 'text-amber-600',
-  },
-};
+export function PlanCard({ billingPlan, isSelected, isDisabled, onSelect, isCurrent }: PlanCardProps) {
+  // Derive card UI dynamically from DB-driven billingPlan
+  const name = billingPlan.name;
+  const priceStr = `₹${billingPlan.price.toLocaleString('en-IN')}`;
+  const duration = billingPlan.duration_days ?? 0;
+  const period = duration > 0 ? `/ ${duration} days` : '';
+  const description = billingPlan.description || '';
+  const features = billingPlan.features || [];
+  const isRecommended = !!billingPlan.is_recommended;
 
-export function PlanCard({ plan, billingPlan, isSelected, isDisabled, onSelect, isCurrent }: PlanCardProps) {
-  // If a DB-driven billingPlan object is provided, derive card UI dynamically
-  let name = '';
-  let priceStr = '';
-  let period = '';
-  let description = '';
-  let features: string[] = [];
   let Icon = Zap;
   let borderClass = 'border-slate-200 hover:border-slate-300';
   let bgClass = 'bg-white';
   let accentClass = 'text-slate-600';
-  let isRecommended = false;
 
-  if (billingPlan) {
-    name = billingPlan.name;
-    priceStr = `₹${billingPlan.price.toLocaleString('en-IN')}`;
-    const duration = billingPlan.duration_days ?? 0;
-    period = duration > 0 ? `/ ${duration} days` : '';
-    description = billingPlan.description || '';
-    features = billingPlan.features || [];
-    isRecommended = !!billingPlan.is_recommended;
-
-    if (billingPlan.name.toUpperCase().includes('FREE') || billingPlan.price === 0) {
-      Icon = Gift;
-      accentClass = 'text-slate-500';
-    } else if (billingPlan.billing_interval === 'YEARLY' || duration >= 365) {
-      Icon = Crown;
-      borderClass = 'border-amber-300 hover:border-amber-500';
-      bgClass = 'bg-amber-50/30';
-      accentClass = 'text-amber-600';
-    } else {
-      Icon = Zap;
-      borderClass = 'border-blue-200 hover:border-blue-400';
-      accentClass = 'text-blue-600';
-    }
-  } else if (plan && DEFAULT_CONFIGS[plan]) {
-    const config = DEFAULT_CONFIGS[plan];
-    name = config.name;
-    priceStr = config.price;
-    period = config.period;
-    description = config.description;
-    features = config.features;
-    Icon = config.Icon;
-    borderClass = config.borderClass;
-    bgClass = config.bgClass;
-    accentClass = config.accentClass;
-    if (plan === 'YEARLY') isRecommended = true;
+  if (billingPlan.name.toUpperCase().includes('FREE') || billingPlan.price === 0) {
+    Icon = Gift;
+    accentClass = 'text-slate-500';
+  } else if (billingPlan.billing_interval === 'YEARLY' || duration >= 365) {
+    Icon = Crown;
+    borderClass = 'border-amber-300 hover:border-amber-500';
+    bgClass = 'bg-amber-50/30';
+    accentClass = 'text-amber-600';
+  } else {
+    Icon = Zap;
+    borderClass = 'border-blue-200 hover:border-blue-400';
+    accentClass = 'text-blue-600';
   }
 
   return (

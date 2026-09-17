@@ -5,7 +5,7 @@ import { Lock } from 'lucide-react';
 import { getMyBillingStatusAction } from '@/app/admin/billing/actions';
 import { PaymentRequestForm } from './PaymentRequestForm';
 import { ActivePlanBadge } from './ActivePlanBadge';
-import type { BillingStatus } from '@/lib/billing/access-control';
+import { planHasFeature, FEATURE_GOOGLE_FORM_GENERATION, type BillingStatus } from '@/lib/billing/constants';
 import type { PaymentRequest } from '@/types/database';
 
 interface FormAccessGateProps {
@@ -45,14 +45,22 @@ export function FormAccessGate({ children, isSuperAdmin }: FormAccessGateProps) 
     );
   }
 
-  // Super Admin or UNLOCKED admin: show the form generation UI
-  if (isSuperAdmin || billing?.isUnlocked) {
+  // Super Admin or admin whose effective features include Google Form generation (via trial or paid plan)
+  const hasFormGen = isSuperAdmin || (billing?.features && planHasFeature(billing.features, FEATURE_GOOGLE_FORM_GENERATION));
+
+  if (isSuperAdmin || hasFormGen) {
     return (
       <div>
         {/* Small plan badge for unlocked admins */}
         {!isSuperAdmin && billing && (
           <div className="mb-4">
-            <ActivePlanBadge planType={billing.planType} expiresAt={billing.expiresAt} />
+            <ActivePlanBadge
+              planType={billing.planType}
+              expiresAt={billing.expiresAt}
+              hasActiveTrial={billing.hasActiveTrial}
+              trialExpiresAt={billing.trialExpiresAt}
+              trialDaysRemaining={billing.trialDaysRemaining}
+            />
           </div>
         )}
         {children}
@@ -60,7 +68,7 @@ export function FormAccessGate({ children, isSuperAdmin }: FormAccessGateProps) 
     );
   }
 
-  // LOCKED admin: show pricing and payment form
+  // Admin without Google Form generation entitlement: show upgrade / payment form
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       {/* Header */}
@@ -72,7 +80,7 @@ export function FormAccessGate({ children, isSuperAdmin }: FormAccessGateProps) 
           <div>
             <h2 className="text-lg font-bold text-white">Form Generation Locked</h2>
             <p className="text-xs text-slate-300">
-              Choose a plan to unlock Google Form generation access.
+              Google Form generation is not included in the FREE base plan. Request a Free Trial from the Super Admin or upgrade to a subscription plan below.
             </p>
           </div>
         </div>

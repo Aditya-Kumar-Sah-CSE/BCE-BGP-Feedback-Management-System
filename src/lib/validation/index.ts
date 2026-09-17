@@ -165,3 +165,38 @@ export const updateBillingPlanSchema = createBillingPlanSchema.partial().extend(
 
 export type UpdateBillingPlanInput = z.infer<typeof updateBillingPlanSchema>;
 
+// ====================================================================
+// TRIAL MANAGEMENT SCHEMAS (Super Admin only)
+// ====================================================================
+
+export const grantTrialSchema = z.object({
+  adminId: z.string().uuid('Admin ID must be a valid UUID'),
+  durationDays: z.number().int().min(1, 'Duration must be at least 1 day').max(365, 'Duration cannot exceed 365 days'),
+  startsAt: z.string().datetime({ offset: true }).optional().or(z.string().datetime().optional()),
+  features: z.array(z.string().trim().min(1)).min(1, 'At least one feature must be selected'),
+  note: z.string().trim().max(500, 'Note cannot exceed 500 characters').optional().nullable(),
+});
+
+export type GrantTrialInput = z.infer<typeof grantTrialSchema>;
+
+export const extendTrialSchema = z.object({
+  trialId: z.string().uuid('Trial ID must be a valid UUID'),
+  additionalDays: z.number().int().min(1, 'Additional days must be at least 1').max(365, 'Cannot extend beyond 365 days').optional(),
+  newExpiresAt: z.string().datetime({ offset: true }).optional().or(z.string().datetime().optional()),
+  note: z.string().trim().max(500, 'Note cannot exceed 500 characters').optional().nullable(),
+}).refine(data => data.additionalDays !== undefined || data.newExpiresAt !== undefined, {
+  message: 'Either additional days or a new expiry date must be provided',
+});
+
+export type ExtendTrialInput = z.infer<typeof extendTrialSchema>;
+
+export const revokeTrialSchema = z.object({
+  trialId: z.string().uuid('Trial ID must be a valid UUID'),
+  reason: z.string().trim().max(500, 'Reason cannot exceed 500 characters').optional().nullable(),
+});
+
+export type RevokeTrialInput = z.infer<typeof revokeTrialSchema>;
+
+export const replaceTrialSchema = grantTrialSchema;
+export type ReplaceTrialInput = GrantTrialInput;
+

@@ -186,7 +186,7 @@ export async function createBillingPlanAction(input: {
   }
 
   await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email },
-    'BILLING_PLAN_CREATED', 'billing_plans', newPlan.id,
+    'PLAN_CREATED', 'billing_plans', newPlan.id,
     `Created billing plan: ${v.name} (${slug}), ₹${v.price}, interval: ${v.billingInterval}`);
 
   revalidatePath('/admin/dashboard');
@@ -278,7 +278,7 @@ export async function updateBillingPlanAction(input: {
     .join(', ');
 
   await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email },
-    'BILLING_PLAN_UPDATED', 'billing_plans', v.id,
+    'PLAN_UPDATED', 'billing_plans', v.id,
     `Updated plan "${existingPlan.name}": ${changes}`);
 
   revalidatePath('/admin/dashboard');
@@ -321,7 +321,7 @@ export async function toggleBillingPlanAction(planId: string, isActive: boolean)
   }
 
   await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email },
-    isActive ? 'BILLING_PLAN_ENABLED' : 'BILLING_PLAN_DISABLED',
+    isActive ? 'PLAN_ENABLED' : 'PLAN_DISABLED',
     'billing_plans', planId,
     `${isActive ? 'Enabled' : 'Disabled'} billing plan: ${plan.name} (${plan.slug})`);
 
@@ -411,7 +411,7 @@ export async function deleteBillingPlanAction(planId: string) {
   }
 
   await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email },
-    'BILLING_PLAN_DELETED', 'billing_plans', planId,
+    'PLAN_DELETED', 'billing_plans', planId,
     `Deleted billing plan: ${plan.name} (${plan.slug})`);
 
   revalidatePath('/admin/dashboard');

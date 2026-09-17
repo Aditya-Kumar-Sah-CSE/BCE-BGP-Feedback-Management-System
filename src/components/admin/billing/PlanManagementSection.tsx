@@ -61,11 +61,11 @@ export function PlanManagementSection() {
     setEditingPlan(null);
     setName('');
     setDescription('');
-    setPrice('2999');
+    setPrice('');
     setCurrency('INR');
     setBillingInterval('MONTHLY');
-    setDurationDays('30');
-    setFeaturesText('Google Form generation\nGoogle Sheet integration\nFull analytics access');
+    setDurationDays('');
+    setFeaturesText('');
     setIsRecommended(false);
     setIsActive(true);
     setDisplayOrder(String((plans.length + 1) * 10));

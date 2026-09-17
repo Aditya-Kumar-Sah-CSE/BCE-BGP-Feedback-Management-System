@@ -18,6 +18,10 @@ import {
   CreditCard,
   Phone,
   Save,
+  Sparkles,
+  TrendingUp,
+  ShieldX,
+  History,
 } from 'lucide-react';
 import {
   getAdminBillingOverviewAction,
@@ -32,14 +36,12 @@ import {
   getPaymentSettingsAction,
 } from '@/app/admin/billing/actions';
 import { PlanManagementSection } from '@/components/admin/billing/PlanManagementSection';
-import type { PaymentSettings, Admin } from '@/types/database';
-
-interface BillingOverviewItem {
-  admin: Admin;
-  billing: any;
-  latestPaymentRequest: any;
-  paymentRequests: any[];
-}
+import { GrantTrialModal } from '@/components/admin/billing/GrantTrialModal';
+import { ExtendTrialModal } from '@/components/admin/billing/ExtendTrialModal';
+import { RevokeTrialModal } from '@/components/admin/billing/RevokeTrialModal';
+import { TrialHistoryModal } from '@/components/admin/billing/TrialHistoryModal';
+import { ReplaceTrialModal } from '@/components/admin/billing/ReplaceTrialModal';
+import type { PaymentSettings, Admin, AdminTrialEntitlement, BillingOverviewItem } from '@/types/database';
 
 export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: string }) {
   const [data, setData] = useState<BillingOverviewItem[]>([]);
@@ -56,6 +58,13 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
     upiId: '', accountName: '', bankName: '', accountNumber: '', ifscCode: '', supportPhone: '9470870830', paymentInstructions: '',
   });
   const [savingSettings, setSavingSettings] = useState(false);
+
+  // Free Trial Modal states
+  const [trialModalAdmin, setTrialModalAdmin] = useState<Admin | null>(null);
+  const [extendModalData, setExtendModalData] = useState<{ admin: Admin; trial: AdminTrialEntitlement } | null>(null);
+  const [revokeModalData, setRevokeModalData] = useState<{ admin: Admin; trial: AdminTrialEntitlement } | null>(null);
+  const [replaceModalData, setReplaceModalData] = useState<{ admin: Admin; currentTrial?: AdminTrialEntitlement | null } | null>(null);
+  const [historyModalAdmin, setHistoryModalAdmin] = useState<Admin | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -126,6 +135,7 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
     const map: Record<string, string> = {
       FREE: 'bg-slate-100 text-slate-600',
       MONTHLY: 'bg-blue-100 text-blue-700',
+      HALF_YEARLY: 'bg-indigo-100 text-indigo-700',
       YEARLY: 'bg-amber-100 text-amber-700',
     };
     return <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${map[plan] || 'bg-slate-100 text-slate-600'}`}>{plan}</span>;
@@ -162,10 +172,10 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
           <p className="text-xs text-slate-500 mt-0.5">{data.length} admins total</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowSettings(!showSettings)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition">
+          <button onClick={() => setShowSettings(!showSettings)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer">
             Payment Settings
           </button>
-          <button onClick={loadData} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition">
+          <button onClick={loadData} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer">
             <RefreshCw className="w-3.5 h-3.5" />
             Refresh
           </button>
@@ -217,7 +227,7 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
             <label className="block text-xs text-slate-600 mb-1 font-medium">Payment Instructions</label>
             <textarea value={settingsForm.paymentInstructions} onChange={e => setSettingsForm(s => ({ ...s, paymentInstructions: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-bce-cobalt/20 h-20 resize-none" />
           </div>
-          <button onClick={handleSaveSettings} disabled={savingSettings} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-bce-cobalt text-white text-sm font-medium hover:bg-bce-navy transition disabled:opacity-50">
+          <button onClick={handleSaveSettings} disabled={savingSettings} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-bce-cobalt text-white text-sm font-medium hover:bg-bce-navy transition disabled:opacity-50 cursor-pointer">
             {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save Settings
           </button>
@@ -226,7 +236,7 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
 
       {/* Confirmation Dialog */}
       {confirmAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4">
             <div className="flex items-center gap-2 text-amber-600">
               <AlertTriangle className="w-5 h-5" />
@@ -242,7 +252,7 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
               </div>
             )}
             <div className="flex gap-2 justify-end">
-              <button onClick={() => { setConfirmAction(null); setRejectionReason(''); }} className="px-4 py-2 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Cancel</button>
+              <button onClick={() => { setConfirmAction(null); setRejectionReason(''); }} className="px-4 py-2 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer">Cancel</button>
               <button
                 onClick={() => {
                   if (confirmAction.type === 'APPROVE' && confirmAction.requestId) {
@@ -259,7 +269,7 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
                     executeAction(() => revokeFormAccessAction(confirmAction.adminId));
                   }
                 }}
-                className="px-4 py-2 text-xs font-medium rounded-lg bg-bce-cobalt text-white hover:bg-bce-navy"
+                className="px-4 py-2 text-xs font-medium rounded-lg bg-bce-cobalt text-white hover:bg-bce-navy cursor-pointer"
               >
                 Confirm
               </button>
@@ -270,11 +280,11 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
 
       {/* Proof Viewer */}
       {proofUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setProofUrl(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs" onClick={() => setProofUrl(null)}>
           <div className="bg-white rounded-2xl p-4 max-w-lg w-full shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-sm font-semibold text-slate-800">Payment Proof</h3>
-              <button onClick={() => setProofUrl(null)} className="text-xs text-slate-400 hover:text-slate-600">Close</button>
+              <button onClick={() => setProofUrl(null)} className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer">Close</button>
             </div>
             <Image src={proofUrl} alt="Payment proof" className="w-full rounded-lg border border-slate-200 max-h-96 object-contain" width={500} height={400} unoptimized />
           </div>
@@ -282,14 +292,15 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
       )}
 
       {/* Admin Billing Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="text-left px-4 py-3 font-semibold text-slate-600">Admin</th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-600">Access</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Plan</th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-600">Billing Plan</th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-600">Trial</th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-600">Payment</th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-600">Valid Until</th>
                 <th className="text-right px-4 py-3 font-semibold text-slate-600">Actions</th>
@@ -303,9 +314,11 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
                 const accessStatus = item.billing?.access_status || 'LOCKED';
                 const planType = item.billing?.plan_type || 'FREE';
                 const latestReq = item.latestPaymentRequest;
+                const activeTrial = item.activeTrial;
 
                 return (
                   <tr key={item.admin.id} className={`${isExpanded ? 'bg-slate-50/50' : 'hover:bg-slate-50/50'} transition-colors`}>
+                    {/* 1. Admin Info */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div>
@@ -317,6 +330,8 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
                         </div>
                       </div>
                     </td>
+
+                    {/* 2. Access Status */}
                     <td className="px-4 py-3">
                       {isSuperAdminRow ? (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-amber-100 text-amber-700">Always Unlocked</span>
@@ -324,9 +339,54 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
                         getStatusBadge(accessStatus)
                       )}
                     </td>
+
+                    {/* 3. Billing Plan */}
                     <td className="px-4 py-3">
                       {getPlanBadge(planType)}
                     </td>
+
+                    {/* 4. Trial Entitlement Status */}
+                    <td className="px-4 py-3">
+                      {isSuperAdminRow ? (
+                        <span className="text-slate-300 font-mono">—</span>
+                      ) : activeTrial ? (() => {
+                        const diffMs = new Date(activeTrial.expires_at).getTime() - new Date().getTime();
+                        const daysLeft = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+                        return (
+                          <div className="space-y-0.5">
+                            <span
+                              title={`Valid until ${new Date(activeTrial.expires_at).toLocaleDateString('en-IN')}. Features: ${activeTrial.features?.join(', ')}`}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs"
+                            >
+                              <Sparkles className="w-3 h-3 text-emerald-600" />
+                              TRIAL — {daysLeft}d left
+                            </span>
+                            <p className="text-[10px] text-slate-400">
+                              Until {new Date(activeTrial.expires_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                            </p>
+                          </div>
+                        );
+                      })() : (() => {
+                        const latestTrial = item.trialHistory && item.trialHistory[0];
+                        if (latestTrial?.status === 'EXPIRED') {
+                          return (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                              EXPIRED
+                            </span>
+                          );
+                        }
+                        if (latestTrial?.status === 'REVOKED') {
+                          return (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-red-50 text-red-700 border border-red-200">
+                              REVOKED
+                            </span>
+                          );
+                        }
+                        return <span className="text-slate-300">—</span>;
+                      })()}
+                    </td>
+
+                    {/* 5. Payment Status */}
                     <td className="px-4 py-3">
                       {latestReq ? (
                         <div className="space-y-0.5">
@@ -337,36 +397,74 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
+
+                    {/* 6. Valid Until */}
                     <td className="px-4 py-3">
                       {item.billing?.expires_at ? (
                         <span className={`text-[11px] ${new Date(item.billing.expires_at) < new Date() ? 'text-red-500 font-semibold' : 'text-slate-600'}`}>
                           {new Date(item.billing.expires_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </span>
                       ) : planType === 'FREE' && accessStatus === 'UNLOCKED' ? (
-                        <span className="text-[11px] text-emerald-600">No Expiry</span>
+                        <span className="text-[11px] text-emerald-600 font-medium">No Expiry</span>
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
+
+                    {/* 7. Actions */}
                     <td className="px-4 py-3 text-right">
                       {isSuperAdminRow ? (
-                        <span className="text-[10px] text-slate-400">Protected</span>
+                        <span className="text-[10px] text-slate-400 font-medium">Protected</span>
                       ) : (
-                        <div className="flex items-center gap-1 justify-end flex-wrap">
+                        <div className="flex items-center gap-1.5 justify-end flex-wrap">
+                          {/* Free Trial Actions */}
+                          {!activeTrial ? (
+                            <button
+                              onClick={() => setTrialModalAdmin(item.admin)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 transition cursor-pointer shadow-2xs"
+                            >
+                              <Sparkles className="w-3 h-3 text-teal-600" /> Grant Trial
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => setExtendModalData({ admin: item.admin, trial: activeTrial })}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition cursor-pointer"
+                              >
+                                <TrendingUp className="w-3 h-3 text-blue-600" /> Extend
+                              </button>
+                              <button
+                                onClick={() => setRevokeModalData({ admin: item.admin, trial: activeTrial })}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 transition cursor-pointer"
+                              >
+                                <ShieldX className="w-3 h-3 text-red-600" /> Revoke
+                              </button>
+                            </>
+                          )}
+
+                          {/* View Trial History */}
+                          <button
+                            onClick={() => setHistoryModalAdmin(item.admin)}
+                            title="View Free Trial History"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+                          >
+                            <History className="w-3 h-3 text-slate-500" /> Trials
+                          </button>
+
                           {/* Approve/Reject pending requests */}
                           {latestReq?.status === 'PENDING' && (
                             <>
                               <button
                                 disabled={!!actionLoading}
                                 onClick={() => setConfirmAction({ type: 'APPROVE', adminId: item.admin.id, adminEmail: item.admin.email, requestId: latestReq.id })}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition disabled:opacity-50 cursor-pointer"
                               >
                                 <CheckCircle2 className="w-3 h-3" /> Approve
                               </button>
                               <button
                                 disabled={!!actionLoading}
                                 onClick={() => setConfirmAction({ type: 'REJECT', adminId: item.admin.id, adminEmail: item.admin.email, requestId: latestReq.id })}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-red-100 text-red-700 hover:bg-red-200 transition disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-red-100 text-red-700 hover:bg-red-200 transition disabled:opacity-50 cursor-pointer"
                               >
                                 <XCircle className="w-3 h-3" /> Reject
                               </button>
@@ -376,27 +474,27 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
                           {/* View proof */}
                           {latestReq?.payment_proof_url && (
                             <button
-                              onClick={() => handleViewProof(latestReq.payment_proof_url)}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
+                              onClick={() => handleViewProof(latestReq.payment_proof_url!)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition cursor-pointer"
                             >
                               <Eye className="w-3 h-3" /> Proof
                             </button>
                           )}
 
-                          {/* Quick actions */}
+                          {/* Quick access status toggle */}
                           {accessStatus === 'LOCKED' && !isOwnRow && (
                             <>
                               <button
                                 disabled={!!actionLoading}
                                 onClick={() => setConfirmAction({ type: 'UNLOCK', adminId: item.admin.id, adminEmail: item.admin.email })}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition disabled:opacity-50 cursor-pointer"
                               >
                                 <Unlock className="w-3 h-3" /> Unlock
                               </button>
                               <button
                                 disabled={!!actionLoading}
                                 onClick={() => setConfirmAction({ type: 'ASSIGN_FREE', adminId: item.admin.id, adminEmail: item.admin.email })}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition disabled:opacity-50 cursor-pointer"
                               >
                                 <Gift className="w-3 h-3" /> Free
                               </button>
@@ -408,14 +506,14 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
                               <button
                                 disabled={!!actionLoading}
                                 onClick={() => setConfirmAction({ type: 'LOCK', adminId: item.admin.id, adminEmail: item.admin.email })}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition disabled:opacity-50 cursor-pointer"
                               >
                                 <Lock className="w-3 h-3" /> Lock
                               </button>
                               <button
                                 disabled={!!actionLoading}
                                 onClick={() => setConfirmAction({ type: 'REVOKE', adminId: item.admin.id, adminEmail: item.admin.email })}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-red-100 text-red-700 hover:bg-red-200 transition disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-red-100 text-red-700 hover:bg-red-200 transition disabled:opacity-50 cursor-pointer"
                               >
                                 <XCircle className="w-3 h-3" /> Revoke
                               </button>
@@ -425,10 +523,10 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
                           {/* Expand history */}
                           <button
                             onClick={() => setExpandedAdmin(isExpanded ? null : item.admin.id)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition cursor-pointer"
                           >
                             {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                            History
+                            Payments
                           </button>
                         </div>
                       )}
@@ -444,11 +542,11 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
         {expandedAdmin && (() => {
           const item = data.find(d => d.admin.id === expandedAdmin);
           if (!item || !item.paymentRequests.length) return (
-            <div className="border-t border-slate-200 p-4 text-xs text-slate-400">No payment history.</div>
+            <div className="border-t border-slate-200 p-4 text-xs text-slate-400">No payment history recorded.</div>
           );
           return (
             <div className="border-t border-slate-200 bg-slate-50/50 p-4">
-              <h4 className="text-xs font-semibold text-slate-700 mb-2">Payment History — {item.admin.email}</h4>
+              <h4 className="text-xs font-semibold text-slate-700 mb-2">Payment Submissions — {item.admin.email}</h4>
               <div className="space-y-2">
                 {item.paymentRequests.map((req: any) => (
                   <div key={req.id} className="flex items-center justify-between bg-white rounded-lg border border-slate-100 px-3 py-2 text-[11px]">
@@ -468,6 +566,71 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
           );
         })()}
       </div>
+
+      {/* Trial Modals */}
+      {trialModalAdmin && (
+        <GrantTrialModal
+          admin={trialModalAdmin}
+          isOpen={!!trialModalAdmin}
+          onClose={() => setTrialModalAdmin(null)}
+          onSuccess={() => {
+            setMessage({ text: `Free Trial granted to ${trialModalAdmin.email}.`, type: 'success' });
+            loadData();
+          }}
+          onOpenReplaceModal={() => {
+            const admin = trialModalAdmin;
+            const overviewItem = data.find(d => d.admin.id === admin.id);
+            setReplaceModalData({ admin, currentTrial: overviewItem?.activeTrial });
+          }}
+        />
+      )}
+
+      {extendModalData && (
+        <ExtendTrialModal
+          admin={extendModalData.admin}
+          trial={extendModalData.trial}
+          isOpen={!!extendModalData}
+          onClose={() => setExtendModalData(null)}
+          onSuccess={() => {
+            setMessage({ text: `Trial extended for ${extendModalData.admin.email}.`, type: 'success' });
+            loadData();
+          }}
+        />
+      )}
+
+      {revokeModalData && (
+        <RevokeTrialModal
+          admin={revokeModalData.admin}
+          trial={revokeModalData.trial}
+          isOpen={!!revokeModalData}
+          onClose={() => setRevokeModalData(null)}
+          onSuccess={() => {
+            setMessage({ text: `Trial revoked for ${revokeModalData.admin.email}.`, type: 'success' });
+            loadData();
+          }}
+        />
+      )}
+
+      {replaceModalData && (
+        <ReplaceTrialModal
+          admin={replaceModalData.admin}
+          currentTrial={replaceModalData.currentTrial}
+          isOpen={!!replaceModalData}
+          onClose={() => setReplaceModalData(null)}
+          onSuccess={() => {
+            setMessage({ text: `Trial replaced for ${replaceModalData.admin.email}.`, type: 'success' });
+            loadData();
+          }}
+        />
+      )}
+
+      {historyModalAdmin && (
+        <TrialHistoryModal
+          admin={historyModalAdmin}
+          isOpen={!!historyModalAdmin}
+          onClose={() => setHistoryModalAdmin(null)}
+        />
+      )}
     </div>
   );
 }

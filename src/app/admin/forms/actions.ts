@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAdminSession } from '@/lib/auth/admin-auth';
-import { assertFormGenerationAccess } from '@/lib/billing/access-control';
+import { assertFormGenerationAccess, assertSheetIntegrationAccess } from '@/lib/billing/access-control';
 
 async function getAdminDb() {
   return createAdminClient() || await createClient();
@@ -888,6 +888,21 @@ export async function syncFormResponsesAction(formId: string) {
   if (!session.isAuthenticated || !session.isActive) {
     return { success: false, error: 'Unauthorized. Active admin session required.' };
   }
+
+  // ─── BILLING ACCESS GATE: Sheet integration & sync management ───
+  const accessResult = await assertSheetIntegrationAccess(
+    session.admin?.id,
+    session.admin?.email || session.user?.email,
+    session.admin?.role,
+    session.admin?.status,
+  );
+  if (!accessResult.allowed) {
+    return {
+      success: false,
+      error: accessResult.reason || 'Google Sheet integration is required to manage response synchronization.',
+    };
+  }
+  // ────────────────────────────────────────────────────────────────
 
   if (!isValidUUID(formId)) {
     return { success: false, error: 'Invalid feedback form identifier format.' };

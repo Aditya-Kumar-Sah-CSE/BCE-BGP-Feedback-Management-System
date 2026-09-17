@@ -698,8 +698,18 @@ export async function getAdminBillingOverviewAction() {
     .select('*')
     .order('created_at', { ascending: false });
 
+  const { data: trialRecords } = await supabase
+    .from('admin_trial_entitlements')
+    .select(`
+      *,
+      granter:admins!admin_trial_entitlements_granted_by_fkey(id, email, name),
+      revoker:admins!admin_trial_entitlements_revoked_by_fkey(id, email, name)
+    `)
+    .order('created_at', { ascending: false });
+
   const billingMap = new Map((billingRecords || []).map((b: any) => [b.admin_user_id, b]));
   const requestsMap = new Map<string, any[]>();
+  const trialsMap = new Map<string, any[]>();
 
   for (const req of (paymentRequests || []) as any[]) {
     if (!requestsMap.has(req.admin_user_id)) {
@@ -708,16 +718,33 @@ export async function getAdminBillingOverviewAction() {
     requestsMap.get(req.admin_user_id)!.push(req);
   }
 
+  for (const trial of (trialRecords || []) as any[]) {
+    if (!trialsMap.has(trial.admin_id)) {
+      trialsMap.set(trial.admin_id, []);
+    }
+    trialsMap.get(trial.admin_id)!.push(trial);
+  }
+
+  const now = new Date();
+
   const overview = admins.map((admin: any) => {
     const billing = billingMap.get(admin.id) as AdminBillingAccount | undefined;
     const requests = (requestsMap.get(admin.id) || []) as PaymentRequest[];
     const latestRequest = requests[0] || null;
+    const adminTrials = (trialsMap.get(admin.id) || []) as any[];
+
+    // Active trial: status = ACTIVE, starts_at <= now, now < expires_at
+    const activeTrial = adminTrials.find(
+      (t) => t.status === 'ACTIVE' && new Date(t.starts_at) <= now && new Date(t.expires_at) > now
+    ) || null;
 
     return {
       admin,
       billing: billing || null,
       latestPaymentRequest: latestRequest,
       paymentRequests: requests,
+      activeTrial,
+      trialHistory: adminTrials,
     };
   });
 

@@ -6,7 +6,7 @@ import { Lock, ArrowLeft, BarChart3 } from 'lucide-react';
 import { getMyBillingStatusAction } from '@/app/admin/billing/actions';
 import { PaymentRequestForm } from './PaymentRequestForm';
 import { ActivePlanBadge } from './ActivePlanBadge';
-import type { BillingStatus } from '@/lib/billing/access-control';
+import type { BillingStatus } from '@/lib/billing/constants';
 import type { PaymentRequest } from '@/types/database';
 
 interface AnalyticsAccessGateProps {
@@ -58,7 +58,13 @@ export function AnalyticsAccessGate({
         <div>
           {!isSuperAdmin && billing && (
             <div className="mb-4">
-              <ActivePlanBadge planType={billing.planType} expiresAt={billing.expiresAt} />
+              <ActivePlanBadge
+                planType={billing.planType}
+                expiresAt={billing.expiresAt}
+                hasActiveTrial={billing.hasActiveTrial}
+                trialExpiresAt={billing.trialExpiresAt}
+                trialDaysRemaining={billing.trialDaysRemaining}
+              />
             </div>
           )}
           {children}

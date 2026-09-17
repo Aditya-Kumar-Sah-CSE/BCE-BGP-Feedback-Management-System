@@ -16,6 +16,7 @@ import {
   BarChart3,
   AlertCircle,
   CreditCard,
+  Lock,
 } from 'lucide-react';
 import type {
   AcademicYear,
@@ -78,6 +79,12 @@ const BillingManagementTab = dynamic(
     loading: () => <TabLoadingSkeleton title="Billing & Access" />,
   }
 );
+const AdminMyBillingTab = dynamic(
+  () => import('./tabs/AdminMyBillingTab').then((mod) => mod.AdminMyBillingTab),
+  {
+    loading: () => <TabLoadingSkeleton title="Billing & Subscription" />,
+  }
+);
 
 interface Props {
   academicYears: AcademicYear[];
@@ -91,6 +98,7 @@ interface Props {
   feedbackForms: FeedbackForm[];
   auditLogs: AuditLog[];
   isSuperAdmin: boolean;
+  hasFullAnalytics?: boolean;
   currentUserEmail: string;
   counts?: DashboardCounts;
   adminReqError?: string | null;
@@ -108,6 +116,7 @@ export function AdminDashboardTabs({
   feedbackForms,
   auditLogs,
   isSuperAdmin,
+  hasFullAnalytics = false,
   currentUserEmail,
   counts,
   adminReqError,
@@ -139,7 +148,11 @@ export function AdminDashboardTabs({
     { id: 'academic', label: 'Academic Structure', icon: GraduationCap },
     { id: 'forms', label: 'Feedback Forms', icon: FileSpreadsheet },
     { id: 'audit', label: 'Audit Trail', icon: Activity },
-    ...(isSuperAdmin ? [{ id: 'billing', label: 'Billing & Access', icon: CreditCard }] : []),
+    {
+      id: 'billing',
+      label: isSuperAdmin ? 'Billing & Access' : 'Billing & Plan',
+      icon: CreditCard,
+    },
   ];
 
   return (
@@ -198,16 +211,32 @@ export function AdminDashboardTabs({
           );
         })}
 
-        <Link
-          href="/admin/dashboard/results"
-          className="relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-700 hover:text-slate-950 hover:bg-amber-50/80 border border-amber-200/70 transition-all shrink-0 whitespace-nowrap md:ml-auto"
-        >
-          <BarChart3 className="w-4 h-4 text-bce-cobalt shrink-0" />
-          <span>Results & Analytics Hub</span>
-          <span className="text-[10px] font-extrabold uppercase bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-full shadow-2xs">
-            Phase 4
-          </span>
-        </Link>
+        {/* Results & Analytics Button: Full Access vs Locked Gate */}
+        {hasFullAnalytics || isSuperAdmin ? (
+          <Link
+            href="/admin/dashboard/results"
+            className="relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-700 hover:text-slate-950 hover:bg-amber-50/80 border border-amber-200/70 transition-all shrink-0 whitespace-nowrap md:ml-auto"
+          >
+            <BarChart3 className="w-4 h-4 text-bce-cobalt shrink-0" />
+            <span>Results & Analytics Hub</span>
+            <span className="text-[10px] font-extrabold uppercase bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-full shadow-2xs">
+              Phase 4
+            </span>
+          </Link>
+        ) : (
+          <Link
+            href="/admin/dashboard/results"
+            title="Full Analytics Access Required - Click to upgrade your plan"
+            className="relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 border border-amber-400/50 transition-all shrink-0 whitespace-nowrap md:ml-auto group"
+          >
+            <Lock className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform shrink-0" />
+            <BarChart3 className="w-4 h-4 text-slate-400 shrink-0" />
+            <span>Results & Analytics</span>
+            <span className="text-[10px] font-bold text-amber-900 bg-amber-200/80 px-1.5 py-0.5 rounded ml-0.5 uppercase tracking-wider">
+              Locked
+            </span>
+          </Link>
+        )}
       </div>
 
       {/* Tab Panels */}
@@ -267,8 +296,12 @@ export function AdminDashboardTabs({
           <AuditLogsTab auditLogs={auditLogs} />
         )}
 
-        {activeTab === 'billing' && isSuperAdmin && (
-          <BillingManagementTab currentUserEmail={currentUserEmail} />
+        {activeTab === 'billing' && (
+          isSuperAdmin ? (
+            <BillingManagementTab currentUserEmail={currentUserEmail} />
+          ) : (
+            <AdminMyBillingTab />
+          )
         )}
       </div>
     </div>

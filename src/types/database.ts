@@ -258,3 +258,37 @@ export interface BillingPlan {
   updated_at: string;
 }
 
+// ====================================================================
+// TRIAL ENTITLEMENT TYPES
+// ====================================================================
+
+export type TrialStatus = 'ACTIVE' | 'EXPIRED' | 'REVOKED';
+
+export interface AdminTrialEntitlement {
+  id: string;
+  admin_id: string;
+  granted_by: string;
+  starts_at: string;
+  expires_at: string;
+  status: TrialStatus;
+  features: string[];
+  note?: string | null;
+  revoked_at?: string | null;
+  revoked_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined relations
+  admin?: Admin;
+  granter?: Admin;
+  revoker?: Admin;
+}
+
+export interface BillingOverviewItem {
+  admin: Admin;
+  billing: AdminBillingAccount | null;
+  latestPaymentRequest: PaymentRequest | null;
+  paymentRequests: PaymentRequest[];
+  activeTrial?: AdminTrialEntitlement | null;
+  trialHistory?: AdminTrialEntitlement[];
+}
+
