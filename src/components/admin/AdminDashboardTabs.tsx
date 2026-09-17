@@ -17,6 +17,7 @@ import {
   AlertCircle,
   CreditCard,
   Lock,
+  Loader2,
 } from 'lucide-react';
 import type {
   AcademicYear,
@@ -122,6 +123,7 @@ export function AdminDashboardTabs({
   adminReqError,
 }: Props) {
   const [activeTab, setActiveTab] = useState<'overview' | 'admins' | 'academic' | 'forms' | 'audit' | 'billing'>('overview');
+  const [isNavigatingToResults, setIsNavigatingToResults] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
@@ -194,16 +196,16 @@ export function AdminDashboardTabs({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 whitespace-nowrap cursor-pointer ${
+              className={`relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shrink-0 whitespace-nowrap cursor-pointer select-none active:scale-95 ${
                 isActive
-                  ? 'bg-bce-navy text-amber-400 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-bce-navy text-amber-400 shadow-sm hover:bg-slate-900'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 hover:-translate-y-0.5'
               }`}
             >
-              <Icon className="w-4 h-4 shrink-0" />
+              <Icon className={`w-4 h-4 shrink-0 transition-transform duration-200 ${isActive ? 'scale-110' : ''}`} />
               <span>{tab.label}</span>
               {tab.badge !== undefined && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-amber-500 text-slate-950">
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-amber-500 text-slate-950 shadow-2xs">
                   {tab.badge}
                 </span>
               )}
@@ -215,23 +217,33 @@ export function AdminDashboardTabs({
         {hasFullAnalytics || isSuperAdmin ? (
           <Link
             href="/admin/dashboard/results"
-            className="relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-700 hover:text-slate-950 hover:bg-amber-50/80 border border-amber-200/70 transition-all shrink-0 whitespace-nowrap md:ml-auto"
+            onClick={() => setIsNavigatingToResults(true)}
+            className="group relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-800 hover:text-slate-950 bg-gradient-to-r from-amber-50 to-amber-100/80 hover:from-amber-100 hover:to-amber-200/90 border border-amber-300/80 hover:border-amber-400 shadow-2xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 active:translate-y-0 transition-all duration-200 shrink-0 whitespace-nowrap md:ml-auto cursor-pointer select-none"
           >
-            <BarChart3 className="w-4 h-4 text-bce-cobalt shrink-0" />
-            <span>Results & Analytics Hub</span>
-            <span className="text-[10px] font-extrabold uppercase bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-full shadow-2xs">
+            {isNavigatingToResults ? (
+              <Loader2 className="w-4 h-4 text-bce-cobalt animate-spin shrink-0" />
+            ) : (
+              <BarChart3 className="w-4 h-4 text-bce-cobalt group-hover:scale-110 transition-transform duration-200 shrink-0" />
+            )}
+            <span>{isNavigatingToResults ? 'Opening Hub...' : 'Results & Analytics Hub'}</span>
+            <span className="text-[10px] font-extrabold uppercase bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full shadow-2xs group-hover:bg-amber-500 transition-colors">
               Phase 4
             </span>
           </Link>
         ) : (
           <Link
             href="/admin/dashboard/results"
+            onClick={() => setIsNavigatingToResults(true)}
             title="Full Analytics Access Required - Click to upgrade your plan"
-            className="relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 border border-amber-400/50 transition-all shrink-0 whitespace-nowrap md:ml-auto group"
+            className="group relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 border border-amber-400/50 hover:border-amber-400 shadow-2xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 active:translate-y-0 transition-all duration-200 shrink-0 whitespace-nowrap md:ml-auto cursor-pointer select-none"
           >
             <Lock className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform shrink-0" />
-            <BarChart3 className="w-4 h-4 text-slate-400 shrink-0" />
-            <span>Results & Analytics</span>
+            {isNavigatingToResults ? (
+              <Loader2 className="w-4 h-4 text-slate-400 animate-spin shrink-0" />
+            ) : (
+              <BarChart3 className="w-4 h-4 text-slate-400 shrink-0" />
+            )}
+            <span>{isNavigatingToResults ? 'Opening Hub...' : 'Results & Analytics'}</span>
             <span className="text-[10px] font-bold text-amber-900 bg-amber-200/80 px-1.5 py-0.5 rounded ml-0.5 uppercase tracking-wider">
               Locked
             </span>

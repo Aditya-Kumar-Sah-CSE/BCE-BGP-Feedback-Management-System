@@ -231,15 +231,15 @@ export default async function FeedbackFormsPage({
         <div className="flex items-center gap-2">
           <Link
             href="/admin/dashboard"
-            className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
+            className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-100 hover:border-slate-400 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 active:translate-y-0 shadow-2xs hover:shadow-xs cursor-pointer select-none"
           >
             ← Admin Console
           </Link>
           <Link
             href="/admin/dashboard/forms/create"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold rounded-xl transition-colors shadow-xs"
+            className="group relative inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-bce-cobalt to-bce-navy hover:from-bce-navy hover:to-slate-900 text-white text-xs font-bold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-95 active:translate-y-0 cursor-pointer select-none"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-200" />
             <span>Generate Google Form</span>
           </Link>
         </div>
