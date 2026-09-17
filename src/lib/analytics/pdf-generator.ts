@@ -87,6 +87,10 @@ function drawFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number
   const pageWidth = 595.28;
   const pageHeight = 841.89; // A4 height
 
+  // Temporarily set bottom margin to 0 so PDFKit won't trigger autoPageBreak when drawing in footer area
+  const originalBottomMargin = doc.page.margins.bottom;
+  doc.page.margins.bottom = 0;
+
   doc
     .strokeColor(COLORS.border)
     .lineWidth(0.5)
@@ -113,6 +117,120 @@ function drawFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number
       width: 60,
       align: 'right',
     });
+
+  doc.page.margins.bottom = originalBottomMargin;
+}
+
+interface MetadataCell {
+  label: string;
+  value: string;
+}
+
+interface MetadataRow {
+  left: MetadataCell;
+  right: MetadataCell;
+}
+
+function measureMetadataCell(
+  doc: PDFKit.PDFDocument,
+  cell: MetadataCell,
+  width: number,
+  fontSize = 8.5,
+  lineGap = 1.5
+): number {
+  doc.fontSize(fontSize);
+  const text = cell.label + cell.value;
+  // Helvetica-Bold provides a safe upper bound on character advance widths
+  const boldH = doc.font('Helvetica-Bold').heightOfString(text, { width, lineGap });
+  const regH = doc.font('Helvetica').heightOfString(text, { width, lineGap });
+  return Math.max(boldH, regH);
+}
+
+/**
+ * Renders a structured 2-column metadata table/grid with dynamic row heights
+ * and automatic text wrapping to prevent any field collision.
+ */
+function renderMetadataGrid(
+  doc: PDFKit.PDFDocument,
+  startY: number,
+  contentWidth: number,
+  margin: number,
+  rows: MetadataRow[]
+): number {
+  const col1Width = contentWidth / 2;
+  const padX = 12;
+  const padY = 4.5;
+  const innerWidth = col1Width - padX * 2;
+  const fontSize = 8.5;
+  const lineGap = 1.5;
+
+  const rowHeights = rows.map(row => {
+    const leftH = measureMetadataCell(doc, row.left, innerWidth, fontSize, lineGap);
+    const rightH = measureMetadataCell(doc, row.right, innerWidth, fontSize, lineGap);
+    const contentH = Math.max(leftH, rightH);
+    return Math.max(contentH + padY * 2, 17);
+  });
+
+  const totalHeight = rowHeights.reduce((sum, h) => sum + h, 0);
+
+  // Background and outer border
+  doc.rect(margin, startY, contentWidth, totalHeight).fillAndStroke(COLORS.bgLight, COLORS.border);
+
+  // Subtle vertical column divider
+  doc
+    .strokeColor('#E2E8F0')
+    .lineWidth(0.5)
+    .moveTo(margin + col1Width, startY + 3)
+    .lineTo(margin + col1Width, startY + totalHeight - 3)
+    .stroke();
+
+  let curY = startY;
+
+  rows.forEach((row, idx) => {
+    const rHeight = rowHeights[idx];
+
+    // Subtle horizontal row divider
+    if (idx > 0) {
+      doc
+        .strokeColor('#E2E8F0')
+        .lineWidth(0.5)
+        .moveTo(margin + 6, curY)
+        .lineTo(margin + contentWidth - 6, curY)
+        .stroke();
+    }
+
+    const textY = curY + padY;
+
+    // Render Left Cell (confined to innerWidth of Left Column)
+    doc.font('Helvetica-Bold').fontSize(fontSize).fillColor(COLORS.secondary);
+    doc.text(row.left.label, margin + padX, textY, {
+      continued: true,
+      width: innerWidth,
+      lineGap,
+    });
+    doc.font('Helvetica').fillColor('#000');
+    doc.text(row.left.value, {
+      width: innerWidth,
+      lineGap,
+    });
+
+    // Render Right Cell (confined to innerWidth of Right Column)
+    doc.font('Helvetica-Bold').fontSize(fontSize).fillColor(COLORS.secondary);
+    doc.text(row.right.label, margin + col1Width + padX, textY, {
+      continued: true,
+      width: innerWidth,
+      lineGap,
+    });
+    doc.font('Helvetica').fillColor('#000');
+    doc.text(row.right.value, {
+      width: innerWidth,
+      lineGap,
+    });
+
+    curY += rHeight;
+  });
+
+  return totalHeight;
 }
 
 /**
@@ -143,40 +261,40 @@ export async function generateIndividualFacultyPDF(
 
   let currentY = 104;
 
-  // Metadata Card (2 Columns)
-  doc.rect(margin, currentY, contentWidth, 68).fillAndStroke(COLORS.bgLight, COLORS.border);
+  // Metadata Table Grid (2 Columns)
+  const metadataRows: MetadataRow[] = [
+    {
+      left: { label: 'Faculty Member: ', value: report.facultyName || 'N/A' },
+      right: { label: 'Semester: ', value: report.semester || 'N/A' },
+    },
+    {
+      left: {
+        label: 'Subject / Course: ',
+        value: `${report.subjectName || 'N/A'}${report.subjectCode ? ` (${report.subjectCode})` : ''}`,
+      },
+      right: { label: 'Evaluation Type: ', value: report.formType || 'Faculty-Specific' },
+    },
+    {
+      left: { label: 'Branch / Discipline: ', value: report.branch || 'N/A' },
+      right: { label: 'Lifecycle Status: ', value: report.status || 'PUBLISHED' },
+    },
+    {
+      left: { label: 'Academic Session: ', value: report.academicYear || 'N/A' },
+      right: {
+        label: 'Report Generated: ',
+        value: new Date().toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      },
+    },
+  ];
 
-  const col1X = margin + 14;
-  const col2X = margin + contentWidth / 2 + 10;
-  const metaY = currentY + 10;
-
-  // Col 1
-  doc.font('Helvetica-Bold').fontSize(8.5).fillColor(COLORS.secondary).text('Faculty Member: ', col1X, metaY, { continued: true });
-  doc.font('Helvetica').fillColor('#000').text(report.facultyName || 'N/A');
-
-  doc.font('Helvetica-Bold').text('Subject / Course: ', col1X, metaY + 14, { continued: true });
-  doc.font('Helvetica').text(`${report.subjectName || 'N/A'} (${report.subjectCode || 'N/A'})`);
-
-  doc.font('Helvetica-Bold').text('Branch / Discipline: ', col1X, metaY + 28, { continued: true });
-  doc.font('Helvetica').text(report.branch || 'N/A');
-
-  doc.font('Helvetica-Bold').text('Academic Session: ', col1X, metaY + 42, { continued: true });
-  doc.font('Helvetica').text(report.academicYear || 'N/A');
-
-  // Col 2
-  doc.font('Helvetica-Bold').text('Semester: ', col2X, metaY, { continued: true });
-  doc.font('Helvetica').text(report.semester || 'N/A');
-
-  doc.font('Helvetica-Bold').text('Evaluation Type: ', col2X, metaY + 14, { continued: true });
-  doc.font('Helvetica').text(report.formType || 'Faculty-Specific');
-
-  doc.font('Helvetica-Bold').text('Lifecycle Status: ', col2X, metaY + 28, { continued: true });
-  doc.font('Helvetica').text(report.status || 'PUBLISHED');
-
-  doc.font('Helvetica-Bold').text('Report Generated: ', col2X, metaY + 42, { continued: true });
-  doc.font('Helvetica').text(new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
-
-  currentY += 80;
+  const metaHeight = renderMetadataGrid(doc, currentY, contentWidth, margin, metadataRows);
+  currentY += metaHeight + 12;
 
   // KPI Summary Metric Blocks (4 Boxes)
   const boxGap = 8;
@@ -694,42 +812,42 @@ export async function generateSemesterComparativePDF(
 
   let currentY = 104;
 
-  // Metadata Card (3 rows of 2 columns)
-  const metaHeight = 68;
-  doc.rect(margin, currentY, contentWidth, metaHeight).fillAndStroke(COLORS.bgLight, COLORS.border);
+  // Metadata Table Grid (2 Columns, dynamic wrapped row heights)
+  const metadataRows: MetadataRow[] = [
+    {
+      left: { label: 'Branch / Department: ', value: report.branch || 'N/A' },
+      right: { label: 'Academic Session: ', value: report.academicYear || 'N/A' },
+    },
+    {
+      left: { label: 'Semester Level: ', value: report.semester || 'N/A' },
+      right: {
+        label: 'Feedback Type: ',
+        value: report.formType === 'SEMESTER_FEEDBACK'
+          ? 'Multi-Faculty Semester Evaluation'
+          : (report.formType || 'SEMESTER_FEEDBACK'),
+      },
+    },
+    {
+      left: { label: 'Form Title: ', value: report.title || 'Semester Feedback Form' },
+      right: {
+        label: 'Faculty Evaluated: ',
+        value: `${report.facultyGrids?.length || 0} Faculty-Subject Evaluations`,
+      },
+    },
+    {
+      left: { label: 'System: ', value: 'BCE Faculty Feedback Management System' },
+      right: {
+        label: 'Report Generated: ',
+        value: new Date().toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        }),
+      },
+    },
+  ];
 
-  const col1X = margin + 14;
-  const col2X = margin + contentWidth / 2 + 10;
-  const metaY = currentY + 8;
-
-  // Row 1
-  doc.font('Helvetica-Bold').fontSize(8.5).fillColor(COLORS.secondary).text('Branch / Department: ', col1X, metaY, { continued: true });
-  doc.font('Helvetica').fillColor('#000').text(report.branch || 'N/A');
-
-  doc.font('Helvetica-Bold').text('Academic Session: ', col2X, metaY, { continued: true });
-  doc.font('Helvetica').text(report.academicYear || 'N/A');
-
-  // Row 2
-  doc.font('Helvetica-Bold').text('Semester Level: ', col1X, metaY + 14, { continued: true });
-  doc.font('Helvetica').text(report.semester || 'N/A');
-
-  doc.font('Helvetica-Bold').text('Feedback Type: ', col2X, metaY + 14, { continued: true });
-  doc.font('Helvetica').text(report.formType === 'SEMESTER_FEEDBACK' ? 'Multi-Faculty Semester Evaluation' : (report.formType || 'SEMESTER_FEEDBACK'));
-
-  // Row 3
-  doc.font('Helvetica-Bold').text('Form Title: ', col1X, metaY + 28, { continued: true });
-  doc.font('Helvetica').text(report.title || 'Semester Feedback Form', { width: contentWidth / 2 - 20, ellipsis: true });
-
-  doc.font('Helvetica-Bold').text('Faculty Evaluated: ', col2X, metaY + 28, { continued: true });
-  doc.font('Helvetica').text(`${report.facultyGrids?.length || 0} Faculty-Subject Evaluations`);
-
-  // Row 4
-  doc.font('Helvetica-Bold').text('System: ', col1X, metaY + 42, { continued: true });
-  doc.font('Helvetica').text('BCE Faculty Feedback Management System');
-
-  doc.font('Helvetica-Bold').text('Report Generated: ', col2X, metaY + 42, { continued: true });
-  doc.font('Helvetica').text(new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }));
-
+  const metaHeight = renderMetadataGrid(doc, currentY, contentWidth, margin, metadataRows);
   currentY += metaHeight + 12;
 
   // 5 KPI Stat Boxes
