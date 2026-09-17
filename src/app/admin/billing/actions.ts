@@ -314,118 +314,139 @@ export async function getPaymentProofUrlAction(proofPath: string) {
 // ====================================================================
 
 export async function approvePaymentAction(requestId: string) {
-  const session = await getAdminSession();
-  if (!session.isAuthenticated || !session.isSuperAdmin) {
-    return { success: false, error: 'Only the Super Admin can approve payments.' };
-  }
+  try {
+    const session = await getAdminSession();
+    if (!session.isAuthenticated || !session.isSuperAdmin) {
+      return { success: false, error: 'Only the Super Admin can approve payments.' };
+    }
 
-  if (!isValidUUID(requestId)) {
-    return { success: false, error: 'Invalid payment request ID.' };
-  }
+    if (!isValidUUID(requestId)) {
+      return { success: false, error: 'Invalid payment request ID.' };
+    }
 
-  const supabase = await getAdminDb();
+    const supabase = await getAdminDb();
 
-  // Fetch payment request
-  const { data: payReq, error: fetchErr } = await supabase
-    .from('payment_requests')
-    .select('*')
-    .eq('id', requestId)
-    .single();
-
-  if (fetchErr || !payReq) {
-    return { success: false, error: 'Payment request not found.' };
-  }
-
-  if (payReq.status !== 'PENDING') {
-    return { success: false, error: `This payment request has already been ${payReq.status.toLowerCase()}.` };
-  }
-
-  // Validate amount: look up the plan from DB (by billing_plan_id or slug)
-  let expectedAmount = payReq.amount; // trust the snapshot by default
-  let durationDays = payReq.plan_type === 'MONTHLY' ? 30 : 365; // fallback
-
-  if (payReq.billing_plan_id) {
-    const { data: plan } = await supabase
-      .from('billing_plans')
-      .select('price, duration_days')
-      .eq('id', payReq.billing_plan_id)
+    // Fetch payment request
+    const { data: payReq, error: fetchErr } = await supabase
+      .from('payment_requests')
+      .select('*')
+      .eq('id', requestId)
       .single();
-    if (plan) {
-      expectedAmount = plan.price;
-      if (plan.duration_days) durationDays = plan.duration_days;
+
+    if (fetchErr || !payReq) {
+      return { success: false, error: fetchErr?.message || 'Payment request not found.' };
     }
-  } else {
-    // Legacy: lookup by slug
-    const { data: plan } = await supabase
-      .from('billing_plans')
-      .select('price, duration_days')
-      .eq('slug', payReq.plan_type)
-      .maybeSingle();
-    if (plan) {
-      expectedAmount = plan.price;
-      if (plan.duration_days) durationDays = plan.duration_days;
+
+    if (payReq.status !== 'PENDING') {
+      return { success: false, error: `This payment request has already been ${payReq.status.toLowerCase()}.` };
     }
+
+    // Validate amount: look up the plan from DB (by billing_plan_id or slug)
+    let expectedAmount = payReq.amount; // trust the snapshot by default
+    let durationDays = payReq.plan_type === 'MONTHLY' ? 30 : 365; // fallback
+
+    if (payReq.billing_plan_id) {
+      const { data: plan } = await supabase
+        .from('billing_plans')
+        .select('price, duration_days')
+        .eq('id', payReq.billing_plan_id)
+        .maybeSingle();
+      if (plan) {
+        expectedAmount = plan.price;
+        if (plan.duration_days) durationDays = plan.duration_days;
+      }
+    } else {
+      // Legacy: lookup by slug
+      const { data: plan } = await supabase
+        .from('billing_plans')
+        .select('price, duration_days')
+        .eq('slug', payReq.plan_type)
+        .maybeSingle();
+      if (plan) {
+        expectedAmount = plan.price;
+        if (plan.duration_days) durationDays = plan.duration_days;
+      }
+    }
+
+    if (expectedAmount !== payReq.amount) {
+      return { success: false, error: `Amount mismatch. Expected ₹${expectedAmount} for ${payReq.plan_type} plan but request has ₹${payReq.amount}.` };
+    }
+
+    // Verify admin exists
+    const { data: targetAdmin, error: adminErr } = await supabase
+      .from('admins')
+      .select('id, email, name')
+      .eq('id', payReq.admin_user_id)
+      .single();
+
+    if (adminErr || !targetAdmin) {
+      return { success: false, error: 'Target admin account not found.' };
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+
+    // Transactional: update payment_request + billing account
+    const { error: updateReqErr } = await supabase
+      .from('payment_requests')
+      .update({
+        status: 'APPROVED',
+        reviewed_by: session.admin?.id || null,
+        reviewed_at: now.toISOString(),
+        updated_at: now.toISOString(),
+      })
+      .eq('id', requestId)
+      .eq('status', 'PENDING'); // Prevent double-approval
+
+    if (updateReqErr) {
+      console.error('[APPROVE_PAYMENT_UPDATE_ERR]', updateReqErr);
+      return { success: false, error: updateReqErr.message || 'Failed to update payment request.' };
+    }
+
+    // Upsert billing account
+    await ensureBillingAccount(payReq.admin_user_id);
+
+    const { error: billingErr } = await supabase
+      .from('admin_billing_accounts')
+      .update({
+        plan_type: payReq.plan_type,
+        access_status: 'UNLOCKED',
+        subscription_status: 'ACTIVE',
+        started_at: now.toISOString(),
+        expires_at: expiresAt.toISOString(),
+        updated_at: now.toISOString(),
+      })
+      .eq('admin_user_id', payReq.admin_user_id);
+
+    if (billingErr) {
+      console.error('[APPROVE_PAYMENT_BILLING_ERR]', billingErr);
+      return { success: false, error: billingErr.message || 'Payment approved but failed to update billing account. Please retry.' };
+    }
+
+    await logAudit(
+      supabase,
+      { adminId: session.admin?.id, email: session.user?.email },
+      'PAYMENT_APPROVED',
+      'payment_requests',
+      requestId,
+      `Approved ${payReq.plan_type} payment for ${targetAdmin.email}. Amount: ₹${payReq.amount}. Valid until: ${expiresAt.toISOString()}`
+    );
+
+    await logAudit(
+      supabase,
+      { adminId: session.admin?.id, email: session.user?.email },
+      'ADMIN_FORM_ACCESS_UNLOCKED',
+      'admin_billing_accounts',
+      payReq.admin_user_id,
+      `Form generation access unlocked for ${targetAdmin.email} (${payReq.plan_type} plan).`
+    );
+
+    revalidatePath('/admin/dashboard');
+    return { success: true, message: `Payment approved. ${targetAdmin.email} is now UNLOCKED with ${payReq.plan_type} plan.` };
+  } catch (err: any) {
+    console.error('[APPROVE_PAYMENT_EXCEPTION]', err);
+    return { success: false, error: err?.message || 'An unexpected error occurred while approving payment.' };
   }
-
-  if (expectedAmount !== payReq.amount) {
-    return { success: false, error: `Amount mismatch. Expected ₹${expectedAmount} for ${payReq.plan_type} plan but request has ₹${payReq.amount}.` };
-  }
-
-  // Verify admin exists
-  const { data: targetAdmin } = await supabase
-    .from('admins')
-    .select('id, email, name')
-    .eq('id', payReq.admin_user_id)
-    .single();
-
-  if (!targetAdmin) {
-    return { success: false, error: 'Target admin account not found.' };
-  }
-
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
-
-  // Transactional: update payment_request + billing account
-  const { error: updateReqErr } = await supabase
-    .from('payment_requests')
-    .update({
-      status: 'APPROVED',
-      reviewed_by: session.admin?.id || null,
-      reviewed_at: now.toISOString(),
-      updated_at: now.toISOString(),
-    })
-    .eq('id', requestId)
-    .eq('status', 'PENDING'); // Prevent double-approval
-
-  if (updateReqErr) {
-    return { success: false, error: 'Failed to update payment request.' };
-  }
-
-  // Upsert billing account
-  await ensureBillingAccount(payReq.admin_user_id);
-
-  const { error: billingErr } = await supabase
-    .from('admin_billing_accounts')
-    .update({
-      plan_type: payReq.plan_type,
-      access_status: 'UNLOCKED',
-      subscription_status: 'ACTIVE',
-      started_at: now.toISOString(),
-      expires_at: expiresAt.toISOString(),
-      updated_at: now.toISOString(),
-    })
-    .eq('admin_user_id', payReq.admin_user_id);
-
-  if (billingErr) {
-    return { success: false, error: 'Payment approved but failed to update billing account. Please retry.' };
-  }
-
-  await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email }, 'PAYMENT_APPROVED', 'payment_requests', requestId, `Approved ${payReq.plan_type} payment for ${targetAdmin.email}. Amount: ₹${payReq.amount}. Valid until: ${expiresAt.toISOString()}`);
-
-  await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email }, 'ADMIN_FORM_ACCESS_UNLOCKED', 'admin_billing_accounts', payReq.admin_user_id, `Form generation access unlocked for ${targetAdmin.email} (${payReq.plan_type} plan).`);
-
-  revalidatePath('/admin/dashboard');
-  return { success: true, message: `Payment approved. ${targetAdmin.email} is now UNLOCKED with ${payReq.plan_type} plan.` };
 }
 
 // ====================================================================
@@ -433,52 +454,66 @@ export async function approvePaymentAction(requestId: string) {
 // ====================================================================
 
 export async function rejectPaymentAction(requestId: string, rejectionReason?: string) {
-  const session = await getAdminSession();
-  if (!session.isAuthenticated || !session.isSuperAdmin) {
-    return { success: false, error: 'Only the Super Admin can reject payments.' };
+  try {
+    const session = await getAdminSession();
+    if (!session.isAuthenticated || !session.isSuperAdmin) {
+      return { success: false, error: 'Only the Super Admin can reject payments.' };
+    }
+
+    if (!isValidUUID(requestId)) {
+      return { success: false, error: 'Invalid payment request ID.' };
+    }
+
+    const supabase = await getAdminDb();
+
+    // Use explicit foreign key relationship payment_requests_admin_user_id_fkey to avoid PGRST201 ambiguity
+    const { data: payReq, error: fetchErr } = await supabase
+      .from('payment_requests')
+      .select('*, admin:admins!payment_requests_admin_user_id_fkey(email, name)')
+      .eq('id', requestId)
+      .single();
+
+    if (fetchErr || !payReq) {
+      return { success: false, error: fetchErr?.message || 'Payment request not found.' };
+    }
+
+    if (payReq.status !== 'PENDING') {
+      return { success: false, error: `This payment request has already been ${payReq.status.toLowerCase()}.` };
+    }
+
+    const { error } = await supabase
+      .from('payment_requests')
+      .update({
+        status: 'REJECTED',
+        reviewed_by: session.admin?.id || null,
+        reviewed_at: new Date().toISOString(),
+        rejection_reason: rejectionReason?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', requestId)
+      .eq('status', 'PENDING');
+
+    if (error) {
+      console.error('[REJECT_PAYMENT_UPDATE_ERR]', error);
+      return { success: false, error: error.message || 'Failed to reject payment request.' };
+    }
+
+    const adminEmail = (payReq.admin as any)?.email || payReq.admin_user_id;
+    await logAudit(
+      supabase,
+      { adminId: session.admin?.id, email: session.user?.email },
+      'PAYMENT_REJECTED',
+      'payment_requests',
+      requestId,
+      `Rejected ${payReq.plan_type} payment for ${adminEmail}. Reason: ${rejectionReason || 'Not specified'}`
+    );
+
+    revalidatePath('/admin/dashboard');
+    return { success: true, message: 'Payment request rejected.' };
+  } catch (err: any) {
+    console.error('[REJECT_PAYMENT_EXCEPTION]', err);
+    return { success: false, error: err?.message || 'An unexpected error occurred while rejecting payment.' };
   }
-
-  if (!isValidUUID(requestId)) {
-    return { success: false, error: 'Invalid payment request ID.' };
-  }
-
-  const supabase = await getAdminDb();
-
-  const { data: payReq } = await supabase
-    .from('payment_requests')
-    .select('*, admin:admins(email, name)')
-    .eq('id', requestId)
-    .single();
-
-  if (!payReq) {
-    return { success: false, error: 'Payment request not found.' };
-  }
-
-  if (payReq.status !== 'PENDING') {
-    return { success: false, error: `This payment request has already been ${payReq.status.toLowerCase()}.` };
-  }
-
-  const { error } = await supabase
-    .from('payment_requests')
-    .update({
-      status: 'REJECTED',
-      reviewed_by: session.admin?.id || null,
-      reviewed_at: new Date().toISOString(),
-      rejection_reason: rejectionReason?.trim() || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', requestId)
-    .eq('status', 'PENDING');
-
-  if (error) {
-    return { success: false, error: 'Failed to reject payment request.' };
-  }
-
-  const adminEmail = (payReq.admin as any)?.email || payReq.admin_user_id;
-  await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email }, 'PAYMENT_REJECTED', 'payment_requests', requestId, `Rejected ${payReq.plan_type} payment for ${adminEmail}. Reason: ${rejectionReason || 'Not specified'}`);
-
-  revalidatePath('/admin/dashboard');
-  return { success: true, message: 'Payment request rejected.' };
 }
 
 // ====================================================================
@@ -486,49 +521,54 @@ export async function rejectPaymentAction(requestId: string, rejectionReason?: s
 // ====================================================================
 
 export async function assignFreePlanAction(targetAdminId: string) {
-  const session = await getAdminSession();
-  if (!session.isAuthenticated || !session.isSuperAdmin) {
-    return { success: false, error: 'Only the Super Admin can assign the Free plan.' };
+  try {
+    const session = await getAdminSession();
+    if (!session.isAuthenticated || !session.isSuperAdmin) {
+      return { success: false, error: 'Only the Super Admin can assign the Free plan.' };
+    }
+
+    if (!isValidUUID(targetAdminId)) {
+      return { success: false, error: 'Invalid admin ID.' };
+    }
+
+    const supabase = await getAdminDb();
+
+    const { data: target } = await supabase
+      .from('admins')
+      .select('id, email, name')
+      .eq('id', targetAdminId)
+      .single();
+
+    if (!target) {
+      return { success: false, error: 'Admin not found.' };
+    }
+
+    await ensureBillingAccount(targetAdminId);
+
+    const { error } = await supabase
+      .from('admin_billing_accounts')
+      .update({
+        plan_type: 'FREE',
+        access_status: 'UNLOCKED',
+        subscription_status: 'ACTIVE',
+        started_at: new Date().toISOString(),
+        expires_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('admin_user_id', targetAdminId);
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to assign Free plan.' };
+    }
+
+    await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email }, 'FREE_PLAN_ASSIGNED', 'admin_billing_accounts', targetAdminId, `Free plan assigned to ${target.email} by Super Admin. Form generation access unlocked.`);
+
+    revalidatePath('/admin/dashboard');
+    return { success: true, message: `Free plan assigned to ${target.email}. Access is now UNLOCKED.` };
+  } catch (err: any) {
+    console.error('[ASSIGN_FREE_PLAN_EXCEPTION]', err);
+    return { success: false, error: err?.message || 'An unexpected error occurred while assigning Free plan.' };
   }
-
-  if (!isValidUUID(targetAdminId)) {
-    return { success: false, error: 'Invalid admin ID.' };
-  }
-
-  const supabase = await getAdminDb();
-
-  const { data: target } = await supabase
-    .from('admins')
-    .select('id, email, name')
-    .eq('id', targetAdminId)
-    .single();
-
-  if (!target) {
-    return { success: false, error: 'Admin not found.' };
-  }
-
-  await ensureBillingAccount(targetAdminId);
-
-  const { error } = await supabase
-    .from('admin_billing_accounts')
-    .update({
-      plan_type: 'FREE',
-      access_status: 'UNLOCKED',
-      subscription_status: 'ACTIVE',
-      started_at: new Date().toISOString(),
-      expires_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('admin_user_id', targetAdminId);
-
-  if (error) {
-    return { success: false, error: 'Failed to assign Free plan.' };
-  }
-
-  await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email }, 'FREE_PLAN_ASSIGNED', 'admin_billing_accounts', targetAdminId, `Free plan assigned to ${target.email} by Super Admin. Form generation access unlocked.`);
-
-  revalidatePath('/admin/dashboard');
-  return { success: true, message: `Free plan assigned to ${target.email}. Access is now UNLOCKED.` };
 }
 
 // ====================================================================
@@ -536,55 +576,60 @@ export async function assignFreePlanAction(targetAdminId: string) {
 // ====================================================================
 
 export async function lockAdminAccessAction(targetAdminId: string) {
-  const session = await getAdminSession();
-  if (!session.isAuthenticated || !session.isSuperAdmin) {
-    return { success: false, error: 'Only the Super Admin can lock access.' };
+  try {
+    const session = await getAdminSession();
+    if (!session.isAuthenticated || !session.isSuperAdmin) {
+      return { success: false, error: 'Only the Super Admin can lock access.' };
+    }
+
+    if (!isValidUUID(targetAdminId)) {
+      return { success: false, error: 'Invalid admin ID.' };
+    }
+
+    const supabase = await getAdminDb();
+
+    const { data: target } = await supabase
+      .from('admins')
+      .select('id, email, role')
+      .eq('id', targetAdminId)
+      .single();
+
+    if (!target) {
+      return { success: false, error: 'Admin not found.' };
+    }
+
+    // Prevent locking Super Admin
+    if (target.role === 'SUPER_ADMIN' || target.email.toLowerCase().trim() === SUPER_ADMIN_EMAIL) {
+      return { success: false, error: 'The Super Admin account cannot be locked.' };
+    }
+
+    // Prevent self-lock
+    if (target.id === session.admin?.id) {
+      return { success: false, error: 'You cannot lock your own account.' };
+    }
+
+    await ensureBillingAccount(targetAdminId);
+
+    const { error } = await supabase
+      .from('admin_billing_accounts')
+      .update({
+        access_status: 'LOCKED',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('admin_user_id', targetAdminId);
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to lock admin access.' };
+    }
+
+    await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email }, 'ADMIN_FORM_ACCESS_LOCKED', 'admin_billing_accounts', targetAdminId, `Form generation access locked for ${target.email} by Super Admin.`);
+
+    revalidatePath('/admin/dashboard');
+    return { success: true, message: `Access locked for ${target.email}.` };
+  } catch (err: any) {
+    console.error('[LOCK_ADMIN_ACCESS_EXCEPTION]', err);
+    return { success: false, error: err?.message || 'An unexpected error occurred while locking access.' };
   }
-
-  if (!isValidUUID(targetAdminId)) {
-    return { success: false, error: 'Invalid admin ID.' };
-  }
-
-  const supabase = await getAdminDb();
-
-  const { data: target } = await supabase
-    .from('admins')
-    .select('id, email, role')
-    .eq('id', targetAdminId)
-    .single();
-
-  if (!target) {
-    return { success: false, error: 'Admin not found.' };
-  }
-
-  // Prevent locking Super Admin
-  if (target.role === 'SUPER_ADMIN' || target.email.toLowerCase().trim() === SUPER_ADMIN_EMAIL) {
-    return { success: false, error: 'The Super Admin account cannot be locked.' };
-  }
-
-  // Prevent self-lock
-  if (target.id === session.admin?.id) {
-    return { success: false, error: 'You cannot lock your own account.' };
-  }
-
-  await ensureBillingAccount(targetAdminId);
-
-  const { error } = await supabase
-    .from('admin_billing_accounts')
-    .update({
-      access_status: 'LOCKED',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('admin_user_id', targetAdminId);
-
-  if (error) {
-    return { success: false, error: 'Failed to lock admin access.' };
-  }
-
-  await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email }, 'ADMIN_FORM_ACCESS_LOCKED', 'admin_billing_accounts', targetAdminId, `Form generation access locked for ${target.email} by Super Admin.`);
-
-  revalidatePath('/admin/dashboard');
-  return { success: true, message: `Access locked for ${target.email}.` };
 }
 
 // ====================================================================
@@ -592,46 +637,51 @@ export async function lockAdminAccessAction(targetAdminId: string) {
 // ====================================================================
 
 export async function unlockAdminAccessAction(targetAdminId: string) {
-  const session = await getAdminSession();
-  if (!session.isAuthenticated || !session.isSuperAdmin) {
-    return { success: false, error: 'Only the Super Admin can unlock access.' };
+  try {
+    const session = await getAdminSession();
+    if (!session.isAuthenticated || !session.isSuperAdmin) {
+      return { success: false, error: 'Only the Super Admin can unlock access.' };
+    }
+
+    if (!isValidUUID(targetAdminId)) {
+      return { success: false, error: 'Invalid admin ID.' };
+    }
+
+    const supabase = await getAdminDb();
+
+    const { data: target } = await supabase
+      .from('admins')
+      .select('id, email')
+      .eq('id', targetAdminId)
+      .single();
+
+    if (!target) {
+      return { success: false, error: 'Admin not found.' };
+    }
+
+    await ensureBillingAccount(targetAdminId);
+
+    const { error } = await supabase
+      .from('admin_billing_accounts')
+      .update({
+        access_status: 'UNLOCKED',
+        subscription_status: 'ACTIVE',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('admin_user_id', targetAdminId);
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to unlock admin access.' };
+    }
+
+    await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email }, 'ADMIN_FORM_ACCESS_UNLOCKED', 'admin_billing_accounts', targetAdminId, `Form generation access unlocked for ${target.email} by Super Admin.`);
+
+    revalidatePath('/admin/dashboard');
+    return { success: true, message: `Access unlocked for ${target.email}.` };
+  } catch (err: any) {
+    console.error('[UNLOCK_ADMIN_ACCESS_EXCEPTION]', err);
+    return { success: false, error: err?.message || 'An unexpected error occurred while unlocking access.' };
   }
-
-  if (!isValidUUID(targetAdminId)) {
-    return { success: false, error: 'Invalid admin ID.' };
-  }
-
-  const supabase = await getAdminDb();
-
-  const { data: target } = await supabase
-    .from('admins')
-    .select('id, email')
-    .eq('id', targetAdminId)
-    .single();
-
-  if (!target) {
-    return { success: false, error: 'Admin not found.' };
-  }
-
-  await ensureBillingAccount(targetAdminId);
-
-  const { error } = await supabase
-    .from('admin_billing_accounts')
-    .update({
-      access_status: 'UNLOCKED',
-      subscription_status: 'ACTIVE',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('admin_user_id', targetAdminId);
-
-  if (error) {
-    return { success: false, error: 'Failed to unlock admin access.' };
-  }
-
-  await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email }, 'ADMIN_FORM_ACCESS_UNLOCKED', 'admin_billing_accounts', targetAdminId, `Form generation access unlocked for ${target.email} by Super Admin.`);
-
-  revalidatePath('/admin/dashboard');
-  return { success: true, message: `Access unlocked for ${target.email}.` };
 }
 
 // ====================================================================
@@ -639,54 +689,59 @@ export async function unlockAdminAccessAction(targetAdminId: string) {
 // ====================================================================
 
 export async function revokeFormAccessAction(targetAdminId: string) {
-  const session = await getAdminSession();
-  if (!session.isAuthenticated || !session.isSuperAdmin) {
-    return { success: false, error: 'Only the Super Admin can revoke access.' };
+  try {
+    const session = await getAdminSession();
+    if (!session.isAuthenticated || !session.isSuperAdmin) {
+      return { success: false, error: 'Only the Super Admin can revoke access.' };
+    }
+
+    if (!isValidUUID(targetAdminId)) {
+      return { success: false, error: 'Invalid admin ID.' };
+    }
+
+    const supabase = await getAdminDb();
+
+    const { data: target } = await supabase
+      .from('admins')
+      .select('id, email, role')
+      .eq('id', targetAdminId)
+      .single();
+
+    if (!target) {
+      return { success: false, error: 'Admin not found.' };
+    }
+
+    if (target.role === 'SUPER_ADMIN' || target.email.toLowerCase().trim() === SUPER_ADMIN_EMAIL) {
+      return { success: false, error: 'The Super Admin account cannot be revoked.' };
+    }
+
+    if (target.id === session.admin?.id) {
+      return { success: false, error: 'You cannot revoke your own access.' };
+    }
+
+    await ensureBillingAccount(targetAdminId);
+
+    const { error } = await supabase
+      .from('admin_billing_accounts')
+      .update({
+        access_status: 'LOCKED',
+        subscription_status: 'CANCELLED',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('admin_user_id', targetAdminId);
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to revoke access.' };
+    }
+
+    await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email }, 'ACCESS_REVOKED', 'admin_billing_accounts', targetAdminId, `Form generation access revoked for ${target.email} by Super Admin.`);
+
+    revalidatePath('/admin/dashboard');
+    return { success: true, message: `Access revoked for ${target.email}.` };
+  } catch (err: any) {
+    console.error('[REVOKE_FORM_ACCESS_EXCEPTION]', err);
+    return { success: false, error: err?.message || 'An unexpected error occurred while revoking access.' };
   }
-
-  if (!isValidUUID(targetAdminId)) {
-    return { success: false, error: 'Invalid admin ID.' };
-  }
-
-  const supabase = await getAdminDb();
-
-  const { data: target } = await supabase
-    .from('admins')
-    .select('id, email, role')
-    .eq('id', targetAdminId)
-    .single();
-
-  if (!target) {
-    return { success: false, error: 'Admin not found.' };
-  }
-
-  if (target.role === 'SUPER_ADMIN' || target.email.toLowerCase().trim() === SUPER_ADMIN_EMAIL) {
-    return { success: false, error: 'The Super Admin account cannot be revoked.' };
-  }
-
-  if (target.id === session.admin?.id) {
-    return { success: false, error: 'You cannot revoke your own access.' };
-  }
-
-  await ensureBillingAccount(targetAdminId);
-
-  const { error } = await supabase
-    .from('admin_billing_accounts')
-    .update({
-      access_status: 'LOCKED',
-      subscription_status: 'CANCELLED',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('admin_user_id', targetAdminId);
-
-  if (error) {
-    return { success: false, error: 'Failed to revoke access.' };
-  }
-
-  await logAudit(supabase, { adminId: session.admin?.id, email: session.user?.email }, 'ACCESS_REVOKED', 'admin_billing_accounts', targetAdminId, `Form generation access revoked for ${target.email} by Super Admin.`);
-
-  revalidatePath('/admin/dashboard');
-  return { success: true, message: `Access revoked for ${target.email}.` };
 }
 
 // ====================================================================
