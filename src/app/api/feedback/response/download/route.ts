@@ -225,6 +225,7 @@ export async function GET(req: NextRequest) {
       semester: (form.semester as any)?.name || 'Semester',
       formTitle: form.title,
       submittedAt,
+      submissionId: verifiedResponseId,
       facultyEvaluations,
       generalFeedback,
     });

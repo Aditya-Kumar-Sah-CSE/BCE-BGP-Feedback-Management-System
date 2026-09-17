@@ -307,6 +307,7 @@ export async function GET(
       semester: (form.semester as any)?.name || 'Semester',
       formTitle: form.title,
       submittedAt,
+      submissionId: targetGoogleResponseId || decodedResponseId,
       facultyEvaluations,
       generalFeedback,
     });
