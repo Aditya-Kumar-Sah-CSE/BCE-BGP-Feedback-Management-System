@@ -1,4 +1,5 @@
 import { FORM_CONFIRMATION_MESSAGE } from './template';
+import { getGoogleServices } from './auth';
 
 export interface LinkingResult {
   success: boolean;
@@ -13,6 +14,31 @@ export interface ConfigurationResult {
   confirmationConfigured: boolean;
   message: string;
   error?: string;
+}
+
+/**
+ * Ensures the Google Apps Script execution account has writer access to
+ * the Google Drive file (Form or Sheet) before invoking the Apps Script Web App.
+ */
+async function ensureWriterAccess(fileId: string): Promise<void> {
+  const runnerEmail =
+    process.env.GOOGLE_APPS_SCRIPT_RUNNER_EMAIL || 'iamsmartlearner4@gmail.com';
+  if (!runnerEmail || !fileId) return;
+
+  try {
+    const { drive } = getGoogleServices();
+    await drive.permissions.create({
+      fileId,
+      requestBody: {
+        role: 'writer',
+        type: 'user',
+        emailAddress: runnerEmail,
+      },
+      fields: 'id',
+    });
+  } catch {
+    // Drive API throws if already shared, or if sharing with self; safe to ignore
+  }
 }
 
 /**
@@ -42,6 +68,10 @@ export async function linkFormToSpreadsheet(
   }
 
   try {
+    await Promise.allSettled([
+      ensureWriterAccess(formId),
+      ensureWriterAccess(sheetId),
+    ]);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
 
@@ -136,6 +166,7 @@ export async function configureGoogleFormConfirmation(
   }
 
   try {
+    await ensureWriterAccess(formId);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
 
