@@ -1,8 +1,11 @@
 /**
  * BCE FACULTY FEEDBACK PORTAL — GOOGLE APPS SCRIPT CONNECTOR
  * 
- * Purpose: Provides native Form → Sheet destination linking.
- * FormApp.setDestination(FormApp.DestinationType.SPREADSHEET, sheetId)
+ * Purpose: Provides native Form → Sheet destination linking and
+ * official post-submission confirmation message configuration:
+ * - FormApp.setDestination(FormApp.DestinationType.SPREADSHEET, sheetId)
+ * - FormApp.setConfirmationMessage(confirmationMessage)
+ * - FormApp.setShowLinkToRespondAgain(true)
  * 
  * Deployment:
  * 1. Create a new Apps Script project at https://script.google.com
@@ -14,6 +17,22 @@
  *    GOOGLE_APPS_SCRIPT_URL="https://script.google.com/macros/s/.../exec"
  *    GOOGLE_APPS_SCRIPT_SECRET="your-chosen-secret"
  */
+
+var CANONICAL_DEFAULT_CONFIRMATION_MESSAGE = [
+  'Your response has been recorded.',
+  '',
+  'More Feedback Forms',
+  '',
+  'Need to access more academic feedback forms?',
+  '',
+  'Visit:',
+  'https://bce-bgp-feedback-management-system.vercel.app/',
+  '',
+  'Developer: Aditya Kumar Sah',
+  '',
+  'Portfolio:',
+  'https://portfolio-two-ashen-zseywond41.vercel.app/'
+].join('\n');
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -38,6 +57,19 @@ function doPost(e) {
     var action = data.action;
     var formId = data.formId;
     var sheetId = data.sheetId;
+    var confirmationMessage = data.confirmationMessage || CANONICAL_DEFAULT_CONFIRMATION_MESSAGE;
+
+    if (action === 'configureFormConfirmation' || action === 'configureForm') {
+      if (!formId) {
+        return ContentService.createTextOutput(
+          JSON.stringify({ success: false, error: 'formId is required' })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      var configResult = configureFormConfirmation(formId, confirmationMessage);
+      return ContentService.createTextOutput(
+        JSON.stringify(configResult)
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
 
     if (action === 'linkFormToSheet' || !action) {
       if (!formId || !sheetId) {
@@ -46,9 +78,9 @@ function doPost(e) {
         ).setMimeType(ContentService.MimeType.JSON);
       }
       
-      var result = linkFormToSheet(formId, sheetId);
+      var linkResult = linkFormToSheet(formId, sheetId, confirmationMessage);
       return ContentService.createTextOutput(
-        JSON.stringify(result)
+        JSON.stringify(linkResult)
       ).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -70,24 +102,49 @@ function doGet(e) {
     JSON.stringify({
       status: 'active',
       service: 'BCE Faculty Feedback Portal Apps Script Connector',
-      version: '1.0.0'
+      version: '1.1.0'
     })
   ).setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
- * Links a Google Form directly to a Google Spreadsheet natively.
- * Responses will automatically populate as new rows in this spreadsheet.
+ * Links a Google Form directly to a Google Spreadsheet natively
+ * and configures the post-submission confirmation message.
  */
-function linkFormToSheet(formId, sheetId) {
+function linkFormToSheet(formId, sheetId, confirmationMessage) {
   var form = FormApp.openById(formId);
-  form.setDestination(FormApp.DestinationType.SPREADSHEET, sheetId);
+  if (sheetId) {
+    form.setDestination(FormApp.DestinationType.SPREADSHEET, sheetId);
+  }
+  
+  var msg = confirmationMessage || CANONICAL_DEFAULT_CONFIRMATION_MESSAGE;
+  form.setConfirmationMessage(msg);
+  form.setShowLinkToRespondAgain(true);
   
   return {
     success: true,
     formId: formId,
     sheetId: sheetId,
     destinationType: 'NATIVE_SHEET',
-    message: 'Google Form response destination successfully connected to Google Sheet.'
+    confirmationConfigured: true,
+    message: 'Google Form response destination successfully connected to Google Sheet and confirmation message configured.'
+  };
+}
+
+/**
+ * Configures the Google Form post-submission confirmation message
+ * and ensures "Submit another response" link is visible.
+ */
+function configureFormConfirmation(formId, confirmationMessage) {
+  var form = FormApp.openById(formId);
+  var msg = confirmationMessage || CANONICAL_DEFAULT_CONFIRMATION_MESSAGE;
+  form.setConfirmationMessage(msg);
+  form.setShowLinkToRespondAgain(true);
+
+  return {
+    success: true,
+    formId: formId,
+    confirmationConfigured: true,
+    message: 'Google Form confirmation message and respond-again link successfully configured.'
   };
 }

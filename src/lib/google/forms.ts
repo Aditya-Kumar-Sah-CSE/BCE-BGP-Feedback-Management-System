@@ -15,6 +15,17 @@ export interface CreateFormResult {
  * Creates a Google Form and populates it with either:
  * - Multi-faculty Multiple Choice Grids (SEMESTER_FEEDBACK) if items are provided, or
  * - The standard 8 BCE evaluation questions (FACULTY_FEEDBACK)
+ *
+ * NOTE ON RESPONSE RECEIPTS / COPIES:
+ * Google Forms REST API v1 supports emailCollectionType ('VERIFIED'). When enabled,
+ * Google Forms natively provides respondents with the option "Send me a copy of my responses".
+ * The REST API does not expose an endpoint or parameter to force this checkbox to mandatory,
+ * so native Google Forms behavior is preserved without faking checkboxes or injecting UI.
+ *
+ * NOTE ON CONFIRMATION MESSAGE:
+ * Google Forms REST API v1 batchUpdate does NOT support confirmationMessage in updateFormInfo
+ * or updateSettings (causes 400 Bad Request). Custom post-submission confirmation messages
+ * are officially configured via the Google Apps Script connector (google-apps-script/Code.gs).
  */
 export async function createGoogleFeedbackForm(params: {
   title: string;
@@ -45,7 +56,6 @@ export async function createGoogleFeedbackForm(params: {
     params.items && params.items.length > 0
       ? buildMultiFacultyGridBatchUpdateRequest(params.items)
       : buildCreateQuestionsBatchUpdateRequest();
-
 
   const updateInfoRequest = {
     updateFormInfo: {
@@ -99,4 +109,73 @@ export async function getGoogleFormResponses(formId: string) {
   const { forms } = getGoogleServices();
   const res = await forms.forms.responses.list({ formId });
   return res.data.responses || [];
+}
+
+/**
+ * Validates the actual generated Google Forms structure after creation
+ * to confirm that:
+ * 1. Verified email collection is active
+ * 2. Student Name is required
+ * 3. University Registration Number is required
+ * 4. Rating questions (or every row of every multi-faculty grid) are strictly required
+ * 5. General Feedback remains optional
+ */
+export async function validateGoogleFormRequiredStructure(formId: string): Promise<{
+  isValid: boolean;
+  errors: string[];
+  form: any;
+}> {
+  const form = await getGoogleForm(formId);
+  const errors: string[] = [];
+
+  const emailCollection = (form.settings as any)?.emailCollectionType;
+  if (emailCollection !== 'VERIFIED') {
+    errors.push(`Expected emailCollectionType to be VERIFIED, found: ${emailCollection}`);
+  }
+
+  const items = form.items || [];
+  const studentNameItem = items.find(it => it.title === 'Student Name');
+  if (!studentNameItem?.questionItem?.question?.required) {
+    errors.push('Student Name question is missing or not marked as required');
+  }
+
+  const regNoItem = items.find(it => it.title === 'University Registration Number');
+  if (!regNoItem?.questionItem?.question?.required) {
+    errors.push('University Registration Number question is missing or not marked as required');
+  }
+
+  const generalFeedbackItem = items.find(it => it.title === 'General Feedback');
+  if (generalFeedbackItem?.questionItem?.question?.required) {
+    errors.push('General Feedback question should be optional but is marked as required');
+  }
+
+  // Check single-faculty rating questions
+  const singleRatingItems = items.filter(it =>
+    it.questionItem?.question?.choiceQuestion && it.title !== 'General Feedback'
+  );
+  singleRatingItems.forEach(item => {
+    if (!item.questionItem?.question?.required) {
+      errors.push(`Single rating question "${item.title}" is not required`);
+    }
+  });
+
+  // Check multi-faculty grids if present
+  const gridItems = items.filter(it => Boolean(it.questionGroupItem?.grid));
+  gridItems.forEach(gridItem => {
+    const questions = gridItem.questionGroupItem?.questions || [];
+    if (questions.length !== 8) {
+      errors.push(`Grid "${gridItem.title}" has ${questions.length} rows instead of 8`);
+    }
+    questions.forEach((q, idx) => {
+      if (!q.required) {
+        errors.push(`Grid "${gridItem.title}" row ${idx + 1} ("${q.rowQuestion?.title}") is not required`);
+      }
+    });
+  });
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    form,
+  };
 }

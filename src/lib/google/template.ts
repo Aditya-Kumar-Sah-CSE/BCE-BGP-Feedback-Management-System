@@ -78,8 +78,30 @@ export interface FormFieldDefinition {
   options?: string[];
 }
 
+export const CANONICAL_PUBLIC_PORTAL_URL = 'https://bce-bgp-feedback-management-system.vercel.app/';
+
 export const PUBLIC_FEEDBACK_PORTAL_URL =
-  process.env.NEXT_PUBLIC_APP_URL || 'https://bce-bgp-feedback-management-system.vercel.app/';
+  process.env.NEXT_PUBLIC_APP_URL || CANONICAL_PUBLIC_PORTAL_URL;
+
+export const ADITYA_PORTFOLIO_URL = 'https://portfolio-two-ashen-zseywond41.vercel.app/';
+
+/**
+ * Standard confirmation message configured via Apps Script.
+ * Plain-text URLs ensure reliable rendering in native Google Forms confirmation screen.
+ */
+export const FORM_CONFIRMATION_MESSAGE = `Your response has been recorded.
+
+More Feedback Forms
+
+Need to access more academic feedback forms?
+
+Visit:
+https://bce-bgp-feedback-management-system.vercel.app/
+
+Developer: Aditya Kumar Sah
+
+Portfolio:
+https://portfolio-two-ashen-zseywond41.vercel.app/`;
 
 export const STUDENT_IDENTIFIER_FIELDS = [
   {
@@ -117,7 +139,7 @@ export const ADDITIONAL_FEEDBACK_FIELDS = [
 
 export const MORE_FEEDBACK_INFO_ITEM = {
   title: 'More Feedback Forms',
-  description: `Want to provide feedback for another faculty or subject?\nVisit:\n${PUBLIC_FEEDBACK_PORTAL_URL}`,
+  description: `Need to access more academic feedback forms?\nVisit:\nhttps://bce-bgp-feedback-management-system.vercel.app/`,
 } as const;
 
 export interface FormMetadataInputs {
@@ -267,8 +289,8 @@ export function buildCreateQuestionsBatchUpdateRequest() {
   requests.push({
     createItem: {
       item: {
-        title: 'More Feedback Forms',
-        description: `Want to provide feedback for another faculty or subject?\nVisit:\n${PUBLIC_FEEDBACK_PORTAL_URL}`,
+        title: MORE_FEEDBACK_INFO_ITEM.title,
+        description: MORE_FEEDBACK_INFO_ITEM.description,
         textItem: {},
       },
       location: {
@@ -393,8 +415,8 @@ export function buildMultiFacultyGridBatchUpdateRequest(items: MultiFacultyGridI
   requests.push({
     createItem: {
       item: {
-        title: 'More Feedback Forms',
-        description: `Need to access more academic feedback forms?\nVisit:\n${PUBLIC_FEEDBACK_PORTAL_URL}`,
+        title: MORE_FEEDBACK_INFO_ITEM.title,
+        description: MORE_FEEDBACK_INFO_ITEM.description,
         textItem: {},
       },
       location: {
