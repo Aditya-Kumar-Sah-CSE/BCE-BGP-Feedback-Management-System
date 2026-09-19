@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
+import { ExternalActionLink } from '@/components/ui/ExternalActionLink';
 
 
 interface Props {
@@ -152,15 +153,14 @@ export function PublicFeedbackCard({ form, isClosed }: boolean extends never ? a
               <p className="text-[11px] text-slate-400 mt-1">This feedback form has concluded.</p>
             </div>
           ) : form.google_form_url ? (
-            <a
+            <ExternalActionLink
               href={form.google_form_url}
-              target="_blank"
-              rel="noopener noreferrer"
+              openingText="Opening Form..."
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3 bg-gradient-to-r from-bce-cobalt to-indigo-600 hover:from-bce-navy hover:to-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg active:scale-98"
             >
               <span>Open Feedback Form</span>
               <ExternalLink className="w-4 h-4" />
-            </a>
+            </ExternalActionLink>
           ) : (
             <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs">
               Google Form responder URL is not available. Please contact administration.

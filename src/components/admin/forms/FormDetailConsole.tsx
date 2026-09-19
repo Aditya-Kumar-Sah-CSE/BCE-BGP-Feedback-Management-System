@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useAppRouter as useRouter } from '@/lib/hooks/use-app-router';
 import {
   FeedbackForm,
   FeedbackFormStatus,
@@ -15,6 +15,7 @@ import {
 } from '@/app/admin/forms/actions';
 import { BCE_FEEDBACK_PARAMETERS } from '@/lib/google/template';
 import { useHydrated, formatDateShort, formatTime, formatDateTimeFull } from '@/lib/hooks/use-hydrated';
+import { ExternalActionLink } from '@/components/ui/ExternalActionLink';
 import {
   ArrowLeft,
   FileSpreadsheet,
@@ -34,6 +35,7 @@ import {
   BarChart3,
   Trash2,
   Lock,
+  Loader2,
 } from 'lucide-react';
 
 interface Props {
@@ -54,6 +56,10 @@ export function FormDetailConsole({
   const hydrated = useHydrated();
   const [form, setForm] = useState<FeedbackForm>(initialForm);
   const [isPending, startTransition] = useTransition();
+  const [pendingAction, setPendingAction] = useState<
+    'PUBLISH' | 'CLOSE' | 'REOPEN' | 'ARCHIVE' | 'RESTORE' | 'DELETE' | 'SYNC' | null
+  >(null);
+  const [isNavigatingResults, setIsNavigatingResults] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -67,34 +73,47 @@ export function FormDetailConsole({
     }
   };
 
-  const handleStatusChange = (newStatus: FeedbackFormStatus) => {
+  const handleStatusChange = (
+    newStatus: FeedbackFormStatus,
+    actionKey?: 'PUBLISH' | 'CLOSE' | 'REOPEN' | 'ARCHIVE' | 'RESTORE'
+  ) => {
     setMessage(null);
+    setPendingAction(actionKey || (newStatus === 'PUBLISHED' ? 'PUBLISH' : newStatus === 'CLOSED' ? 'CLOSE' : 'ARCHIVE'));
     setForm((prev) => ({ ...prev, status: newStatus }));
     startTransition(async () => {
-      const res = await updateFormStatusAction(form.id, newStatus);
-      if (res.success) {
-        setMessage({ type: 'success', text: res.message || `Form status changed to ${newStatus}.` });
-      } else {
-        setForm(initialForm); // rollback
-        setMessage({ type: 'error', text: res.error || 'Failed to update status.' });
+      try {
+        const res = await updateFormStatusAction(form.id, newStatus);
+        if (res.success) {
+          setMessage({ type: 'success', text: res.message || `Form status changed to ${newStatus}.` });
+        } else {
+          setForm(initialForm); // rollback
+          setMessage({ type: 'error', text: res.error || 'Failed to update status.' });
+        }
+      } finally {
+        setPendingAction(null);
       }
     });
   };
 
   const handleSyncResponses = () => {
     setMessage(null);
+    setPendingAction('SYNC');
     startTransition(async () => {
-      const res = await syncFormResponsesAction(form.id);
-      if (res.success) {
-        if (res.totalResponses !== undefined) {
-          setForm((prev) => ({ ...prev, response_count: res.totalResponses ?? prev.response_count }));
+      try {
+        const res = await syncFormResponsesAction(form.id);
+        if (res.success) {
+          if (res.totalResponses !== undefined) {
+            setForm((prev) => ({ ...prev, response_count: res.totalResponses ?? prev.response_count }));
+          }
+          setMessage({
+            type: 'success',
+            text: res.message || `Synced ${res.syncedCount} response(s). Total: ${res.totalResponses}.`,
+          });
+        } else {
+          setMessage({ type: 'error', text: res.error || 'Failed to sync responses.' });
         }
-        setMessage({
-          type: 'success',
-          text: res.message || `Synced ${res.syncedCount} response(s). Total: ${res.totalResponses}.`,
-        });
-      } else {
-        setMessage({ type: 'error', text: res.error || 'Failed to sync responses.' });
+      } finally {
+        setPendingAction(null);
       }
     });
   };
@@ -106,12 +125,17 @@ export function FormDetailConsole({
     if (!isConfirmed) return;
 
     setMessage(null);
+    setPendingAction('DELETE');
     startTransition(async () => {
-      const res = await deleteFeedbackFormAction(form.id);
-      if (res.success) {
-        router.push('/admin/dashboard/forms');
-      } else {
-        setMessage({ type: 'error', text: res.error || 'Failed to delete feedback form.' });
+      try {
+        const res = await deleteFeedbackFormAction(form.id);
+        if (res.success) {
+          router.push('/admin/dashboard/forms');
+        } else {
+          setMessage({ type: 'error', text: res.error || 'Failed to delete feedback form.' });
+        }
+      } finally {
+        setPendingAction(null);
       }
     });
   };
@@ -199,20 +223,20 @@ export function FormDetailConsole({
           <div className="flex flex-wrap items-center gap-2">
             {form.google_form_url && (
               <>
-                <a
+                <ExternalActionLink
                   href={form.google_form_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-xl text-xs font-bold transition-colors shadow-2xs"
+                  openingText="Opening Student Form..."
+                  className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-xl text-xs font-bold transition-colors shadow-2xs"
+                  icon={<FileCode2 className="w-4 h-4 text-purple-700" />}
                 >
-                  <FileCode2 className="w-4 h-4 text-purple-700" />
                   <span>Open Student Form</span>
                   <ExternalLink className="w-3 h-3" />
-                </a>
+                </ExternalActionLink>
 
                 <button
+                  type="button"
                   onClick={handleCopyLink}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium transition-colors"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium transition-colors cursor-pointer"
                 >
                   {copiedUrl ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedUrl ? 'Copied' : 'Copy Form URL'}</span>
@@ -221,56 +245,59 @@ export function FormDetailConsole({
             )}
 
             {form.google_form_edit_url ? (
-              <a
+              <ExternalActionLink
                 href={form.google_form_edit_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-medium transition-colors"
+                openingText="Opening Google Forms..."
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-medium transition-colors"
               >
                 <span>Edit in Google Forms</span>
                 <ExternalLink className="w-3 h-3 text-slate-400" />
-              </a>
+              </ExternalActionLink>
             ) : form.google_form_id ? (
-              <a
+              <ExternalActionLink
                 href={`https://docs.google.com/forms/d/${form.google_form_id}/edit`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-medium transition-colors"
+                openingText="Opening Google Forms..."
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-medium transition-colors"
               >
                 <span>Edit in Google Forms</span>
                 <ExternalLink className="w-3 h-3 text-slate-400" />
-              </a>
+              </ExternalActionLink>
             ) : null}
 
             {form.google_sheet_url || form.google_sheet_id ? (
-              <a
+              <ExternalActionLink
                 href={
                   form.google_sheet_url ||
                   `https://docs.google.com/spreadsheets/d/${form.google_sheet_id}/edit`
                 }
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-colors shadow-2xs"
+                openingText="Opening Response Sheet..."
+                className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-colors shadow-2xs"
+                icon={<FileSpreadsheet className="w-4 h-4 text-emerald-700" />}
               >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
                 <span>Open Response Sheet</span>
                 <ExternalLink className="w-3 h-3" />
-              </a>
+              </ExternalActionLink>
             ) : null}
 
             {hasAnalyticsAccess ? (
               <Link
                 href={`/admin/dashboard/results/${form.id}`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-bce-navy hover:bg-slate-800 text-amber-300 border border-slate-700 rounded-xl text-xs font-bold transition-colors shadow-2xs"
+                onClick={() => setIsNavigatingResults(true)}
+                aria-busy={isNavigatingResults ? 'true' : undefined}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-bce-navy hover:bg-slate-800 text-amber-300 border border-slate-700 rounded-xl text-xs font-bold transition-colors shadow-2xs cursor-pointer"
               >
-                <BarChart3 className="w-4 h-4 text-amber-400" />
-                <span>Results & Analytics</span>
+                {isNavigatingResults ? (
+                  <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
+                ) : (
+                  <BarChart3 className="w-4 h-4 text-amber-400" />
+                )}
+                <span>{isNavigatingResults ? 'Opening Hub...' : 'Results & Analytics'}</span>
               </Link>
             ) : (
               <Link
                 href={`/admin/dashboard/results/${form.id}`}
                 title="Full Analytics Access Required - Click to upgrade your plan"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/95 hover:bg-slate-800 text-slate-300 hover:text-white border border-amber-500/40 rounded-xl text-xs font-bold transition-all shadow-2xs group"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/95 hover:bg-slate-800 text-slate-300 hover:text-white border border-amber-500/40 rounded-xl text-xs font-bold transition-all shadow-2xs group cursor-pointer"
               >
                 <Lock className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
                 <BarChart3 className="w-4 h-4 text-slate-400" />
@@ -286,65 +313,100 @@ export function FormDetailConsole({
           <div className="flex items-center gap-2">
             {form.status === 'DRAFT' && (
               <button
-                onClick={() => handleStatusChange('PUBLISHED')}
+                type="button"
+                onClick={() => handleStatusChange('PUBLISHED', 'PUBLISH')}
                 disabled={isPending}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 shadow-xs"
+                aria-busy={pendingAction === 'PUBLISH' ? 'true' : undefined}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 shadow-xs cursor-pointer"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Publish Form</span>
+                {pendingAction === 'PUBLISH' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                <span>{pendingAction === 'PUBLISH' ? 'Publishing Form...' : 'Publish Form'}</span>
               </button>
             )}
 
             {form.status === 'PUBLISHED' && (
               <button
-                onClick={() => handleStatusChange('CLOSED')}
+                type="button"
+                onClick={() => handleStatusChange('CLOSED', 'CLOSE')}
                 disabled={isPending}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 shadow-xs"
+                aria-busy={pendingAction === 'CLOSE' ? 'true' : undefined}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 shadow-xs cursor-pointer"
               >
-                <Ban className="w-4 h-4" />
-                <span>Close Submissions</span>
+                {pendingAction === 'CLOSE' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Ban className="w-4 h-4" />
+                )}
+                <span>{pendingAction === 'CLOSE' ? 'Closing Submissions...' : 'Close Submissions'}</span>
               </button>
             )}
 
             {form.status === 'CLOSED' && (
               <>
                 <button
-                  onClick={() => handleStatusChange('PUBLISHED')}
+                  type="button"
+                  onClick={() => handleStatusChange('PUBLISHED', 'REOPEN')}
                   disabled={isPending}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+                  aria-busy={pendingAction === 'REOPEN' ? 'true' : undefined}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Reopen Form</span>
+                  {pendingAction === 'REOPEN' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4" />
+                  )}
+                  <span>{pendingAction === 'REOPEN' ? 'Reopening Form...' : 'Reopen Form'}</span>
                 </button>
                 <button
-                  onClick={() => handleStatusChange('ARCHIVED')}
+                  type="button"
+                  onClick={() => handleStatusChange('ARCHIVED', 'ARCHIVE')}
                   disabled={isPending}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+                  aria-busy={pendingAction === 'ARCHIVE' ? 'true' : undefined}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer"
                 >
-                  <Archive className="w-4 h-4" />
-                  <span>Archive Form</span>
+                  {pendingAction === 'ARCHIVE' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Archive className="w-4 h-4" />
+                  )}
+                  <span>{pendingAction === 'ARCHIVE' ? 'Archiving Form...' : 'Archive Form'}</span>
                 </button>
               </>
             )}
 
             {form.status === 'ARCHIVED' && (
               <button
-                onClick={() => handleStatusChange('DRAFT')}
+                type="button"
+                onClick={() => handleStatusChange('DRAFT', 'RESTORE')}
                 disabled={isPending}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+                aria-busy={pendingAction === 'RESTORE' ? 'true' : undefined}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer"
               >
-                <span>Restore to Draft</span>
+                {pendingAction === 'RESTORE' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : null}
+                <span>{pendingAction === 'RESTORE' ? 'Restoring to Draft...' : 'Restore to Draft'}</span>
               </button>
             )}
 
             <button
+              type="button"
               onClick={handleDeleteForm}
               disabled={isPending}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-xs"
+              aria-busy={pendingAction === 'DELETE' ? 'true' : undefined}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-xs cursor-pointer"
               title="Delete this feedback form permanently"
             >
-              <Trash2 className="w-4 h-4" />
-              <span>Delete Form</span>
+              {pendingAction === 'DELETE' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+              <span>{pendingAction === 'DELETE' ? 'Deleting Form...' : 'Delete Form'}</span>
             </button>
           </div>
         </div>
@@ -403,12 +465,14 @@ export function FormDetailConsole({
 
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col justify-center items-center">
                 <button
+                  type="button"
                   onClick={handleSyncResponses}
                   disabled={isPending || !form.google_form_id || !form.google_sheet_id}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 shadow-xs"
+                  aria-busy={pendingAction === 'SYNC' ? 'true' : undefined}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-bce-cobalt hover:bg-bce-navy text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 shadow-xs cursor-pointer"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isPending ? 'animate-spin' : ''}`} />
-                  <span>{isPending ? 'Syncing...' : 'Sync Responses Now'}</span>
+                  <RefreshCw className={`w-3.5 h-3.5 ${pendingAction === 'SYNC' ? 'animate-spin' : ''}`} />
+                  <span>{pendingAction === 'SYNC' ? 'Syncing Responses...' : 'Sync Responses Now'}</span>
                 </button>
                 <span className="text-[10px] text-slate-400 mt-1">Appends new responses</span>
               </div>

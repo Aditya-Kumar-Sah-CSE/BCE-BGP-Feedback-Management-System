@@ -1,7 +1,7 @@
 'use client';
 
 import { useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useAppRouter as useRouter } from '@/lib/hooks/use-app-router';
 import { Trash2, Loader2 } from 'lucide-react';
 import { deleteFeedbackFormAction } from '@/app/admin/forms/actions';
 

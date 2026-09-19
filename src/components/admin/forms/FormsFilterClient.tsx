@@ -1,6 +1,7 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useAppRouter as useRouter } from '@/lib/hooks/use-app-router';
 import { Search, RotateCcw } from 'lucide-react';
 import { AcademicYear, Branch, Semester } from '@/types/database';
 import { useState, useTransition, useEffect, useCallback, useMemo } from 'react';

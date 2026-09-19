@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
+import { useAppRouter as useRouter } from '@/lib/hooks/use-app-router';
 import { createClient } from '@/lib/supabase/client';
 import { OverviewTab, type DashboardCounts } from './tabs/OverviewTab';
 import { AdminMobileNav } from './AdminMobileNav';
@@ -158,7 +158,7 @@ export function AdminDashboardTabs({
   ];
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6 w-full max-w-full min-w-0">
       {adminReqError && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-800 text-xs flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
@@ -169,7 +169,7 @@ export function AdminDashboardTabs({
         </div>
       )}
       {/* Mobile Navigation Bar with Drawer Trigger */}
-      <div className="md:hidden flex items-center justify-between bg-white px-3.5 py-2.5 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="md:hidden flex items-center justify-between bg-white px-3 sm:px-3.5 py-2.5 rounded-2xl border border-slate-200 shadow-xs min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Tab:</span>
           <span className="text-xs font-bold text-bce-navy bg-amber-100 text-amber-900 border border-amber-300/60 px-2.5 py-0.5 rounded-lg truncate">
@@ -188,7 +188,7 @@ export function AdminDashboardTabs({
       </div>
 
       {/* Primary Navigation Tabs */}
-      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs overflow-x-auto no-scrollbar flex flex-nowrap md:flex-wrap items-center gap-1.5 max-w-full">
+      <div className="bg-white p-1.5 sm:p-2 rounded-2xl border border-slate-200 shadow-xs overflow-x-auto no-scrollbar flex flex-nowrap md:flex-wrap items-center gap-1.5 w-full max-w-full min-w-0 touch-pan-x">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -196,7 +196,7 @@ export function AdminDashboardTabs({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shrink-0 whitespace-nowrap cursor-pointer select-none active:scale-95 ${
+              className={`relative inline-flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shrink-0 whitespace-nowrap cursor-pointer select-none active:scale-95 ${
                 isActive
                   ? 'bg-bce-navy text-amber-400 shadow-sm hover:bg-slate-900'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 hover:-translate-y-0.5'
@@ -218,7 +218,7 @@ export function AdminDashboardTabs({
           <Link
             href="/admin/dashboard/results"
             onClick={() => setIsNavigatingToResults(true)}
-            className="group relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-800 hover:text-slate-950 bg-gradient-to-r from-amber-50 to-amber-100/80 hover:from-amber-100 hover:to-amber-200/90 border border-amber-300/80 hover:border-amber-400 shadow-2xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 active:translate-y-0 transition-all duration-200 shrink-0 whitespace-nowrap md:ml-auto cursor-pointer select-none"
+            className="group relative inline-flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-800 hover:text-slate-950 bg-gradient-to-r from-amber-50 to-amber-100/80 hover:from-amber-100 hover:to-amber-200/90 border border-amber-300/80 hover:border-amber-400 shadow-2xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 active:translate-y-0 transition-all duration-200 shrink-0 whitespace-nowrap md:ml-auto cursor-pointer select-none"
           >
             {isNavigatingToResults ? (
               <Loader2 className="w-4 h-4 text-bce-cobalt animate-spin shrink-0" />
@@ -235,7 +235,7 @@ export function AdminDashboardTabs({
             href="/admin/dashboard/results"
             onClick={() => setIsNavigatingToResults(true)}
             title="Full Analytics Access Required - Click to upgrade your plan"
-            className="group relative inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 border border-amber-400/50 hover:border-amber-400 shadow-2xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 active:translate-y-0 transition-all duration-200 shrink-0 whitespace-nowrap md:ml-auto cursor-pointer select-none"
+            className="group relative inline-flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 border border-amber-400/50 hover:border-amber-400 shadow-2xs hover:shadow-md hover:-translate-y-0.5 active:scale-95 active:translate-y-0 transition-all duration-200 shrink-0 whitespace-nowrap md:ml-auto cursor-pointer select-none"
           >
             <Lock className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform shrink-0" />
             {isNavigatingToResults ? (
@@ -252,7 +252,7 @@ export function AdminDashboardTabs({
       </div>
 
       {/* Tab Panels */}
-      <div>
+      <div className="w-full max-w-full min-w-0">
         {activeTab === 'overview' && (
           <OverviewTab
             academicYears={academicYears}

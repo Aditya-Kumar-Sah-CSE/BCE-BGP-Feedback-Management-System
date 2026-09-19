@@ -2,7 +2,8 @@
 
 import { useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useAppRouter as useRouter } from '@/lib/hooks/use-app-router';
 import { createClient } from '@/lib/supabase/client';
 import {
   School,

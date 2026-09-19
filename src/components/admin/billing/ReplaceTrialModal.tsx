@@ -284,10 +284,11 @@ export function ReplaceTrialModal({
             type="button"
             onClick={handleReplace}
             disabled={submitting || loadingConfig}
+            aria-busy={submitting}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50 shadow-sm"
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-            Confirm Replacement
+            <span>{submitting ? 'Replacing Trial...' : 'Confirm Replacement'}</span>
           </button>
         </div>
       </div>

@@ -22,6 +22,7 @@ import {
   getFormResponsesAction,
   getResponseDetailAction,
 } from '@/app/admin/results/responses/actions';
+import { downloadPdfFile } from '@/lib/utils/pdf-download';
 
 interface Props {
   formId: string;
@@ -63,55 +64,24 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
     setDownloadNotification(null);
 
     try {
-      const res = await fetch(
-        `/api/admin/results/${formId}/responses/${encodeURIComponent(responseId)}/pdf`
-      );
-
-      if (!res.ok) {
-        let errMsg = 'Failed to generate student response PDF.';
-        try {
-          const errJson = await res.json();
-          errMsg = errJson.error || errJson.detail || errMsg;
-        } catch {
-          const text = await res.text();
-          if (text) errMsg = text;
-        }
-        setDownloadNotification({
-          type: 'error',
-          message: `PDF Download Error: ${errMsg}`,
-        });
-        return;
-      }
-
-      const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/pdf')) {
-        const text = await res.text();
-        setDownloadNotification({
-          type: 'error',
-          message: `Unexpected response format: ${text.slice(0, 120)}`,
-        });
-        return;
-      }
-
-      const blob = await res.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      const disposition = res.headers.get('content-disposition');
-      const filenameMatch = disposition?.match(/filename="?([^"]+)"?/);
-      link.download = filenameMatch
-        ? filenameMatch[1]
-        : `student-response-${responseId.slice(0, 8)}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
-
-      setDownloadNotification({
-        type: 'success',
-        message: 'Student Response PDF downloaded successfully.',
+      await downloadPdfFile({
+        url: `/api/admin/results/${formId}/responses/${encodeURIComponent(responseId)}/pdf`,
+        defaultFilename: `student-response-${responseId.slice(0, 8)}.pdf`,
+        onError: (err) => {
+          const msg = typeof err === 'string' ? err : err.message;
+          setDownloadNotification({
+            type: 'error',
+            message: `PDF Download Error: ${msg}`,
+          });
+        },
+        onSuccess: () => {
+          setDownloadNotification({
+            type: 'success',
+            message: 'Student Response PDF downloaded successfully.',
+          });
+          setTimeout(() => setDownloadNotification(null), 4000);
+        },
       });
-      setTimeout(() => setDownloadNotification(null), 4000);
     } catch (err: any) {
       console.error('PDF download error:', err);
       setDownloadNotification({
@@ -424,6 +394,7 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
                           type="button"
                           onClick={() => handleDownloadResponsePdf(row.googleResponseId || row.id)}
                           disabled={downloadingPdfId === (row.googleResponseId || row.id)}
+                          aria-busy={downloadingPdfId === (row.googleResponseId || row.id) ? 'true' : undefined}
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors disabled:opacity-50 cursor-pointer"
                           title="Download Student Response PDF"
                         >
@@ -432,7 +403,7 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
                           ) : (
                             <Download className="w-3.5 h-3.5 text-slate-500" />
                           )}
-                          <span>PDF</span>
+                          <span>{downloadingPdfId === (row.googleResponseId || row.id) ? 'Downloading...' : 'PDF'}</span>
                         </button>
                       </div>
                     </td>
@@ -595,6 +566,7 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
                 type="button"
                 onClick={() => handleDownloadResponsePdf(selectedDetail.responseId)}
                 disabled={downloadingPdfId === selectedDetail.responseId}
+                aria-busy={downloadingPdfId === selectedDetail.responseId ? 'true' : undefined}
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
               >
                 {downloadingPdfId === selectedDetail.responseId ? (
@@ -602,7 +574,7 @@ export function FormResponsesConsole({ formId, initialData }: Props) {
                 ) : (
                   <Download className="w-3.5 h-3.5" />
                 )}
-                <span>Download Response PDF</span>
+                <span>{downloadingPdfId === selectedDetail.responseId ? 'Downloading...' : 'Download Response PDF'}</span>
               </button>
 
               <button

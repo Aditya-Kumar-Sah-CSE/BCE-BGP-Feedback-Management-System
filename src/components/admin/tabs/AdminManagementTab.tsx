@@ -16,7 +16,6 @@ import {
   X,
   Clock,
   AlertCircle,
-  AlertTriangle,
   Loader2,
 } from 'lucide-react';
 import type { Admin, AdminRequest } from '@/types/database';
@@ -37,7 +36,10 @@ export function AdminManagementTab({
 }: Props) {
   const hydrated = useHydrated();
   const [isPending, startTransition] = useTransition();
-  const [activeActionId, setActiveActionId] = useState<string | null>(null);
+  const [activeAction, setActiveAction] = useState<{
+    id: string;
+    type: 'APPROVE' | 'REJECT' | 'REVOKE' | 'REACTIVATE';
+  } | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Modals for deliberate Super Admin confirmation
@@ -49,31 +51,37 @@ export function AdminManagementTab({
   const pastRequests = adminRequests.filter((r) => r.status !== 'PENDING');
 
   const handleApprove = (requestId: string) => {
-    setActiveActionId(requestId);
+    setActiveAction({ id: requestId, type: 'APPROVE' });
     setMessage(null);
     startTransition(async () => {
-      const res = await approveAdminRequestAction(requestId);
-      if (res.success) {
-        setMessage({ type: 'success', text: 'Admin request approved successfully.' });
-      } else {
-        setMessage({ type: 'error', text: res.error || 'Failed to approve request.' });
+      try {
+        const res = await approveAdminRequestAction(requestId);
+        if (res.success) {
+          setMessage({ type: 'success', text: 'Admin request approved successfully.' });
+        } else {
+          setMessage({ type: 'error', text: res.error || 'Failed to approve request.' });
+        }
+      } finally {
+        setActiveAction(null);
       }
-      setActiveActionId(null);
     });
   };
 
   const handleReject = (requestId: string) => {
     if (!confirm('Are you sure you want to reject this admin request?')) return;
-    setActiveActionId(requestId);
+    setActiveAction({ id: requestId, type: 'REJECT' });
     setMessage(null);
     startTransition(async () => {
-      const res = await rejectAdminRequestAction(requestId);
-      if (res.success) {
-        setMessage({ type: 'success', text: 'Admin request rejected.' });
-      } else {
-        setMessage({ type: 'error', text: res.error || 'Failed to reject request.' });
+      try {
+        const res = await rejectAdminRequestAction(requestId);
+        if (res.success) {
+          setMessage({ type: 'success', text: 'Admin request rejected.' });
+        } else {
+          setMessage({ type: 'error', text: res.error || 'Failed to reject request.' });
+        }
+      } finally {
+        setActiveAction(null);
       }
-      setActiveActionId(null);
     });
   };
 
@@ -81,22 +89,25 @@ export function AdminManagementTab({
     if (!revokingAdmin) return;
     const targetId = revokingAdmin.id;
     const email = revokingAdmin.email;
-    setActiveActionId(targetId);
+    setActiveAction({ id: targetId, type: 'REVOKE' });
     setMessage(null);
 
     startTransition(async () => {
-      const res = await revokeAdminAccessAction(targetId, revokeReason.trim() || undefined);
-      if (res.success) {
-        setMessage({
-          type: 'success',
-          text: `Administrator access for ${email} has been revoked. The account is now INACTIVE.`,
-        });
-      } else {
-        setMessage({ type: 'error', text: res.error || 'Failed to revoke administrator access.' });
+      try {
+        const res = await revokeAdminAccessAction(targetId, revokeReason.trim() || undefined);
+        if (res.success) {
+          setMessage({
+            type: 'success',
+            text: `Administrator access for ${email} has been revoked. The account is now INACTIVE.`,
+          });
+        } else {
+          setMessage({ type: 'error', text: res.error || 'Failed to revoke administrator access.' });
+        }
+      } finally {
+        setActiveAction(null);
+        setRevokingAdmin(null);
+        setRevokeReason('');
       }
-      setActiveActionId(null);
-      setRevokingAdmin(null);
-      setRevokeReason('');
     });
   };
 
@@ -104,28 +115,31 @@ export function AdminManagementTab({
     if (!reactivatingAdmin) return;
     const targetId = reactivatingAdmin.id;
     const email = reactivatingAdmin.email;
-    setActiveActionId(targetId);
+    setActiveAction({ id: targetId, type: 'REACTIVATE' });
     setMessage(null);
 
     startTransition(async () => {
-      const res = await reactivateAdminAccessAction(targetId);
-      if (res.success) {
-        setMessage({
-          type: 'success',
-          text: `Administrator access for ${email} has been restored. The account is now ACTIVE.`,
-        });
-      } else {
-        setMessage({ type: 'error', text: res.error || 'Failed to reactivate administrator access.' });
+      try {
+        const res = await reactivateAdminAccessAction(targetId);
+        if (res.success) {
+          setMessage({
+            type: 'success',
+            text: `Administrator access for ${email} has been restored. The account is now ACTIVE.`,
+          });
+        } else {
+          setMessage({ type: 'error', text: res.error || 'Failed to reactivate administrator access.' });
+        }
+      } finally {
+        setActiveAction(null);
+        setReactivatingAdmin(null);
       }
-      setActiveActionId(null);
-      setReactivatingAdmin(null);
     });
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4 sm:space-y-6 w-full max-w-full min-w-0">
       {/* Header Banner */}
-      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0">
         <div>
           <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-bce-cobalt" />
@@ -158,16 +172,16 @@ export function AdminManagementTab({
       )}
 
       {/* 1. PENDING REQUESTS TABLE */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-amber-500" />
-            <h4 className="text-sm font-bold text-slate-900">
-              Pending Admin Access Requests ({pendingRequests.length})
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden w-full min-w-0">
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+            <h4 className="text-sm font-bold text-slate-900 truncate">
+              Pending Admin Requests ({pendingRequests.length})
             </h4>
           </div>
-          <span className="text-xs text-slate-400">
-            Awaiting Super Admin Review
+          <span className="text-xs text-slate-400 shrink-0">
+            Awaiting Review
           </span>
         </div>
 
@@ -176,86 +190,144 @@ export function AdminManagementTab({
             No pending admin registration requests at this time.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider">
-                <tr>
-                  <th className="px-5 py-3">Applicant Name</th>
-                  <th className="px-5 py-3">Email Address</th>
-                  <th className="px-5 py-3">Request Date</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {pendingRequests.map((req) => {
-                  const isOperating = isPending && activeActionId === req.id;
-                  return (
-                    <tr key={req.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-5 py-3.5 font-bold text-slate-800">
-                        {req.name}
-                      </td>
-                      <td className="px-5 py-3.5 font-mono text-slate-600">
-                        {req.email}
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-500">
-                        {formatDateShort(req.created_at, hydrated)} at{' '}
-                        {formatTime(req.created_at, hydrated)}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
-                          PENDING
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-right space-x-2">
-                        {isSuperAdmin ? (
-                          <>
-                            <button
-                              onClick={() => handleApprove(req.id)}
-                              disabled={isOperating}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition-colors disabled:opacity-50"
-                            >
-                              {isOperating ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Check className="w-3.5 h-3.5" />
-                              )}
-                              <span>Approve</span>
-                            </button>
+          <>
+            {/* Mobile Cards View */}
+            <div className="md:hidden divide-y divide-slate-100 min-w-0">
+              {pendingRequests.map((req) => {
+                const isApproving = isPending && activeAction?.id === req.id && activeAction.type === 'APPROVE';
+                const isRejecting = isPending && activeAction?.id === req.id && activeAction.type === 'REJECT';
 
-                            <button
-                              onClick={() => handleReject(req.id)}
-                              disabled={isOperating}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold transition-colors disabled:opacity-50"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                              <span>Reject</span>
-                            </button>
-                          </>
-                        ) : (
-                          <span className="text-slate-400 italic text-[11px]">Approval restricted</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                return (
+                  <div key={req.id} className="p-4 space-y-2.5 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-sm text-slate-800 truncate">{req.name}</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 shrink-0">
+                        PENDING
+                      </span>
+                    </div>
+                    <div className="text-xs font-mono text-slate-600 break-all">
+                      {req.email}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Requested: {formatDateShort(req.created_at, hydrated)} at {formatTime(req.created_at, hydrated)}
+                    </div>
+                    {isSuperAdmin && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          onClick={() => handleApprove(req.id)}
+                          disabled={isPending}
+                          aria-busy={isApproving}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-colors disabled:opacity-50 min-h-[40px]"
+                        >
+                          {isApproving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                          <span>{isApproving ? 'Approving...' : 'Approve'}</span>
+                        </button>
+                        <button
+                          onClick={() => handleReject(req.id)}
+                          disabled={isPending}
+                          aria-busy={isRejecting}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition-colors disabled:opacity-50 min-h-[40px]"
+                        >
+                          {isRejecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                          <span>{isRejecting ? 'Rejecting...' : 'Reject'}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto min-w-0">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-5 py-3">Applicant Name</th>
+                    <th className="px-5 py-3">Email Address</th>
+                    <th className="px-5 py-3">Request Date</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pendingRequests.map((req) => {
+                    const isApproving = isPending && activeAction?.id === req.id && activeAction.type === 'APPROVE';
+                    const isRejecting = isPending && activeAction?.id === req.id && activeAction.type === 'REJECT';
+
+                    return (
+                      <tr key={req.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="px-5 py-3.5 font-bold text-slate-800">
+                          {req.name}
+                        </td>
+                        <td className="px-5 py-3.5 font-mono text-slate-600">
+                          {req.email}
+                        </td>
+                        <td className="px-5 py-3.5 text-slate-500">
+                          {formatDateShort(req.created_at, hydrated)} at{' '}
+                          {formatTime(req.created_at, hydrated)}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
+                            PENDING
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-right space-x-2">
+                          {isSuperAdmin ? (
+                            <>
+                              <button
+                                onClick={() => handleApprove(req.id)}
+                                disabled={isPending}
+                                aria-busy={isApproving}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition-colors disabled:opacity-50"
+                              >
+                                {isApproving ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5" />
+                                )}
+                                <span>{isApproving ? 'Approving...' : 'Approve'}</span>
+                              </button>
+
+                              <button
+                                onClick={() => handleReject(req.id)}
+                                disabled={isPending}
+                                aria-busy={isRejecting}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold transition-colors disabled:opacity-50"
+                              >
+                                {isRejecting ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <X className="w-3.5 h-3.5" />
+                                )}
+                                <span>{isRejecting ? 'Rejecting...' : 'Reject'}</span>
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-slate-400 italic text-[11px]">Approval restricted</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
       {/* 2. REGISTERED ADMINISTRATORS DIRECTORY */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <UserCheck className="w-4 h-4 text-bce-cobalt" />
-            <h4 className="text-sm font-bold text-slate-900">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden w-full min-w-0">
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <UserCheck className="w-4 h-4 text-bce-cobalt shrink-0" />
+            <h4 className="text-sm font-bold text-slate-900 truncate">
               Authorized Administrators ({adminsList.length})
             </h4>
           </div>
-          <span className="text-xs text-slate-400">
-            Active and Inactive Admin Accounts
+          <span className="text-xs text-slate-400 shrink-0">
+            Active & Inactive Accounts
           </span>
         </div>
 
@@ -264,112 +336,194 @@ export function AdminManagementTab({
             No administrator accounts configured yet.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider">
-                <tr>
-                  <th className="px-5 py-3">Admin Name</th>
-                  <th className="px-5 py-3">Email</th>
-                  <th className="px-5 py-3">Role</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Added Date</th>
-                  <th className="px-5 py-3 text-right">Access Control</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {adminsList.map((admin) => {
-                  const isOperating = isPending && activeActionId === admin.id;
-                  const isPrimarySuperAdmin = admin.email.toLowerCase() === 'iambestadi@gmail.com';
-                  const isSelf = admin.email.toLowerCase() === currentUserEmail.toLowerCase();
+          <>
+            {/* Mobile Cards View */}
+            <div className="md:hidden divide-y divide-slate-100 min-w-0">
+              {adminsList.map((admin) => {
+                const isOperating = isPending && activeAction?.id === admin.id;
+                const isPrimarySuperAdmin = admin.email.toLowerCase() === 'iambestadi@gmail.com';
+                const isSelf = admin.email.toLowerCase() === currentUserEmail.toLowerCase();
 
-                  return (
-                    <tr key={admin.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-5 py-3.5 font-bold text-slate-800">
-                        {admin.name}
+                return (
+                  <div key={admin.id} className="p-4 space-y-2.5 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="font-bold text-sm text-slate-800 truncate block">
+                          {admin.name}
+                        </span>
                         {isSelf && (
-                          <span className="ml-2 text-[10px] text-bce-cobalt font-semibold bg-blue-50 px-1.5 py-0.5 rounded">
-                            (You)
+                          <span className="text-[10px] text-bce-cobalt font-semibold bg-blue-50 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                            (Your Current Session)
                           </span>
                         )}
-                      </td>
-                      <td className="px-5 py-3.5 font-mono text-slate-600">
-                        {admin.email}
-                      </td>
-                      <td className="px-5 py-3.5">
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
                         {admin.role === 'SUPER_ADMIN' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
                             <ShieldCheck className="w-3 h-3" /> SUPER ADMIN
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-blue-100 text-blue-800">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-800">
                             ADMIN
                           </span>
                         )}
-                      </td>
-                      <td className="px-5 py-3.5">
                         {admin.status === 'ACTIVE' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
                             ACTIVE
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-800">
-                            REVOKED / INACTIVE
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-800">
+                            REVOKED
                           </span>
                         )}
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-500">
-                        {formatDateShort(admin.created_at, hydrated)}
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        {isSuperAdmin ? (
-                          isPrimarySuperAdmin ? (
-                            <span className="text-[11px] text-slate-400 italic">Primary Super Admin</span>
-                          ) : isSelf ? (
-                            <span className="text-[11px] text-slate-400 italic">Current Session</span>
-                          ) : admin.role === 'ADMIN' ? (
-                            admin.status === 'ACTIVE' ? (
-                              <button
-                                onClick={() => {
-                                  setRevokingAdmin(admin);
-                                  setRevokeReason('');
-                                }}
-                                disabled={isOperating}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 shadow-2xs hover:shadow-xs disabled:opacity-50 cursor-pointer"
-                              >
-                                {isOperating ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  <UserX className="w-3.5 h-3.5 text-rose-600" />
-                                )}
-                                <span>Revoke Access</span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => setReactivatingAdmin(admin)}
-                                disabled={isOperating}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-2xs hover:shadow-xs disabled:opacity-50 cursor-pointer"
-                              >
-                                {isOperating ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                                )}
-                                <span>Reactivate Access</span>
-                              </button>
-                            )
-                          ) : (
-                            <span className="text-slate-400 text-[11px] italic">Protected Super Admin</span>
-                          )
+                      </div>
+                    </div>
+
+                    <div className="text-xs font-mono text-slate-600 break-all">
+                      {admin.email}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <span className="text-[11px] text-slate-400">
+                        Added: {formatDateShort(admin.created_at, hydrated)}
+                      </span>
+
+                      {isSuperAdmin && !isPrimarySuperAdmin && !isSelf && admin.role === 'ADMIN' && (
+                        admin.status === 'ACTIVE' ? (
+                          <button
+                            onClick={() => {
+                              setRevokingAdmin(admin);
+                              setRevokeReason('');
+                            }}
+                            disabled={isOperating}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 min-h-[36px]"
+                          >
+                            {isOperating ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserX className="w-3 h-3" />}
+                            <span>Revoke Access</span>
+                          </button>
                         ) : (
-                          <span className="text-slate-400 text-[11px] italic">Protected</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          <button
+                            onClick={() => setReactivatingAdmin(admin)}
+                            disabled={isOperating}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 min-h-[36px]"
+                          >
+                            {isOperating ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserCheck className="w-3 h-3" />}
+                            <span>Reactivate</span>
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto min-w-0">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-5 py-3">Admin Name</th>
+                    <th className="px-5 py-3">Email</th>
+                    <th className="px-5 py-3">Role</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3">Added Date</th>
+                    <th className="px-5 py-3 text-right">Access Control</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {adminsList.map((admin) => {
+                    const isOperating = isPending && activeAction?.id === admin.id;
+                    const isPrimarySuperAdmin = admin.email.toLowerCase() === 'iambestadi@gmail.com';
+                    const isSelf = admin.email.toLowerCase() === currentUserEmail.toLowerCase();
+
+                    return (
+                      <tr key={admin.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="px-5 py-3.5 font-bold text-slate-800">
+                          {admin.name}
+                          {isSelf && (
+                            <span className="ml-2 text-[10px] text-bce-cobalt font-semibold bg-blue-50 px-1.5 py-0.5 rounded">
+                              (You)
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 font-mono text-slate-600">
+                          {admin.email}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {admin.role === 'SUPER_ADMIN' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
+                              <ShieldCheck className="w-3 h-3" /> SUPER ADMIN
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-blue-100 text-blue-800">
+                              ADMIN
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {admin.status === 'ACTIVE' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                              ACTIVE
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-800">
+                              REVOKED / INACTIVE
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-slate-500">
+                          {formatDateShort(admin.created_at, hydrated)}
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          {isSuperAdmin ? (
+                            isPrimarySuperAdmin ? (
+                              <span className="text-[11px] text-slate-400 italic">Primary Super Admin</span>
+                            ) : isSelf ? (
+                              <span className="text-[11px] text-slate-400 italic">Current Session</span>
+                            ) : admin.role === 'ADMIN' ? (
+                              admin.status === 'ACTIVE' ? (
+                                <button
+                                  onClick={() => {
+                                    setRevokingAdmin(admin);
+                                    setRevokeReason('');
+                                  }}
+                                  disabled={isOperating}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 shadow-2xs hover:shadow-xs disabled:opacity-50 cursor-pointer"
+                                >
+                                  {isOperating ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <UserX className="w-3.5 h-3.5 text-rose-600" />
+                                  )}
+                                  <span>Revoke Access</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setReactivatingAdmin(admin)}
+                                  disabled={isOperating}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-2xs hover:shadow-xs disabled:opacity-50 cursor-pointer"
+                                >
+                                  {isOperating ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                  )}
+                                  <span>Reactivate</span>
+                                </button>
+                              )
+                            ) : null
+                          ) : (
+                            <span className="text-slate-400 italic text-[11px]">Restricted</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
@@ -379,14 +533,14 @@ export function AdminManagementTab({
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-start gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-rose-100 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5" />
+                <AlertCircle className="w-5 h-5" />
               </div>
               <div className="space-y-1">
                 <h4 className="text-base font-bold text-slate-900">
-                  Revoke admin access?
+                  Revoke administrator access?
                 </h4>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Admin access will be disabled immediately. Existing academic/content data will not be deleted.
+                  This administrator will be set to INACTIVE and immediately lose access to all admin portal features.
                 </p>
               </div>
             </div>
@@ -403,8 +557,8 @@ export function AdminManagementTab({
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-[11px] font-semibold text-slate-700 uppercase tracking-wider">
-                Reason for revocation (optional)
+              <label className="text-xs font-semibold text-slate-700">
+                Reason for revocation (optional):
               </label>
               <input
                 type="text"
@@ -428,10 +582,17 @@ export function AdminManagementTab({
                 type="button"
                 onClick={confirmRevokeAccess}
                 disabled={isPending}
+                aria-busy={isPending && activeAction?.type === 'REVOKE'}
                 className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 transition-colors shadow-sm cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>Revoke Access</span>
+                {isPending && activeAction?.type === 'REVOKE' ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Revoking Access...</span>
+                  </>
+                ) : (
+                  <span>Revoke Access</span>
+                )}
               </button>
             </div>
           </div>
@@ -480,10 +641,17 @@ export function AdminManagementTab({
                 type="button"
                 onClick={confirmReactivateAccess}
                 disabled={isPending}
+                aria-busy={isPending && activeAction?.type === 'REACTIVATE'}
                 className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>Reactivate Access</span>
+                {isPending && activeAction?.type === 'REACTIVATE' ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Reactivating Access...</span>
+                  </>
+                ) : (
+                  <span>Reactivate Access</span>
+                )}
               </button>
             </div>
           </div>
@@ -492,13 +660,39 @@ export function AdminManagementTab({
 
       {/* 3. PAST REVIEWED REQUESTS HISTORY */}
       {pastRequests.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden w-full min-w-0">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-2">
+            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider truncate">
               Reviewed Requests History ({pastRequests.length})
             </h4>
           </div>
-          <div className="overflow-x-auto">
+          {/* Mobile Cards View */}
+          <div className="md:hidden divide-y divide-slate-100 min-w-0">
+            {pastRequests.map((req) => (
+              <div key={req.id} className="p-3.5 space-y-1.5 text-xs min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-800 truncate">{req.name}</span>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                      req.status === 'APPROVED'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-rose-100 text-rose-800'
+                    }`}
+                  >
+                    {req.status}
+                  </span>
+                </div>
+                <div className="font-mono text-slate-500 break-all text-[11px]">
+                  {req.email}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  Reviewed: {req.reviewed_at ? formatDateShort(req.reviewed_at, hydrated) : '—'}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Desktop Table */}
+          <div className="hidden md:block overflow-x-auto min-w-0">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-100">
                 <tr>

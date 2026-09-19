@@ -24,6 +24,7 @@ import {
   resendConfirmationEmailAction,
   VerifiedConfirmationData,
 } from './actions';
+import { downloadPdfFile } from '@/lib/utils/pdf-download';
 
 function ConfirmationContent() {
   const searchParams = useSearchParams();
@@ -35,9 +36,26 @@ function ConfirmationContent() {
   const [lookupFormId, setLookupFormId] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [emailStatusMsg, setEmailStatusMsg] = useState<string | null>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const [isPending, startTransition] = useTransition();
   const [isEmailPending, startEmailTransition] = useTransition();
+
+  const handleDownloadPdf = async () => {
+    if (!confirmationData?.downloadUrl || isDownloadingPdf) return;
+    setIsDownloadingPdf(true);
+    try {
+      await downloadPdfFile({
+        url: confirmationData.downloadUrl,
+        defaultFilename: 'bce-feedback-confirmation-response.pdf',
+        onError: (err) => {
+          setEmailStatusMsg(typeof err === 'string' ? err : err.message);
+        },
+      });
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   useEffect(() => {
     if (!token) {
@@ -232,14 +250,20 @@ function ConfirmationContent() {
 
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              <a
-                href={confirmationData.downloadUrl}
-                download
-                className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/30"
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={isDownloadingPdf}
+                aria-busy={isDownloadingPdf ? 'true' : undefined}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/30 disabled:opacity-50 cursor-pointer"
               >
-                <Download className="w-4 h-4" />
-                Download My Response (PDF)
-              </a>
+                {isDownloadingPdf ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                <span>{isDownloadingPdf ? 'Downloading PDF...' : 'Download My Response (PDF)'}</span>
+              </button>
 
               <button
                 type="button"

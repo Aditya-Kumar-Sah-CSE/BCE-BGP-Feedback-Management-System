@@ -28,9 +28,11 @@ export function PlanManagementSection() {
   const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<BillingPlan | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Form State
   const [name, setName] = useState('');
@@ -46,11 +48,14 @@ export function PlanManagementSection() {
 
   const loadPlans = useCallback(async () => {
     setLoading(true);
-    const res = await getAllBillingPlansAction();
-    if (res.success && res.plans) {
-      setPlans(res.plans);
+    try {
+      const res = await getAllBillingPlansAction();
+      if (res.success && res.plans) {
+        setPlans(res.plans);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -79,9 +84,9 @@ export function PlanManagementSection() {
     setPrice(String(plan.price));
     setCurrency(plan.currency);
     setBillingInterval(plan.billing_interval);
-    setDurationDays(plan.duration_days !== null && plan.duration_days !== undefined ? String(plan.duration_days) : '');
-    setFeaturesText(plan.features?.join('\n') || '');
-    setIsRecommended(plan.is_recommended || false);
+    setDurationDays(plan.duration_days ? String(plan.duration_days) : '');
+    setFeaturesText((plan.features || []).join('\n'));
+    setIsRecommended(plan.is_recommended);
     setIsActive(plan.is_active);
     setDisplayOrder(String(plan.display_order));
     setIsModalOpen(true);
@@ -92,16 +97,14 @@ export function PlanManagementSection() {
       setMessage({ type: 'error', text: 'Plan name is required.' });
       return;
     }
-
     const priceNum = parseFloat(price);
     if (isNaN(priceNum) || priceNum < 0) {
-      setMessage({ type: 'error', text: 'Price must be a non-negative number.' });
+      setMessage({ type: 'error', text: 'Valid price is required.' });
       return;
     }
-
-    const durationNum = durationDays.trim() !== '' ? parseInt(durationDays, 10) : null;
-    if (durationNum !== null && (isNaN(durationNum) || durationNum < 0)) {
-      setMessage({ type: 'error', text: 'Duration must be a valid non-negative number of days, or empty for unlimited.' });
+    const durationNum = durationDays ? parseInt(durationDays, 10) : undefined;
+    if (durationNum !== undefined && (isNaN(durationNum) || durationNum < 1)) {
+      setMessage({ type: 'error', text: 'Duration must be at least 1 day.' });
       return;
     }
 
@@ -113,46 +116,58 @@ export function PlanManagementSection() {
     setSaving(true);
     setMessage(null);
 
-    const payload = {
-      name: name.trim(),
-      description: description.trim() || undefined,
-      price: priceNum,
-      currency: currency.trim() || 'INR',
-      billingInterval,
-      durationDays: durationNum,
-      features,
-      isRecommended,
-      isActive,
-      displayOrder: parseInt(displayOrder, 10) || 0,
-    };
+    try {
+      const payload = {
+        name: name.trim(),
+        description: description.trim() || undefined,
+        price: priceNum,
+        currency: currency.trim() || 'INR',
+        billingInterval,
+        durationDays: durationNum,
+        features,
+        isRecommended,
+        isActive,
+        displayOrder: parseInt(displayOrder, 10) || 0,
+      };
 
-    let res;
-    if (editingPlan) {
-      res = await updateBillingPlanAction({ id: editingPlan.id, ...payload });
-    } else {
-      res = await createBillingPlanAction(payload);
-    }
+      let res;
+      if (editingPlan) {
+        res = await updateBillingPlanAction({ id: editingPlan.id, ...payload });
+      } else {
+        res = await createBillingPlanAction(payload);
+      }
 
-    setSaving(false);
-    if (res.success) {
-      const msg = 'message' in res ? (res as any).message : undefined;
-      setMessage({ type: 'success', text: msg || 'Plan saved successfully.' });
-      setIsModalOpen(false);
-      await loadPlans();
-    } else {
-      const err = 'error' in res ? (res as any).error : undefined;
-      setMessage({ type: 'error', text: err || 'Failed to save plan.' });
+      if (res.success) {
+        const msg = 'message' in res ? (res as any).message : undefined;
+        setMessage({ type: 'success', text: msg || 'Plan saved successfully.' });
+        setIsModalOpen(false);
+        await loadPlans();
+      } else {
+        const err = 'error' in res ? (res as any).error : undefined;
+        setMessage({ type: 'error', text: err || 'Failed to save plan.' });
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err?.message || 'Failed to save plan.' });
+    } finally {
+      setSaving(false);
     }
     setTimeout(() => setMessage(null), 4000);
   }
 
   async function handleToggle(plan: BillingPlan) {
-    const res = await toggleBillingPlanAction(plan.id, !plan.is_active);
-    if (res.success) {
-      setMessage({ type: 'success', text: res.message || 'Status updated.' });
-      await loadPlans();
-    } else {
-      setMessage({ type: 'error', text: res.error || 'Failed to toggle status.' });
+    setTogglingId(plan.id);
+    try {
+      const res = await toggleBillingPlanAction(plan.id, !plan.is_active);
+      if (res.success) {
+        setMessage({ type: 'success', text: res.message || 'Status updated.' });
+        await loadPlans();
+      } else {
+        setMessage({ type: 'error', text: res.error || 'Failed to toggle status.' });
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err?.message || 'Failed to toggle status.' });
+    } finally {
+      setTogglingId(null);
     }
     setTimeout(() => setMessage(null), 4000);
   }
@@ -160,12 +175,19 @@ export function PlanManagementSection() {
   async function handleDelete(plan: BillingPlan) {
     if (!confirm(`Are you sure you want to delete "${plan.name}"? This cannot be undone.`)) return;
 
-    const res = await deleteBillingPlanAction(plan.id);
-    if (res.success) {
-      setMessage({ type: 'success', text: res.message || 'Plan deleted.' });
-      await loadPlans();
-    } else {
-      setMessage({ type: 'error', text: res.error || 'Cannot delete plan.' });
+    setDeletingId(plan.id);
+    try {
+      const res = await deleteBillingPlanAction(plan.id);
+      if (res.success) {
+        setMessage({ type: 'success', text: res.message || 'Plan deleted.' });
+        await loadPlans();
+      } else {
+        setMessage({ type: 'error', text: res.error || 'Cannot delete plan.' });
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err?.message || 'Cannot delete plan.' });
+    } finally {
+      setDeletingId(null);
     }
     setTimeout(() => setMessage(null), 4000);
   }
@@ -260,14 +282,22 @@ export function PlanManagementSection() {
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                 <button
                   onClick={() => handleToggle(plan)}
-                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition ${
+                  disabled={togglingId === plan.id}
+                  aria-busy={togglingId === plan.id}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition disabled:opacity-50 ${
                     plan.is_active
                       ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                       : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
                   }`}
                 >
-                  {plan.is_active ? <ToggleRight className="w-3.5 h-3.5" /> : <ToggleLeft className="w-3.5 h-3.5" />}
-                  {plan.is_active ? 'Active' : 'Disabled'}
+                  {togglingId === plan.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : plan.is_active ? (
+                    <ToggleRight className="w-3.5 h-3.5" />
+                  ) : (
+                    <ToggleLeft className="w-3.5 h-3.5" />
+                  )}
+                  <span>{togglingId === plan.id ? 'Updating...' : plan.is_active ? 'Active' : 'Disabled'}</span>
                 </button>
 
                 <div className="flex items-center gap-1">
@@ -280,10 +310,16 @@ export function PlanManagementSection() {
                   </button>
                   <button
                     onClick={() => handleDelete(plan)}
-                    className="p-1.5 rounded-md text-red-500 hover:text-red-700 hover:bg-red-50 transition"
+                    disabled={deletingId === plan.id}
+                    aria-busy={deletingId === plan.id}
+                    className="p-1.5 rounded-md text-red-500 hover:text-red-700 hover:bg-red-50 transition disabled:opacity-50"
                     title="Delete Plan"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    {deletingId === plan.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -427,10 +463,11 @@ export function PlanManagementSection() {
                 type="button"
                 onClick={handleSave}
                 disabled={saving}
+                aria-busy={saving}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-bce-cobalt text-white hover:bg-bce-navy transition disabled:opacity-50"
               >
                 {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {editingPlan ? 'Update Plan' : 'Save Plan'}
+                <span>{saving ? (editingPlan ? 'Updating Plan...' : 'Saving Plan...') : (editingPlan ? 'Update Plan' : 'Save Plan')}</span>
               </button>
             </div>
           </div>

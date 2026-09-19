@@ -27,6 +27,7 @@ import type {
   Subject,
 } from '@/types/database';
 import { PaginationControl } from '@/components/ui/PaginationControl';
+import { ExternalActionLink } from '@/components/ui/ExternalActionLink';
 
 interface Props {
   feedbackForms: FeedbackForm[];
@@ -48,6 +49,8 @@ export function FeedbackFormsTab({
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [navigatingFormId, setNavigatingFormId] = useState<string | null>(null);
   const [isNavigatingCreate, setIsNavigatingCreate] = useState(false);
   const [isNavigatingCatalog, setIsNavigatingCatalog] = useState(false);
 
@@ -74,21 +77,29 @@ export function FeedbackFormsTab({
 
   // Fast in-place optimistic status toggle
   const handleToggleStatus = (form: FeedbackForm) => {
-    const nextStatus = form.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED';
+    const nextStatus = form.status === 'PUBLISHED' ? 'CLOSED' : 'PUBLISHED';
+    setMessage(null);
+    setTogglingId(form.id);
+
+    // Optimistic UI update
     setFormsList((prev) =>
       prev.map((f) => (f.id === form.id ? { ...f, status: nextStatus } : f))
     );
 
     startTransition(async () => {
-      const res = await toggleFeedbackFormStatusAction(form.id, nextStatus);
-      if (res.success) {
-        setMessage({ type: 'success', text: `Form status updated to ${nextStatus}.` });
-      } else {
-        // Rollback
-        setFormsList((prev) =>
-          prev.map((f) => (f.id === form.id ? { ...f, status: form.status } : f))
-        );
-        setMessage({ type: 'error', text: res.error || 'Failed to update status.' });
+      try {
+        const res = await toggleFeedbackFormStatusAction(form.id, nextStatus);
+        if (res.success) {
+          setMessage({ type: 'success', text: `Form status updated to ${nextStatus}.` });
+        } else {
+          // Rollback
+          setFormsList((prev) =>
+            prev.map((f) => (f.id === form.id ? { ...f, status: form.status } : f))
+          );
+          setMessage({ type: 'error', text: res.error || 'Failed to update status.' });
+        }
+      } finally {
+        setTogglingId(null);
       }
     });
   };
@@ -108,14 +119,17 @@ export function FeedbackFormsTab({
     setFormsList((prev) => prev.filter((f) => f.id !== form.id));
 
     startTransition(async () => {
-      const res = await deleteFeedbackFormAction(form.id);
-      setDeletingId(null);
-      if (res.success) {
-        setMessage({ type: 'success', text: `Form "${form.title}" deleted successfully.` });
-      } else {
-        // Rollback on failure
-        setFormsList(previousForms);
-        setMessage({ type: 'error', text: res.error || 'Failed to delete feedback form.' });
+      try {
+        const res = await deleteFeedbackFormAction(form.id);
+        if (res.success) {
+          setMessage({ type: 'success', text: `Form "${form.title}" deleted successfully.` });
+        } else {
+          // Rollback on failure
+          setFormsList(previousForms);
+          setMessage({ type: 'error', text: res.error || 'Failed to delete feedback form.' });
+        }
+      } finally {
+        setDeletingId(null);
       }
     });
   };
@@ -354,33 +368,31 @@ export function FeedbackFormsTab({
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-2">
                             {form.google_form_url && (
-                              <a
+                              <ExternalActionLink
                                 href={form.google_form_url}
-                                target="_blank"
-                                rel="noreferrer"
+                                openingText="Opening Form..."
                                 className="text-purple-700 hover:text-purple-900 inline-flex items-center gap-0.5 text-[11px] font-semibold"
                                 title="Open Google Form Responder View"
+                                icon={<FileCode2 className="w-3.5 h-3.5" />}
                               >
-                                <FileCode2 className="w-3.5 h-3.5" />
                                 <span>Form</span>
                                 <ExternalLink className="w-2.5 h-2.5" />
-                              </a>
+                              </ExternalActionLink>
                             )}
                             {form.google_sheet_url || form.google_sheet_id ? (
-                              <a
+                              <ExternalActionLink
                                 href={
                                   form.google_sheet_url ||
                                   `https://docs.google.com/spreadsheets/d/${form.google_sheet_id}/edit`
                                 }
-                                target="_blank"
-                                rel="noreferrer"
+                                openingText="Opening Sheet..."
                                 className="text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-0.5 text-[11px] font-semibold ml-1.5"
                                 title="Open Google Sheet"
+                                icon={<FileSpreadsheet className="w-3.5 h-3.5" />}
                               >
-                                <FileSpreadsheet className="w-3.5 h-3.5" />
                                 <span>Sheet</span>
                                 <ExternalLink className="w-2.5 h-2.5" />
-                              </a>
+                              </ExternalActionLink>
                             ) : null}
                           </div>
                         </td>
@@ -388,26 +400,45 @@ export function FeedbackFormsTab({
                           <div className="inline-flex items-center gap-1.5">
                             <Link
                               href={`/admin/dashboard/forms/${form.id}`}
-                              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 hover:text-bce-cobalt bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1"
+                              onClick={() => setNavigatingFormId(form.id)}
+                              aria-busy={navigatingFormId === form.id ? 'true' : undefined}
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 hover:text-bce-cobalt bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
                             >
-                              <Eye className="w-3 h-3" />
-                              <span>Manage</span>
+                              {navigatingFormId === form.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Eye className="w-3 h-3" />
+                              )}
+                              <span>{navigatingFormId === form.id ? 'Opening...' : 'Manage'}</span>
                             </Link>
                             <button
+                              type="button"
                               onClick={() => handleToggleStatus(form)}
-                              disabled={isPending || deletingId === form.id}
-                              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                              disabled={isPending || deletingId === form.id || togglingId === form.id}
+                              aria-busy={togglingId === form.id ? 'true' : undefined}
+                              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1 ${
                                 isPublished
                                   ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
                                   : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                               }`}
                             >
-                              {isPublished ? 'Unpublish' : 'Publish'}
+                              {togglingId === form.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                              <span>
+                                {togglingId === form.id
+                                  ? isPublished
+                                    ? 'Unpublishing...'
+                                    : 'Publishing...'
+                                  : isPublished
+                                  ? 'Unpublish'
+                                  : 'Publish'}
+                              </span>
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleDeleteForm(form)}
-                              disabled={isPending || deletingId === form.id}
-                              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-rose-600 transition-all inline-flex items-center gap-1 disabled:opacity-50"
+                              disabled={isPending || deletingId === form.id || togglingId === form.id}
+                              aria-busy={deletingId === form.id ? 'true' : undefined}
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-rose-600 transition-all inline-flex items-center gap-1 disabled:opacity-50 cursor-pointer"
                               title="Delete Form"
                             >
                               {deletingId === form.id ? (
@@ -415,7 +446,7 @@ export function FeedbackFormsTab({
                               ) : (
                                 <Trash2 className="w-3 h-3" />
                               )}
-                              <span>Delete</span>
+                              <span>{deletingId === form.id ? 'Deleting...' : 'Delete'}</span>
                             </button>
                           </div>
                         </td>
@@ -487,56 +518,73 @@ export function FeedbackFormsTab({
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                       <div className="flex items-center gap-2">
                         {form.google_form_url && (
-                          <a
+                          <ExternalActionLink
                             href={form.google_form_url}
-                            target="_blank"
-                            rel="noreferrer"
+                            openingText="Opening..."
                             className="text-purple-700 hover:text-purple-900 inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg bg-purple-50"
+                            icon={<FileCode2 className="w-3.5 h-3.5" />}
                           >
-                            <FileCode2 className="w-3.5 h-3.5" />
                             <span>Form</span>
                             <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
+                          </ExternalActionLink>
                         )}
                         {(form.google_sheet_url || form.google_sheet_id) && (
-                          <a
+                          <ExternalActionLink
                             href={
                               form.google_sheet_url ||
                               `https://docs.google.com/spreadsheets/d/${form.google_sheet_id}/edit`
                             }
-                            target="_blank"
-                            rel="noreferrer"
+                            openingText="Opening..."
                             className="text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg bg-emerald-50"
+                            icon={<FileSpreadsheet className="w-3.5 h-3.5" />}
                           >
-                            <FileSpreadsheet className="w-3.5 h-3.5" />
                             <span>Sheet</span>
                             <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
+                          </ExternalActionLink>
                         )}
                       </div>
 
                       <div className="flex items-center gap-1.5 ml-auto">
                         <Link
                           href={`/admin/dashboard/forms/${form.id}`}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:text-bce-cobalt bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1"
+                          onClick={() => setNavigatingFormId(form.id)}
+                          aria-busy={navigatingFormId === form.id ? 'true' : undefined}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:text-bce-cobalt bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
                         >
-                          <Eye className="w-3 h-3" />
-                          <span>Manage</span>
+                          {navigatingFormId === form.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Eye className="w-3 h-3" />
+                          )}
+                          <span>{navigatingFormId === form.id ? 'Opening...' : 'Manage'}</span>
                         </Link>
                         <button
+                          type="button"
                           onClick={() => handleToggleStatus(form)}
-                          disabled={isPending || deletingId === form.id}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                          disabled={isPending || deletingId === form.id || togglingId === form.id}
+                          aria-busy={togglingId === form.id ? 'true' : undefined}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1 ${
                             isPublished
                               ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
                               : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                           }`}
                         >
-                          {isPublished ? 'Unpublish' : 'Publish'}
+                          {togglingId === form.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                          <span>
+                            {togglingId === form.id
+                              ? isPublished
+                                ? 'Unpublishing...'
+                                : 'Publishing...'
+                              : isPublished
+                              ? 'Unpublish'
+                              : 'Publish'}
+                          </span>
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleDeleteForm(form)}
-                          disabled={isPending || deletingId === form.id}
+                          disabled={isPending || deletingId === form.id || togglingId === form.id}
+                          aria-busy={deletingId === form.id ? 'true' : undefined}
                           className="p-1.5 rounded-lg text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-rose-600 transition-all inline-flex items-center disabled:opacity-50 cursor-pointer"
                           title="Delete Form"
                         >

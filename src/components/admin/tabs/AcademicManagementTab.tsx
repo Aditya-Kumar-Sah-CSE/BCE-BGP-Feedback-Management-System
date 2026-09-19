@@ -612,9 +612,9 @@ export function AcademicManagementTab({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 w-full max-w-full min-w-0">
       {/* Sub-Navigation Tabs */}
-      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex overflow-x-auto no-scrollbar gap-1.5 sm:flex-wrap">
+      <div className="bg-white p-1.5 sm:p-2 rounded-2xl border border-slate-200 shadow-xs flex overflow-x-auto no-scrollbar gap-1.5 w-full max-w-full min-w-0 touch-pan-x sm:flex-wrap">
         {[
           { id: 'faculties', label: `Faculties (${facultyTotal})`, icon: Users },
           { id: 'subjects', label: `Subjects (${subjectTotal})`, icon: BookOpen },
@@ -657,9 +657,9 @@ export function AcademicManagementTab({
 
       {/* 1. FACULTIES SUBTAB */}
       {activeSubTab === 'faculties' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
           {/* Add Faculty Form */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 min-w-0 w-full">
             <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Plus className="w-4 h-4 text-bce-cobalt" />
               Add New Faculty
@@ -730,7 +730,7 @@ export function AcademicManagementTab({
           </div>
 
           {/* Faculty List with Fast Search, Filter & Pagination */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col min-w-0 w-full">
             {/* Filter / Search Header */}
             <div className="p-3.5 border-b border-slate-100 bg-slate-50/40 flex flex-col sm:flex-row items-center justify-between gap-2.5">
               <div className="relative w-full sm:w-56">
@@ -778,7 +778,7 @@ export function AcademicManagementTab({
             </div>
 
             {/* Table */}
-            <div className="flex-1 overflow-x-auto">
+            <div className="flex-1 overflow-x-auto min-w-0">
               {facultyLoading ? (
                 <div className="p-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-bce-cobalt" />
@@ -855,9 +855,9 @@ export function AcademicManagementTab({
 
       {/* 2. SUBJECTS SUBTAB */}
       {activeSubTab === 'subjects' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
           {/* Add Subject Form */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 min-w-0 w-full">
             <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Plus className="w-4 h-4 text-bce-cobalt" />
               Add New Subject
@@ -932,7 +932,7 @@ export function AcademicManagementTab({
           </div>
 
           {/* Subjects List */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col min-w-0 w-full">
             {/* Filter Header */}
             <div className="p-3.5 border-b border-slate-100 bg-slate-50/40 flex flex-col sm:flex-row items-center justify-between gap-2.5">
               <div className="relative w-full sm:w-56">
@@ -1077,9 +1077,9 @@ export function AcademicManagementTab({
 
       {/* 3. ASSIGNMENTS SUBTAB */}
       {activeSubTab === 'assignments' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
           {/* Add Assignment Form with SearchableSelect */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 min-w-0 w-full">
             <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Plus className="w-4 h-4 text-bce-cobalt" />
               Assign Faculty to Subject
@@ -1179,7 +1179,7 @@ export function AcademicManagementTab({
           </div>
 
           {/* Assignments List */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col min-w-0 w-full">
             {/* Filter Header */}
             <div className="p-3.5 border-b border-slate-100 bg-slate-50/40 flex flex-col sm:flex-row items-center justify-between gap-2.5">
               <div className="text-xs font-bold text-slate-700">Filter Assignments:</div>
@@ -1306,8 +1306,8 @@ export function AcademicManagementTab({
 
       {/* 4. ACADEMIC YEARS SUBTAB */}
       {activeSubTab === 'years' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 min-w-0 w-full">
             <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Plus className="w-4 h-4 text-bce-cobalt" />
               Add Academic Year
@@ -1349,11 +1349,11 @@ export function AcademicManagementTab({
             </form>
           </div>
 
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden min-w-0 w-full">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <h4 className="text-sm font-bold text-slate-900">Academic Sessions ({yearList.length})</h4>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto min-w-0">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100">
                 <tr>
@@ -1394,8 +1394,8 @@ export function AcademicManagementTab({
 
       {/* 5. BRANCHES SUBTAB */}
       {activeSubTab === 'branches' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 min-w-0 w-full">
             <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Plus className="w-4 h-4 text-bce-cobalt" />
               Add Engineering Branch
@@ -1436,11 +1436,11 @@ export function AcademicManagementTab({
             </form>
           </div>
 
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden min-w-0 w-full">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <h4 className="text-sm font-bold text-slate-900">Engineering Branches ({branchList.length})</h4>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto min-w-0">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100">
                 <tr>
@@ -1631,12 +1631,12 @@ export function AcademicManagementTab({
 
       {/* 6. SEMESTERS SUBTAB */}
       {activeSubTab === 'semesters' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden w-full min-w-0">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <h4 className="text-sm font-bold text-slate-900">Configured Semesters ({semesterList.length})</h4>
             <span className="text-xs text-slate-400">8 Semester Curriculum Structure</span>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto min-w-0">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider">
               <tr>

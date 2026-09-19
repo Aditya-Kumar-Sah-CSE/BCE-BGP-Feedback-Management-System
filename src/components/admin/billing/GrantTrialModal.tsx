@@ -366,6 +366,7 @@ export function GrantTrialModal({
             type="button"
             onClick={handleGrant}
             disabled={submitting || loadingConfig}
+            aria-busy={submitting}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-bce-cobalt text-white hover:bg-bce-navy transition disabled:opacity-50 shadow-sm"
           >
             {submitting ? (
@@ -373,7 +374,7 @@ export function GrantTrialModal({
             ) : (
               <Sparkles className="w-4 h-4 text-amber-300" />
             )}
-            Grant Trial
+            <span>{submitting ? 'Granting Trial...' : 'Grant Trial'}</span>
           </button>
         </div>
       </div>

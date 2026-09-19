@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useAppRouter as useRouter } from '@/lib/hooks/use-app-router';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Clock, ShieldAlert, LogOut, RefreshCw, CheckCircle2 } from 'lucide-react';

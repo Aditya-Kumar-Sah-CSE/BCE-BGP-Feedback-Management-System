@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { GlobalNavigationProgress } from '@/components/ui/GlobalNavigationProgress';
 import { GlobalInteractionEffects } from '@/components/ui/GlobalInteractionEffects';
 import { ServiceWorkerRegister } from '@/components/pwa/ServiceWorkerRegister';
 import { PwaInstallPrompt } from '@/components/pwa/PwaInstallPrompt';
@@ -44,6 +45,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body className="min-h-screen flex flex-col antialiased bg-slate-50 text-slate-900 overflow-x-hidden selection:bg-amber-400/30 selection:text-slate-900">
+        <GlobalNavigationProgress />
         <GlobalInteractionEffects />
         <ServiceWorkerRegister />
         <NetworkStatusBanner />

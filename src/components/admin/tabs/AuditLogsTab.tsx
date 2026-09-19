@@ -29,9 +29,9 @@ export function AuditLogsTab({ auditLogs }: Props) {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 w-full max-w-full min-w-0">
       {/* Header & Filters */}
-      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 min-w-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -80,7 +80,7 @@ export function AuditLogsTab({ auditLogs }: Props) {
       </div>
 
       {/* Logs Table (Desktop) & Cards (Mobile) */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden w-full min-w-0">
         {filteredLogs.length === 0 ? (
           <div className="p-8 sm:p-12 text-center text-xs text-slate-400">
             No audit records match the current filter criteria.
@@ -88,14 +88,14 @@ export function AuditLogsTab({ auditLogs }: Props) {
         ) : (
           <>
             {/* Mobile Card List */}
-            <div className="divide-y divide-slate-100 md:hidden">
+            <div className="divide-y divide-slate-100 md:hidden min-w-0">
               {filteredLogs.map((log) => (
-                <div key={log.id} className="p-4 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono text-[11px] font-bold">
+                <div key={log.id} className="p-3.5 sm:p-4 space-y-2 min-w-0">
+                  <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono text-[11px] font-bold break-all">
                       {log.action}
                     </span>
-                    <span className="text-[11px] text-slate-400 font-mono">
+                    <span className="text-[11px] text-slate-400 font-mono shrink-0 ml-auto sm:ml-0">
                       {formatDateShort(log.created_at, hydrated)}{' '}
                       {formatTime(log.created_at, hydrated)}
                     </span>
@@ -109,7 +109,7 @@ export function AuditLogsTab({ auditLogs }: Props) {
                     </div>
                   )}
                   {log.details && (
-                    <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100 leading-relaxed">
+                    <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed break-words [overflow-wrap:anywhere]">
                       {log.details}
                     </p>
                   )}
@@ -149,7 +149,7 @@ export function AuditLogsTab({ auditLogs }: Props) {
                       <td className="px-5 py-3.5 text-slate-500 font-mono text-[11px]">
                         {log.entity_type || '—'}
                       </td>
-                      <td className="px-5 py-3.5 text-slate-700 max-w-md">
+                      <td className="px-5 py-3.5 text-slate-700 max-w-md break-words [overflow-wrap:anywhere]">
                         {log.details || '—'}
                       </td>
                     </tr>

@@ -46,30 +46,30 @@ export default async function AdminDashboardLayout({
   const adminEmail = session.admin?.email || session.user?.email || '';
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-100 text-slate-900">
+    <div className="min-h-screen flex flex-col bg-slate-100 text-slate-900 w-full max-w-full overflow-x-hidden">
       {/* Admin Top Header */}
-      <header className="bg-bce-navy text-white border-b border-bce-cobalt/60 shadow-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-bce-cobalt to-amber-500 flex items-center justify-center font-bold text-base sm:text-lg shadow-sm border border-amber-400/30 text-amber-300 shrink-0">
-              <School className="w-5 h-5" />
+      <header className="bg-bce-navy text-white border-b border-bce-cobalt/60 shadow-md sticky top-0 z-40 w-full min-w-0">
+        <div className="max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-bce-cobalt to-amber-500 flex items-center justify-center font-bold text-sm sm:text-lg shadow-sm border border-amber-400/30 text-amber-300 shrink-0">
+              <School className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="font-bold text-sm sm:text-base tracking-tight text-white truncate">
+                <span className="font-bold text-xs sm:text-base tracking-tight text-white truncate">
                   BCE Feedback
                 </span>
                 <span className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
                   Admin
                 </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-slate-400 truncate hidden xs:block">
+              <p className="text-[10px] sm:text-[11px] text-slate-400 truncate hidden sm:block">
                 Bhagalpur College of Engineering
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">
             {/* User Profile Badge */}
             <div className="hidden sm:flex flex-col items-end text-right">
               <div className="flex items-center gap-1.5">
@@ -103,15 +103,15 @@ export default async function AdminDashboardLayout({
       </header>
 
       {/* Main Admin Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 min-w-0">
         {children}
       </main>
 
       {/* Admin Footer */}
-      <footer className="bg-white border-t border-slate-200 py-4 px-4 text-center text-xs text-slate-500 mt-auto">
+      <footer className="bg-white border-t border-slate-200 py-4 px-3 sm:px-4 text-center text-xs text-slate-500 mt-auto w-full min-w-0">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>BCE Faculty Feedback Management System • Phase 1 Foundation</span>
-          <span>Authenticated as: <strong className="text-slate-700 font-mono">{adminEmail}</strong></span>
+          <span className="truncate max-w-full">Authenticated as: <strong className="text-slate-700 font-mono">{adminEmail}</strong></span>
         </div>
       </footer>
     </div>

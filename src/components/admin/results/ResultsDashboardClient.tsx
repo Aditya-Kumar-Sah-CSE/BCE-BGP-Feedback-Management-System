@@ -18,6 +18,7 @@ import {
   Subject,
   FeedbackForm,
 } from '@/types/database';
+import { downloadPdfFile } from '@/lib/utils/pdf-download';
 import {
   FileDown,
   RefreshCw,
@@ -28,6 +29,8 @@ import {
   Users,
   CheckCircle2,
   FileSpreadsheet,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 
 interface Props {
@@ -52,6 +55,46 @@ export function ResultsDashboardClient({
   const [report, setReport] = useState<AggregatedAnalyticsReport>(initialReport);
   const [isPending, startTransition] = useTransition();
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [navigatingFormId, setNavigatingFormId] = useState<string | null>(null);
+  const [downloadingPdfFormId, setDownloadingPdfFormId] = useState<string | null>(null);
+  const [downloadingScopePdf, setDownloadingScopePdf] = useState(false);
+  const [pdfNotification, setPdfNotification] = useState<string | null>(null);
+
+  const handleDownloadFormPdf = async (formId: string, facultyName?: string) => {
+    if (downloadingPdfFormId) return;
+    setDownloadingPdfFormId(formId);
+    setPdfNotification(null);
+    try {
+      await downloadPdfFile({
+        url: `/api/admin/results/${formId}/pdf`,
+        defaultFilename: facultyName ? `evaluation-${encodeURIComponent(facultyName)}.pdf` : `form-report-${formId}.pdf`,
+        onError: (err) => {
+          setPdfNotification(typeof err === 'string' ? err : err.message);
+          setTimeout(() => setPdfNotification(null), 4500);
+        },
+      });
+    } finally {
+      setDownloadingPdfFormId(null);
+    }
+  };
+
+  const handleDownloadScopePdf = async () => {
+    if (downloadingScopePdf) return;
+    setDownloadingScopePdf(true);
+    setPdfNotification(null);
+    try {
+      await downloadPdfFile({
+        url: pdfExportUrl,
+        defaultFilename: 'bce-institutional-feedback-report.pdf',
+        onError: (err) => {
+          setPdfNotification(typeof err === 'string' ? err : err.message);
+          setTimeout(() => setPdfNotification(null), 5000);
+        },
+      });
+    } finally {
+      setDownloadingScopePdf(false);
+    }
+  };
 
   // Filter states
   const [academicYearId, setAcademicYearId] = useState<string>('ALL');
@@ -149,17 +192,29 @@ export function ResultsDashboardClient({
           </div>
 
           <div className="flex items-center gap-2">
-            <a
-              href={pdfExportUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-bce-navy hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-xs"
+            <button
+              type="button"
+              onClick={handleDownloadScopePdf}
+              disabled={downloadingScopePdf}
+              aria-busy={downloadingScopePdf}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-bce-navy hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-xs disabled:opacity-50 cursor-pointer"
             >
-              <FileDown className="w-4 h-4 text-amber-400" />
-              <span>Download Overall Scope PDF</span>
-            </a>
+              {downloadingScopePdf ? (
+                <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
+              ) : (
+                <FileDown className="w-4 h-4 text-amber-400" />
+              )}
+              <span>{downloadingScopePdf ? 'Downloading Scope PDF...' : 'Download Overall Scope PDF'}</span>
+            </button>
           </div>
         </div>
+
+        {pdfNotification && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+            <span>{pdfNotification}</span>
+          </div>
+        )}
 
         {/* Scope Indicator Badge */}
         <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -531,20 +586,30 @@ export function ResultsDashboardClient({
                         <td className="px-4 py-3.5 text-right space-x-2">
                           <Link
                             href={`/admin/dashboard/results/${form.id}`}
+                            onClick={() => setNavigatingFormId(form.id)}
+                            aria-busy={navigatingFormId === form.id ? 'true' : undefined}
                             className="inline-flex items-center gap-1 px-2.5 py-1 bg-bce-navy text-amber-400 hover:bg-slate-800 rounded-lg text-xs font-semibold transition-colors"
                           >
-                            <span>Analytics</span>
-                            <ChevronRight className="w-3 h-3" />
+                            {navigatingFormId === form.id ? (
+                              <Loader2 className="w-3 h-3 text-amber-400 animate-spin" />
+                            ) : null}
+                            <span>{navigatingFormId === form.id ? 'Opening...' : 'Analytics'}</span>
+                            {navigatingFormId !== form.id && <ChevronRight className="w-3 h-3" />}
                           </Link>
-                          <a
-                            href={`/api/admin/results/${form.id}/pdf`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors"
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadFormPdf(form.id, form.faculty?.name)}
+                            disabled={Boolean(downloadingPdfFormId)}
+                            aria-busy={downloadingPdfFormId === form.id ? 'true' : undefined}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 cursor-pointer"
                           >
-                            <FileDown className="w-3 h-3 text-slate-500" />
-                            <span>PDF</span>
-                          </a>
+                            {downloadingPdfFormId === form.id ? (
+                              <Loader2 className="w-3 h-3 text-slate-500 animate-spin" />
+                            ) : (
+                              <FileDown className="w-3 h-3 text-slate-500" />
+                            )}
+                            <span>{downloadingPdfFormId === form.id ? 'Downloading...' : 'PDF'}</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -607,20 +672,30 @@ export function ResultsDashboardClient({
                       <div className="flex items-center gap-1.5">
                         <Link
                           href={`/admin/dashboard/results/${form.id}`}
+                          onClick={() => setNavigatingFormId(form.id)}
+                          aria-busy={navigatingFormId === form.id ? 'true' : undefined}
                           className="inline-flex items-center gap-1 px-3 py-1.5 bg-bce-navy text-amber-400 hover:bg-slate-800 rounded-lg text-xs font-semibold transition-colors"
                         >
-                          <span>Analytics</span>
-                          <ChevronRight className="w-3 h-3" />
+                          {navigatingFormId === form.id ? (
+                            <Loader2 className="w-3 h-3 text-amber-400 animate-spin" />
+                          ) : null}
+                          <span>{navigatingFormId === form.id ? 'Opening...' : 'Analytics'}</span>
+                          {navigatingFormId !== form.id && <ChevronRight className="w-3 h-3" />}
                         </Link>
-                        <a
-                          href={`/api/admin/results/${form.id}/pdf`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium transition-colors"
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadFormPdf(form.id, form.faculty?.name)}
+                          disabled={Boolean(downloadingPdfFormId)}
+                          aria-busy={downloadingPdfFormId === form.id ? 'true' : undefined}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 cursor-pointer"
                         >
-                          <FileDown className="w-3 h-3 text-slate-600" />
-                          <span>PDF</span>
-                        </a>
+                          {downloadingPdfFormId === form.id ? (
+                            <Loader2 className="w-3 h-3 text-slate-600 animate-spin" />
+                          ) : (
+                            <FileDown className="w-3 h-3 text-slate-600" />
+                          )}
+                          <span>{downloadingPdfFormId === form.id ? 'Downloading...' : 'PDF'}</span>
+                        </button>
                       </div>
                     </div>
                   </div>

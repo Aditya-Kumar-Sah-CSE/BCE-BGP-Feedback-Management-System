@@ -149,10 +149,15 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
 
   async function handleSaveSettings() {
     setSavingSettings(true);
-    const res = await updatePaymentSettingsAction(settingsForm);
-    setMessage({ text: res.success ? 'Payment settings saved.' : (res.error || 'Save failed.'), type: res.success ? 'success' : 'error' });
-    setSavingSettings(false);
-    setTimeout(() => setMessage(null), 4000);
+    try {
+      const res = await updatePaymentSettingsAction(settingsForm);
+      setMessage({ text: res.success ? 'Payment settings saved.' : (res.error || 'Save failed.'), type: res.success ? 'success' : 'error' });
+      setTimeout(() => setMessage(null), 4000);
+    } catch (err: any) {
+      setMessage({ text: err?.message || 'Failed to save settings.', type: 'error' });
+    } finally {
+      setSavingSettings(false);
+    }
   }
 
   const getStatusBadge = (status: string) => {
@@ -194,17 +199,17 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 w-full max-w-full min-w-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-bce-cobalt" />
-            Billing & Access Management
+            <CreditCard className="w-5 h-5 text-bce-cobalt shrink-0" />
+            <span>Billing & Access Management</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">{data.length} admins total</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setShowSettings(!showSettings)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer">
             Payment Settings
           </button>
@@ -312,6 +317,7 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
               <button
                 disabled={confirmLoading}
                 onClick={handleConfirmAction}
+                aria-busy={confirmLoading}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-bce-cobalt text-white hover:bg-bce-navy disabled:opacity-50 cursor-pointer"
               >
                 {confirmLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -349,8 +355,8 @@ export function BillingManagementTab({ currentUserEmail }: { currentUserEmail: s
       )}
 
       {/* Admin Billing Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs w-full min-w-0">
+        <div className="overflow-x-auto min-w-0">
           <table className="w-full text-xs">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
