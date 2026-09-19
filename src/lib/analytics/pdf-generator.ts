@@ -149,6 +149,28 @@ export function formatSafeCellText(value: string | null | undefined, maxChunk = 
     .trim();
 }
 
+/**
+ * Determines whether submission-level metadata (Submission Date and Submission ID)
+ * should be rendered on the Student Feedback Submission Record PDF based strictly
+ * on the feedback form's Academic Session / Academic Year.
+ *
+ * Rules:
+ * - Extracts numeric starting academic year from "YYYY-YYYY" format (or any string containing a 4-digit start year).
+ * - Metadata is visible for starting year >= 2026 (e.g., 2026-2027, 2027-2028, etc.).
+ * - Metadata is hidden for starting year < 2026 (e.g., 2025-2026, 2024-2025, 2023-2024, etc.).
+ * - Does NOT use the current system date.
+ * - Does NOT hardcode individual session strings.
+ * - If session is null, undefined, or unparseable, defaults to false (hide) to protect legacy/unverified sessions.
+ */
+export function shouldShowSubmissionMetadata(academicSession?: string | null): boolean {
+  if (!academicSession) return false;
+  const match = academicSession.match(/\b(\d{4})\s*[-/–—]\s*(\d{4}|\d{2})\b/) || academicSession.match(/\b(\d{4})\b/);
+  if (!match) return false;
+  const startYear = parseInt(match[1], 10);
+  if (isNaN(startYear)) return false;
+  return startYear >= 2026;
+}
+
 function measureMetadataCell(
   doc: PDFKit.PDFDocument,
   cell: MetadataCell,
@@ -1256,6 +1278,8 @@ export async function generateStudentResponsePDF(
     : 'Recorded in Google Sheet';
 
   // Metadata Table Grid (2 Columns, dynamic wrapped row heights)
+  const showSubmissionMeta = shouldShowSubmissionMetadata(data.academicYear);
+
   const metadataRows: MetadataRow[] = [
     {
       left: {
@@ -1292,12 +1316,20 @@ export async function generateStudentResponsePDF(
         label: 'Feedback Form: ',
         value: data.formTitle || 'N/A',
       },
-      right: {
-        label: 'Submission Date: ',
-        value: formattedDate,
-      },
+      right: showSubmissionMeta
+        ? {
+            label: 'Submission Date: ',
+            value: formattedDate,
+          }
+        : {
+            label: '',
+            value: '',
+          },
     },
-    {
+  ];
+
+  if (showSubmissionMeta) {
+    metadataRows.push({
       left: {
         label: '',
         value: '',
@@ -1306,8 +1338,8 @@ export async function generateStudentResponsePDF(
         label: 'Submission ID: ',
         value: formatSafeCellText(data.submissionId, 28) || 'Recorded',
       },
-    },
-  ];
+    });
+  }
 
   const metaHeight = renderMetadataGrid(doc, currentY, contentWidth, margin, metadataRows);
   currentY += metaHeight + 12;
